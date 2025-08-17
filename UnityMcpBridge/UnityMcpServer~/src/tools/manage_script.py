@@ -107,7 +107,7 @@ def register_manage_script_tools(mcp: FastMCP):
         - Edits should use apply_text_edits.
 
         Args:
-            action: Operation ('create', 'read', 'update', 'delete').
+            action: Operation ('create', 'read', 'delete').
             name: Script name (no .cs extension).
             path: Asset path (default: "Assets/").
             contents: C# code for 'create'/'update'.
@@ -133,32 +133,32 @@ def register_manage_script_tools(mcp: FastMCP):
 
             # Base64 encode the contents if they exist to avoid JSON escaping issues
             if contents is not None:
-                if action in ['create', 'update']:
+                if action == 'create':
                     params["encodedContents"] = base64.b64encode(contents.encode('utf-8')).decode('utf-8')
                     params["contentsEncoded"] = True
-                else:
+                elif contents:
                     params["contents"] = contents
 
             params = {k: v for k, v in params.items() if v is not None}
 
             response = send_command_with_retry("manage_script", params)
 
-            if isinstance(response, dict) and response.get("success"):
-                if response.get("data", {}).get("contentsEncoded"):
-                    decoded_contents = base64.b64decode(response["data"]["encodedContents"]).decode('utf-8')
-                    response["data"]["contents"] = decoded_contents
-                    del response["data"]["encodedContents"]
-                    del response["data"]["contentsEncoded"]
+            if isinstance(response, dict):
+                if response.get("success"):
+                    if response.get("data", {}).get("contentsEncoded"):
+                        decoded_contents = base64.b64decode(response["data"]["encodedContents"]).decode('utf-8')
+                        response["data"]["contents"] = decoded_contents
+                        del response["data"]["encodedContents"]
+                        del response["data"]["contentsEncoded"]
 
-                return {
-                    "success": True,
-                    "message": response.get("message", "Operation successful."),
-                    "data": response.get("data"),
-                }
-            return response if isinstance(response, dict) else {
-                "success": False,
-                "message": str(response),
-            }
+                    return {
+                        "success": True,
+                        "message": response.get("message", "Operation successful."),
+                        "data": response.get("data"),
+                    }
+                return response
+
+            return {"success": False, "message": str(response)}
 
         except Exception as e:
             return {
