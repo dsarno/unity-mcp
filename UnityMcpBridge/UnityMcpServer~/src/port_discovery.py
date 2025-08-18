@@ -22,6 +22,21 @@ import struct
 
 logger = logging.getLogger("unity-mcp-server")
 
+FRAME_HEADER_SIZE = 8
+# Keep small; we're only looking for a tiny pong. 1 MiB is generous for probes.
+MAX_FRAME_SIZE = 1 << 20
+
+
+# Module-level helper to avoid duplication and per-call redefinition
+def _read_exact(sock: socket.socket, count: int) -> bytes:
+    buf = bytearray()
+    while len(buf) < count:
+        chunk = sock.recv(count - len(buf))
+        if not chunk:
+            raise ConnectionError("Connection closed before reading expected bytes")
+        buf.extend(chunk)
+    return bytes(buf)
+
 class PortDiscovery:
     """Handles port discovery from Unity Bridge registry"""
     REGISTRY_FILE = "unity-mcp-port.json"  # legacy single-project file
@@ -62,15 +77,6 @@ class PortDiscovery:
         pong are sent/received with an 8-byte big-endian length prefix.
         """
 
-        def _read_exact(sock: socket.socket, count: int) -> bytes:
-            buf = bytearray()
-            while len(buf) < count:
-                chunk = sock.recv(count - len(buf))
-                if not chunk:
-                    raise ConnectionError("Connection closed before reading expected bytes")
-                buf.extend(chunk)
-            return bytes(buf)
-
         try:
             with socket.create_connection(("127.0.0.1", port), PortDiscovery.CONNECT_TIMEOUT) as s:
                 s.settimeout(PortDiscovery.CONNECT_TIMEOUT)
@@ -81,12 +87,31 @@ class PortDiscovery:
                     if 'FRAMING=1' in text:
                         header = struct.pack('>Q', len(payload))
                         s.sendall(header + payload)
-                        resp_header = _read_exact(s, 8)
+                        resp_header = _read_exact(s, FRAME_HEADER_SIZE)
                         resp_len = struct.unpack('>Q', resp_header)[0]
+                        # Defensive cap against unreasonable frame sizes
+                        if resp_len > MAX_FRAME_SIZE:
+                            return False
                         data = _read_exact(s, resp_len)
                     else:
                         s.sendall(payload)
-                        data = s.recv(512)
+                        # Read a small bounded amount looking for pong
+                        chunks = []
+                        total = 0
+                        data = b""
+                        while total < 1024:
+                            try:
+                                part = s.recv(512)
+                            except socket.timeout:
+                                break
+                            if not part:
+                                break
+                            chunks.append(part)
+                            total += len(part)
+                            if b'"message":"pong"' in part:
+                                break
+                        if chunks:
+                            data = b"".join(chunks)
                     # Minimal validation: look for a success pong response
                     if data and b'"message":"pong"' in data:
                         return True
