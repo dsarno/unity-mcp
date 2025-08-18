@@ -557,13 +557,20 @@ namespace UnityMcpBridge.Editor.Tools
                             // If the edit overlaps the method span significantly, treat as replace_method
                             if (sp.start <= mStart + 2 && sp.end >= mStart + 1)
                             {
+                                var methodOriginal = original.Substring(mStart, mLen);
+                                int relStart = Math.Max(0, Math.Min(sp.start - mStart, methodOriginal.Length));
+                                int relEnd = Math.Max(relStart, Math.Min(sp.end - mStart, methodOriginal.Length));
+                                string replacementSnippet = methodOriginal
+                                    .Remove(relStart, relEnd - relStart)
+                                    .Insert(relStart, sp.text ?? string.Empty);
+
                                 var structEdits = new JArray();
                                 var op = new JObject
                                 {
                                     ["mode"] = "replace_method",
                                     ["className"] = name,
                                     ["methodName"] = methodName,
-                                    ["replacement"] = original.Remove(sp.start, sp.end - sp.start).Insert(sp.start, sp.text ?? string.Empty).Substring(mStart, (sp.text ?? string.Empty).Length + (sp.start - mStart) + (mLen - (sp.end - mStart)))
+                                    ["replacement"] = replacementSnippet
                                 };
                                 structEdits.Add(op);
                                 // Reuse structured path
