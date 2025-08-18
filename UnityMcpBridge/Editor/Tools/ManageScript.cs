@@ -90,6 +90,14 @@ namespace UnityMcpBridge.Editor.Tools
                         relPathSafe = null;
                         return false;
                     }
+#if NET6_0_OR_GREATER
+                    if (!string.IsNullOrEmpty(di.LinkTarget))
+                    {
+                        fullPathDir = null;
+                        relPathSafe = null;
+                        return false;
+                    }
+#endif
                 }
             }
             catch { /* best effort; proceed */ }
@@ -525,7 +533,11 @@ namespace UnityMcpBridge.Editor.Tools
             int headerBoundary = 0;
             if (original.Length > 0 && original[0] == '\uFEFF') headerBoundary = 1; // skip BOM
             // Find first top-level using (very simple scan of start of file)
-            var mUsing = System.Text.RegularExpressions.Regex.Match(original, @"(?m)^(?:\uFEFF)?using\s+\w+", System.Text.RegularExpressions.RegexOptions.None);
+            var mUsing = System.Text.RegularExpressions.Regex.Match(
+                original,
+                @"(?m)^(?:\uFEFF)?(?:global\s+)?using(?:\s+static)?\b",
+                System.Text.RegularExpressions.RegexOptions.None
+            );
             if (mUsing.Success)
                 headerBoundary = Math.Min(Math.Max(headerBoundary, mUsing.Index), original.Length);
             foreach (var sp in spans)
@@ -550,32 +562,34 @@ namespace UnityMcpBridge.Editor.Tools
                 {
                     string methodName = mh.Groups[1].Value;
                     // Find class span containing the edit
-                    if (TryComputeClassSpan(original, name, null, out var clsStart, out var clsLen, out _))
+                    if (!TryComputeClassSpan(original, name, null, out var clsStart, out var clsLen, out _))
                     {
-                        if (TryComputeMethodSpan(original, clsStart, clsLen, methodName, null, null, null, out var mStart, out var mLen, out _))
+                        FindEnclosingClassSpan(original, sp.start, out clsStart, out clsLen);
+                    }
+                    if (clsLen > 0 &&
+                        TryComputeMethodSpan(original, clsStart, clsLen, methodName, null, null, null, out var mStart, out var mLen, out _))
+                    {
+                        // If the edit overlaps the method span significantly, treat as replace_method
+                        if (sp.start <= mStart + 2 && sp.end >= mStart + 1)
                         {
-                            // If the edit overlaps the method span significantly, treat as replace_method
-                            if (sp.start <= mStart + 2 && sp.end >= mStart + 1)
-                            {
-                                var methodOriginal = original.Substring(mStart, mLen);
-                                int relStart = Math.Max(0, Math.Min(sp.start - mStart, methodOriginal.Length));
-                                int relEnd = Math.Max(relStart, Math.Min(sp.end - mStart, methodOriginal.Length));
-                                string replacementSnippet = methodOriginal
-                                    .Remove(relStart, relEnd - relStart)
-                                    .Insert(relStart, sp.text ?? string.Empty);
+                            var methodOriginal = original.Substring(mStart, mLen);
+                            int relStart = Math.Max(0, Math.Min(sp.start - mStart, methodOriginal.Length));
+                            int relEnd = Math.Max(relStart, Math.Min(sp.end - mStart, methodOriginal.Length));
+                            string replacementSnippet = methodOriginal
+                                .Remove(relStart, relEnd - relStart)
+                                .Insert(relStart, sp.text ?? string.Empty);
 
-                                var structEdits = new JArray();
-                                var op = new JObject
-                                {
-                                    ["mode"] = "replace_method",
-                                    ["className"] = name,
-                                    ["methodName"] = methodName,
-                                    ["replacement"] = replacementSnippet
-                                };
-                                structEdits.Add(op);
-                                // Reuse structured path
-                                return EditScript(fullPath, relativePath, name, structEdits, new JObject{ ["refresh"] = "immediate", ["validate"] = "standard" });
-                            }
+                            var structEdits = new JArray();
+                            var op = new JObject
+                            {
+                                ["mode"] = "replace_method",
+                                ["className"] = name,
+                                ["methodName"] = methodName,
+                                ["replacement"] = replacementSnippet
+                            };
+                            structEdits.Add(op);
+                            // Reuse structured path
+                            return EditScript(fullPath, relativePath, name, structEdits, new JObject{ ["refresh"] = "immediate", ["validate"] = "standard" });
                         }
                     }
                 }
@@ -737,7 +751,16 @@ namespace UnityMcpBridge.Editor.Tools
                 char c = text[i];
                 char next = i + 1 < text.Length ? text[i + 1] : '\0';
 
-                if (c == '\n') { line++; if (inSingle) inSingle = false; }
+                if (c == '\r')
+                {
+                    // Treat CRLF as a single newline; skip the LF if present
+                    if (next == '\n') { i++; }
+                    line++; if (inSingle) inSingle = false;
+                }
+                else if (c == '\n')
+                {
+                    line++; if (inSingle) inSingle = false;
+                }
 
                 if (escape) { escape = false; continue; }
 
@@ -1203,6 +1226,18 @@ namespace UnityMcpBridge.Editor.Tools
             if (string.IsNullOrWhiteSpace(snippet) || !snippet.Contains("class ")) { err = "no 'class' keyword found in snippet"; return false; }
             err = null; return true;
 #endif
+        }
+
+        private static bool FindEnclosingClassSpan(string source, int index, out int start, out int length)
+        {
+            start = length = 0;
+            if (index < 0 || index > source.Length) return false;
+            var prefix = source.Substring(0, Math.Min(index, source.Length));
+            var matches = Regex.Matches(prefix, @"(?m)\bclass\s+([A-Za-z_][A-Za-z0-9_]*)");
+            if (matches.Count == 0) return false;
+            var m = matches[matches.Count - 1];
+            var className = m.Groups[1].Value;
+            return TryComputeClassSpanBalanced(source, className, null, out start, out length, out _);
         }
 
         private static bool TryComputeClassSpan(string source, string className, string ns, out int start, out int length, out string why)
