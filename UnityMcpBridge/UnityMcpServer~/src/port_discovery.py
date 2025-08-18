@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional, List
 import glob
 import socket
+import struct
 
 logger = logging.getLogger("unity-mcp-server")
 
@@ -56,14 +57,36 @@ class PortDiscovery:
     @staticmethod
     def _try_probe_unity_mcp(port: int) -> bool:
         """Quickly check if a Unity MCP listener is on this port.
-        Tries a short TCP connect, sends 'ping', expects a JSON 'pong'.
+        Performs a short TCP connect and ping/pong exchange. If the
+        server advertises ``FRAMING=1`` in its greeting, the ping and
+        pong are sent/received with an 8-byte big-endian length prefix.
         """
+
+        def _read_exact(sock: socket.socket, count: int) -> bytes:
+            buf = bytearray()
+            while len(buf) < count:
+                chunk = sock.recv(count - len(buf))
+                if not chunk:
+                    raise ConnectionError("Connection closed before reading expected bytes")
+                buf.extend(chunk)
+            return bytes(buf)
+
         try:
             with socket.create_connection(("127.0.0.1", port), PortDiscovery.CONNECT_TIMEOUT) as s:
                 s.settimeout(PortDiscovery.CONNECT_TIMEOUT)
                 try:
-                    s.sendall(b"ping")
-                    data = s.recv(512)
+                    greeting = s.recv(256)
+                    text = greeting.decode('ascii', errors='ignore') if greeting else ''
+                    payload = b"ping"
+                    if 'FRAMING=1' in text:
+                        header = struct.pack('>Q', len(payload))
+                        s.sendall(header + payload)
+                        resp_header = _read_exact(s, 8)
+                        resp_len = struct.unpack('>Q', resp_header)[0]
+                        data = _read_exact(s, resp_len)
+                    else:
+                        s.sendall(payload)
+                        data = s.recv(512)
                     # Minimal validation: look for a success pong response
                     if data and b'"message":"pong"' in data:
                         return True
