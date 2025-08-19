@@ -117,7 +117,6 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    print("DEBUG: mcp_source main invoked")
     args = parse_args()
     try:
         repo_root = detect_repo_root(args.repo)
