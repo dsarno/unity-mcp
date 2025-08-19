@@ -18,8 +18,6 @@ jobs:
   nl-suite:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    env:
-      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
 
     steps:
       - uses: actions/checkout@v4
@@ -79,12 +77,34 @@ jobs:
           name: Claude NL/T
           path: reports/claude-nl-tests.xml
           reporter: java-junit
+          fail-on-empty: false
+
+      - name: Detect Unity mode & secrets
+        id: detect
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        run: |
+          if [ -n "$UNITY_LICENSE" ]; then echo "has_license=true" >> $GITHUB_OUTPUT; else echo "has_license=false" >> $GITHUB_OUTPUT; fi
+          if [ -f ProjectSettings/ProjectVersion.txt ]; then
+            echo "is_project=true"  >> $GITHUB_OUTPUT
+          else
+            echo "is_project=false" >> $GITHUB_OUTPUT
+          fi
+          if [ -f Packages/manifest.json ] && [ ! -f ProjectSettings/ProjectVersion.txt ]; then
+            echo "is_package=true"  >> $GITHUB_OUTPUT
+          else
+            echo "is_package=false" >> $GITHUB_OUTPUT
+          fi
 
       # --- Optional: Unity compile after Claude’s edits (satisfies NL-4) ---
       # If your repo is a *Unity project*:
       - name: Unity compile (Project)
-        if: ${{ always() && hashFiles('ProjectSettings/ProjectVersion.txt') != '' && env.UNITY_LICENSE != '' }}
+        if: always() && steps.detect.outputs.has_license == 'true' && steps.detect.outputs.is_project == 'true'
         uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           projectPath: .
           githubToken: ${{ secrets.GITHUB_TOKEN }}
@@ -93,8 +113,12 @@ jobs:
 
       # If your repo is primarily a *Unity package*, prefer packageMode:
       - name: Unity compile (Package)
-        if: ${{ always() && hashFiles('Packages/manifest.json') != '' && hashFiles('ProjectSettings/ProjectVersion.txt') == '' && env.UNITY_LICENSE != '' }}
+        if: always() && steps.detect.outputs.has_license == 'true' && steps.detect.outputs.is_package == 'true'
         uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           packageMode: true
           unityVersion: 2022.3.45f1   # <-- set explicitly for packages
