@@ -52,7 +52,7 @@ jobs:
               "mcpServers": {
                 "unity": {
                   "command": "python",
-                  "args": ["UnityMcpServer/src/server.py"]
+                  "args": ["UnityMcpBridge/UnityMcpServer~/src/server.py"]
                 }
               }
             }
