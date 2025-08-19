@@ -34,11 +34,17 @@ jobs:
         run: |
           set -eux
           if [ -f "UnityMcpBridge/UnityMcpServer~/src/pyproject.toml" ]; then
+
+            uv venv
+            . .venv/bin/activate
             uv pip install -e "UnityMcpBridge/UnityMcpServer~/src"
           elif [ -f "UnityMcpBridge/UnityMcpServer~/src/requirements.txt" ]; then
+            uv venv
+            . .venv/bin/activate
             uv pip install -r "UnityMcpBridge/UnityMcpServer~/src/requirements.txt"
           else
-            echo "No Python deps found for UnityMcpServer~ (skipping)"
+            echo "No Python deps found (skipping)"
+
           fi
 
       - name: Run Claude NL/T test suite
