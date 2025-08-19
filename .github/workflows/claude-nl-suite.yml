@@ -31,8 +31,10 @@ jobs:
 
       - name: Prepare Unity MCP server deps (adjust path or remove if N/A)
         run: |
-          if [ -f UnityMcpServer/requirements.txt ]; then
-            uv pip install -r UnityMcpServer/requirements.txt
+          if [ -f UnityMcpBridge/UnityMcpServer~/src/pyproject.toml ]; then
+            uv pip install UnityMcpBridge/UnityMcpServer~/src
+          elif [ -f UnityMcpBridge/UnityMcpServer~/src/requirements.txt ]; then
+            uv pip install -r UnityMcpBridge/UnityMcpServer~/src/requirements.txt
           fi
 
       - name: Run Claude NL/T test suite
