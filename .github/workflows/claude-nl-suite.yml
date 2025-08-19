@@ -1,6 +1,7 @@
 name: Claude NL suite + (optional) Unity compile
 
-on: { workflow_dispatch: {} }
+on:
+  workflow_dispatch:
 
 
 
