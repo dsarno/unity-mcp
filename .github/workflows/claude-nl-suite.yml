@@ -17,6 +17,8 @@ jobs:
   nl-suite:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
 
     steps:
       - uses: actions/checkout@v4
@@ -80,10 +82,8 @@ jobs:
       # --- Optional: Unity compile after Claude’s edits (satisfies NL-4) ---
       # If your repo is a *Unity project*:
       - name: Unity compile (Project)
-        if: ${{ always() && hashFiles('ProjectSettings/ProjectVersion.txt') != '' && secrets.UNITY_LICENSE != '' }}
+        if: ${{ always() && hashFiles('ProjectSettings/ProjectVersion.txt') != '' && env.UNITY_LICENSE != '' }}
         uses: game-ci/unity-test-runner@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}  # OR UNITY_* for Pro
         with:
           projectPath: .
           githubToken: ${{ secrets.GITHUB_TOKEN }}
@@ -92,10 +92,8 @@ jobs:
 
       # If your repo is primarily a *Unity package*, prefer packageMode:
       - name: Unity compile (Package)
-        if: ${{ always() && hashFiles('Packages/manifest.json') != '' && hashFiles('ProjectSettings/ProjectVersion.txt') == '' && secrets.UNITY_LICENSE != '' }}
+        if: ${{ always() && hashFiles('Packages/manifest.json') != '' && hashFiles('ProjectSettings/ProjectVersion.txt') == '' && env.UNITY_LICENSE != '' }}
         uses: game-ci/unity-test-runner@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         with:
           packageMode: true
           unityVersion: 2022.3.45f1   # <-- set explicitly for packages
