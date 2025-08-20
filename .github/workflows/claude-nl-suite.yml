@@ -76,6 +76,22 @@ jobs:
           set -eux
           mkdir -p reports
 
+      - name: Log MCP server location (diagnostic)
+        run: |
+          set -ux  # do not -e; we want logs even if missing
+          SRV_DIR="UnityMcpBridge/UnityMcpServer~/src"
+          echo "MCP server dir := ${SRV_DIR}"
+          python - <<'PY'
+          import pathlib
+          p = pathlib.Path('UnityMcpBridge/UnityMcpServer~/src').resolve()
+          print('Resolved path:', p)
+          print('Exists:', p.exists())
+          print('server.py present:', (p / 'server.py').exists())
+          PY
+          ls -la "${SRV_DIR}" || true
+          uv --version || true
+          uv run --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
+
       - name: Run Claude NL/T test suite
         if: success()
         id: claude
