@@ -185,17 +185,17 @@ jobs:
           set -eux
           mkdir -p reports
           if [ ! -f reports/claude-nl-tests.xml ]; then
-            cat > reports/claude-nl-tests.xml <<'XML'
-<testsuites>
-  <testsuite name="UnityMCP.NL" tests="1" failures="1" errors="0" skipped="0" time="0.0">
-    <testcase name="Bootstrap" classname="UnityMCP.NL" time="0.0">
-      <failure message="No MCP resources detected by aggregator or test aborted early">
-        Claude ran but the startup checks failed to detect usable MCP resources; NL/T flow did not execute.
-      </failure>
-    </testcase>
-  </testsuite>
-</testsuites>
-XML
+            printf '%s\n' \
+              '<testsuites>' \
+              '  <testsuite name="UnityMCP.NL" tests="1" failures="1" errors="0" skipped="0" time="0.0">' \
+              '    <testcase name="Bootstrap" classname="UnityMCP.NL" time="0.0">' \
+              '      <failure message="No MCP resources detected by aggregator or test aborted early">' \
+              '        Claude ran but the startup checks failed to detect usable MCP resources; NL/T flow did not execute.' \
+              '      </failure>' \
+              '    </testcase>' \
+              '  </testsuite>' \
+              '</testsuites>' \
+              > reports/claude-nl-tests.xml
           fi
 
       - name: Upload JUnit (Claude NL/T)
