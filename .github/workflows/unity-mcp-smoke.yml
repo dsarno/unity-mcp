@@ -19,11 +19,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Run QuickProbe
+      # Keep the launch path pointed at the server project dir.
+      # This is the key to consistent tool registration.
+      - name: Run QuickProbe (two MCP calls)
         uses: anthropics/claude-code-base-action@beta
         with:
           prompt_file: .claude/prompts/mcp-quickprobe.md
-          allowed_tools: mcp__unity__find_in_file,mcp__unity__list_resources,mcp__unity__read_resource
+          allowed_tools: mcp__unity__list_resources,mcp__unity__read_resource
           max_turns: "2"
           timeout_minutes: "5"
           mcp_config: |
@@ -31,13 +33,11 @@ jobs:
               "mcpServers": {
                 "unity": {
                   "command": "uv",
-                  "args": ["run","--directory",".","python","UnityMcpBridge/UnityMcpServer~/src/server.py"],
+                  "args": ["run","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
-                    "MCP_LOG_LEVEL": "debug",
-                    "PYTHONPATH": "UnityMcpBridge/UnityMcpServer~/src",
-                    "UNITY_MCP_PROJECT_ROOT": "."
+                    "MCP_LOG_LEVEL": "debug"
                   }
                 }
               }
@@ -47,6 +47,7 @@ jobs:
               "permissionMode": "allow",
               "autoApprove": ["mcp__unity__*"]
             }
+          model: claude-3-7-sonnet-20250219
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Upload QuickProbe log
