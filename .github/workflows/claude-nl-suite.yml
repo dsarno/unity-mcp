@@ -56,12 +56,28 @@ jobs:
           python -V
           python -c "import mcp; print('mcp ok')"
 
+      - name: Preflight MCP modules (fail fast)
+        run: |
+          set -eux
+          uv run --directory UnityMcpBridge/UnityMcpServer~/src python - <<'PY'
+          import sys, pkgutil
+          import tools
+          mods = {name for _, name, _ in pkgutil.iter_modules(tools.__path__)}
+          required = {"manage_script","manage_script_edits","resource_tools"}
+          missing = required - mods
+          if missing:
+              print(f"Missing MCP tool modules: {sorted(missing)}")
+              sys.exit(1)
+          print("MCP tool modules present:", sorted(required))
+          PY
+
       - name: Prepare reports dir
         run: |
           set -eux
           mkdir -p reports
 
       - name: Run Claude NL/T test suite
+        if: success()
         id: claude
         uses: anthropics/claude-code-base-action@beta
         with:
