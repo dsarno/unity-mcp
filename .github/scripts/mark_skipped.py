@@ -15,7 +15,11 @@ def main(path: str) -> None:
     p = pathlib.Path(path)
     if not p.exists():
         return
-    tree = ET.parse(p)
+    try:
+        tree = ET.parse(p)
+    except (ET.ParseError, FileNotFoundError) as e:
+        print(f"[mark_skipped] Failed to parse XML at {p}: {e}", file=sys.stderr)
+        return
     root = tree.getroot()
     changed = False
     for case in root.iter("testcase"):

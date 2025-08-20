@@ -71,10 +71,8 @@ jobs:
           print("MCP tool modules present:", sorted(required))
           PY
 
-      - name: Prepare reports dir
-        run: |
-          set -eux
-          mkdir -p reports
+      - name: Ensure artifact dirs exist
+        run: mkdir -p reports
 
       - name: Log MCP server location (diagnostic)
         run: |
