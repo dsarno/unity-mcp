@@ -1,108 +1,34 @@
-# CLAUDE TASK: Run NL/T editing tests for Unity MCP repo and emit JUnit
+# Unity NL Editing Suite — Natural Mode
 
-You are running in CI at the repository root. Use only the tools that are allowed by the workflow:
-- View, GlobTool, GrepTool for reading.
-- Bash for local shell (git is allowed).
-- BatchTool for grouping.
-- MCP tools from server "unity" (exposed as mcp__unity__*).
+You are running inside CI for the **unity-mcp** repository. Your task is to demonstrate end‑to‑end **natural‑language code editing** on a representative Unity C# script using whatever capabilities and servers are already available in this session. Work autonomously. Do not ask the user for input.
 
-## Test target
-- Primary file: `ClaudeTests/longUnityScript-claudeTest.cs`
-- For each operation, prefer structured edit tools (`replace_method`, `insert_method`, `delete_method`, `anchor_insert`, `apply_text_edits`, `regex_replace`) via the MCP server.
-- Include `precondition_sha256` for any text path write.
+## Mission
+1) **Discover capabilities.** Quietly inspect the tools and any connected servers that are available to you at session start. If the server offers a primer or capabilities resource, read it before acting.
+2) **Choose a target file.** Prefer `ClaudeTests/longUnityScript-claudeTest.cs` if it exists; otherwise choose a simple, safe C# script under `ClaudeTests/` or `Assets/`.
+3) **Perform a small set of realistic edits** using minimal, precise changes (not full-file rewrites). Examples of small edits you may choose from (pick 3–6 total):
+   - Insert a new, small helper method (e.g., a logger or counter) in a sensible location.
+   - Add a short anchor comment near a key method (e.g., above `Update()`), then add or modify a few lines nearby.
+   - Append an end‑of‑class utility method (e.g., formatting or clamping helper).
+   - Make a safe, localized tweak to an existing method body (e.g., add a guard or a simple accumulator).
+   - Optionally include one idempotency/no‑op check (re‑apply an edit and confirm nothing breaks).
+4) **Validate your edits.** Re‑read the modified regions and verify the changes exist, compile‑risk is low, and surrounding structure remains intact.
+5) **Report results.** Produce both:
+   - A JUnit XML at `reports/claude-nl-tests.xml` containing a single suite named `UnityMCP.NL` with one testcase per sub‑test you executed (mark pass/fail and include helpful failure text).
+   - A summary markdown at `reports/claude-nl-summary.md` that explains what you attempted, what succeeded/failed, and any follow‑ups you would try.
+6) **Be gentle and reversible.** Prefer targeted, minimal edits; avoid wide refactors or non‑deterministic changes.
 
-### Preflight (must run before NL/T tests)
-- List available MCP tools from server `unity`.
-- Assert that at least these tools are present: `script_apply_edits` (structured), `manage_script` (with `apply_text_edits` action available via arguments), and resource wrappers.
-- If missing, fail fast with a concise message so logs clearly show the server didn’t advertise edit endpoints.
+## Assumptions & Hints (non‑prescriptive)
+- A Unity‑oriented MCP server is expected to be connected. If a server‑provided **primer/capabilities** resource exists, read it first. If no primer is available, infer capabilities from your visible tools in the session.
+- If the preferred file isn’t present, locate a fallback C# file with simple, local methods you can edit safely.
+- If a compile command is available in this environment, you may optionally trigger it; if not, rely on structural checks and localized validation.
 
-## Output requirements
-- Create a JUnit XML at `reports/claude-nl-tests.xml`.
-- Each test = one `<testcase>` with `classname="UnityMCP.NL"` or `UnityMCP.T`.
-- On failure, include a `<failure>` node with a concise message and the last evidence snippet (10–20 lines).
-- Also write a human summary at `reports/claude-nl-tests.md` with checkboxes and the windowed reads.
+## Output Requirements
+- `reports/claude-nl-tests.xml` — JUnit XML, suite `UnityMCP.NL`, each sub‑test a separate `<testcase>` with `<failure>` text when relevant.
+- `reports/claude-nl-summary.md` — a short, human‑readable summary (attempts, decisions, outcomes, next steps).
 
-## Safety & hygiene
-- Make edits in-place, then revert them at the end (`git stash -u`/`git reset --hard` or balanced counter-edits) so the workspace is clean for subsequent steps.
-- Never push commits from CI.
-- If a write fails midway, ensure the file is restored before proceeding.
+## Guardrails
+- No destructive operations. Keep changes minimal and well‑scoped.
+- Don’t leak secrets or environment details beyond what’s needed in the reports.
+- Work without user interaction; do not prompt for approval mid‑flow.
 
-## NL-0. Sanity Reads (windowed)
-- Tail 120 lines of `ClaudeTests/longUnityScript-claudeTest.cs`.
-- Show 40 lines around method `Update`.
-- **Pass** if both windows render with expected anchors present.
-
-## NL-1. Method replace/insert/delete (natural-language)
-- Replace `HasTarget` with block-bodied version returning `currentTarget != null`.
-- Insert `PrintSeries()` after `GetCurrentTarget` logging `1,2,3`.
-- Verify by reading 20 lines around the anchor.
-- Delete `PrintSeries()` and verify removal.
-- **Pass** if diffs match and verification windows show expected content.
-
-## NL-2. Anchor comment insertion
-- Add a comment `Build marker OK` immediately above the `Update` method.
-- **Pass** if the comment appears directly above the `public void Update()` line.
-
-## NL-3. End-of-class insertion
-- Insert a 3-line comment `Tail test A/B/C` before the last method or immediately before the final class brace (preview, then apply).
-- **Pass** if windowed read shows the three lines at the intended location.
-
-## NL-4. Compile trigger
-- After any NL edit, ensure no stale compiler errors:
-  - Write a short marker edit, then **revert** after validating.
-  - The CI job will run Unity compile separately; record your local check (e.g., file parity and syntax sanity) as INFO, but do not attempt to invoke Unity here.
-
-## T-A. Anchor insert (text path)
-- Insert after `GetCurrentTarget`: `private int __TempHelper(int a, int b) => a + b;`
-- Verify via read; then delete with a `regex_replace` targeting only that helper block.
-- **Pass** if round-trip leaves the file exactly as before.
-
-## T-B. Replace method body with minimal range
-- Identify `HasTarget` body lines; single `replace_range` to change only inside braces; then revert.
-- **Pass** on exact-range change + revert.
-
-## T-C. Header/region preservation
-- For `ApplyBlend`, change only interior lines via `replace_range`; the method signature and surrounding `#region`/`#endregion` markers must remain untouched.
-- **Pass** if signature and region markers unchanged.
-
-## T-D. End-of-class insertion (anchor)
-- Find final class brace; `position: before` to append a temporary helper; then remove.
-- **Pass** if insert/remove verified.
-
-## T-E. Temporary method lifecycle
-- Insert helper (T-A), update helper implementation via `apply_text_edits`, then delete with `regex_replace`.
-- **Pass** if lifecycle completes and file returns to original checksum.
-
-## T-F. Multi-edit atomic batch
-- In one call, perform two `replace_range` tweaks and one comment insert at the class end; verify all-or-nothing behavior.
-- **Pass** if either all 3 apply or none.
-
-## T-G. Path normalization
-- Run the same edit once with `unity://path/ClaudeTests/longUnityScript-claudeTest.cs` and once with `ClaudeTests/longUnityScript-claudeTest.cs` (if supported).
-- **Pass** if both target the same file and no path duplication.
-
-## T-H. Validation levels
-- After edits, run `validate` with `level: "standard"`, then `"basic"` for temporarily unbalanced text ops; final state must be valid.
-- **Pass** if validation OK and final file compiles in CI step.
-
-## T-I. Failure surfaces (expected)
-- Too large payload: `apply_text_edits` with >15 KB aggregate → expect `{status:"too_large"}`.
-- Stale file: change externally, then resend with old `precondition_sha256` → expect `{status:"stale_file"}` with hashes.
-- Overlap: two overlapping ranges → expect rejection.
-- Unbalanced braces: remove a closing `}` → expect validation failure and **no write**.
-- Header guard: attempt insert before the first `using` → expect `{status:"header_guard"}`.
-- Anchor aliasing: `insert`/`content` alias → expect success (aliased to `text`).
-- Auto-upgrade: try a text edit overwriting a method header → prefer structured `replace_method` or return a clear error.
-- **Pass** when each negative case returns the expected failure without persisting changes.
-
-## T-J. Idempotency & no-op
-- Re-run the same `replace_range` with identical content → expect success with no change.
-- Re-run a delete of an already-removed helper via `regex_replace` → clean no-op.
-- **Pass** if both behave idempotently.
-
-### Implementation notes
-- Always capture pre- and post‑windows (±20–40 lines) as evidence in the JUnit `<failure>` or as `<system-out>`.
-- For any file write, include `precondition_sha256` and verify the post‑hash in your log.
-- At the end, restore the repository to its original state (`git status` must be clean).
-
-# Emit the JUnit file to reports/claude-nl-tests.xml and a summary markdown to reports/claude-nl-tests.md.
+> If capabilities discovery fails, still produce the two reports that clearly explain why you could not proceed and what evidence you gathered.

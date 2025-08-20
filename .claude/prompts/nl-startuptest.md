@@ -1,19 +1,22 @@
-# CLAUDE TASK: Unity MCP startup checks
+# Goal
+Fast preflight to confirm the Unity MCP server is reachable and usable in CI.
 
-You are running in CI at the repository root. Use only allowed tools.
+# What to do
+1) Use **ListMcpResourcesTool** first to probe the Unity MCP server for any resources.  
+   - If it returns `[]`, try Unity’s direct tools **mcp__unity__list_resources** with just `under` and `pattern`.  
+   - **Do not** pass `ctx: ""`. If a `ctx` object is required, pass `{}` (an empty JSON object) or omit it entirely.
 
-- Verify that the MCP server `unity` is connected.
-- List tools and assert presence of these IDs:
-  - mcp__unity__script_apply_edits
-  - mcp__unity__manage_script
-  - mcp__unity__list_resources
-  - mcp__unity__read_resource
-- Try native resources: call ListMcpResourcesTool. If it returns [], fall back to mcp__unity__list_resources.
-- Read one resource:
-  - Prefer `unity://spec/script-edits` via native read; otherwise use mcp__unity__read_resource.
-- Perform one minimal structured edit preview (no write):
-  - Use mcp__unity__script_apply_edits with `options.preview=true` to insert a comment above `Update` in `ClaudeTests/longUnityScript-claudeTest.cs`, then stop.
+2) Locate a test C# file under `ClaudeTests/` (e.g., `ClaudeTests/longUnityScript-claudeTest.cs`) using Bash/Glob and **Read** a small window of lines to confirm anchors like `Update()` exist.
 
-Output:
-- Write a short JUnit at `reports/claude-nl-tests.xml` with a single `<testsuite>` containing 2–3 `<testcase>` entries (tools present, resources readable, preview edit ok). On failure, include a `<failure>` element with concise reason.
-- Also write a brief markdown summary at `reports/claude-nl-tests.md`.
+3) Do **not** make destructive edits here. This step is only a smoke test to ensure we can list/read resources successfully before the full NL/T suite.
+
+# Guardrails
+- No wildcards in tool names were enabled; you must work with the explicit tools allowed by the workflow.
+- Prefer aggregator tools (ListMcpResourcesTool / ReadMcpResourceTool) first; drop down to `mcp__unity__*` tools only when necessary and with correct argument shapes.
+- Keep logs short and actionable.
+
+# Output
+- Print a brief bullet summary to stdout that includes:
+  - Whether resources were detected.
+  - The path of the target file you’ll use later.
+  - Any issues to watch for (e.g., permission prompts).
