@@ -19,25 +19,28 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Keep the launch path pointed at the server project dir.
-      # This is the key to consistent tool registration.
-      - name: Run QuickProbe (two MCP calls)
+      - name: Run QuickProbe
         uses: anthropics/claude-code-base-action@beta
         with:
+          model: claude-3-7-sonnet-20250219
           prompt_file: .claude/prompts/mcp-quickprobe.md
-          allowed_tools: mcp__unity__list_resources,mcp__unity__read_resource
-          max_turns: "2"
-          timeout_minutes: "5"
+          # Only the two tools we require:
+          allowed_tools: mcp__unity__find_in_file,mcp__unity__list_resources
+          # Give room for 2 calls + responses:
+          max_turns: 4
+          timeout_minutes: 5
           mcp_config: |
             {
               "mcpServers": {
                 "unity": {
                   "command": "uv",
-                  "args": ["run","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "args": ["run","--directory",".","python","UnityMcpBridge/UnityMcpServer~/src/server.py"],
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
-                    "MCP_LOG_LEVEL": "debug"
+                    "MCP_LOG_LEVEL": "debug",
+                    "PYTHONPATH": "UnityMcpBridge/UnityMcpServer~/src",
+                    "UNITY_MCP_PROJECT_ROOT": "."
                   }
                 }
               }
@@ -45,9 +48,10 @@ jobs:
           settings: |
             {
               "permissionMode": "allow",
-              "autoApprove": ["mcp__unity__*"]
+              "autoApprove": ["mcp__unity__find_in_file","mcp__unity__list_resources"],
+              "defaultMode": "bypassPermissions",
+              "permissionStorage": "none"
             }
-          model: claude-3-7-sonnet-20250219
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Upload QuickProbe log
