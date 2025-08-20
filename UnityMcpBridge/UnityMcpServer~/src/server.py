@@ -96,12 +96,17 @@ def asset_creation_strategy() -> str:
         "- You can pass uri or full file path for scripts; the server normalizes to name/path.\n"
     )
 
-# Resources support: list and read Unity scripts/files
+"""
+Resources support: publish native MCP resources in a way that is
+compatible with FastMCP variants exposing either `.resource` or `.resources`.
+Always include a synthetic spec at `unity://spec/script-edits`.
+"""
+
 # Guard for older MCP versions without 'capabilities' API
 if hasattr(mcp, "capabilities"):
     @mcp.capabilities(resources={"listChanged": True})
-    class _:
-        pass
+    class _ResourcesCaps:
+        ...
 
 PROJECT_ROOT = Path(os.environ.get("UNITY_PROJECT_ROOT", Path.cwd())).resolve()
 ASSETS_ROOT = (PROJECT_ROOT / "Assets").resolve()
@@ -124,29 +129,27 @@ def _resolve_safe_path_from_uri(uri: str) -> Path | None:
     return p
 
 
-if hasattr(mcp, "resource") and hasattr(getattr(mcp, "resource"), "list"):
-    @mcp.resource.list()
-    def list_resources(ctx: Context) -> list[dict]:
-        assets = []
-        try:
+def _list_resources_impl() -> list[dict]:
+    assets: list[dict] = []
+    try:
+        # Enumerate C# scripts in Assets/ if present
+        if ASSETS_ROOT.exists():
             for p in ASSETS_ROOT.rglob("*.cs"):
                 rel = p.relative_to(PROJECT_ROOT).as_posix()
                 assets.append({"uri": f"unity://path/{rel}", "name": p.name})
-        except Exception:
-            pass
-        # Add spec resource so clients (e.g., Claude Desktop) can learn the exact contract
-        assets.append({
-            "uri": "unity://spec/script-edits",
-            "name": "Unity Script Edits – Required JSON"
-        })
-        return assets
+    except Exception as e:
+        logger.debug(f"Assets enumeration failed: {e}")
+    # Always include the scripted spec resource
+    assets.append({
+        "uri": "unity://spec/script-edits",
+        "name": "Unity Script Edits – Required JSON",
+    })
+    return assets
 
-if hasattr(mcp, "resource") and hasattr(getattr(mcp, "resource"), "read"):
-    @mcp.resource.read()
-    def read_resource(ctx: Context, uri: str) -> dict:
-        # Serve script-edits spec
-        if uri == "unity://spec/script-edits":
-            spec_json = (
+
+def _read_resource_impl(uri: str) -> dict:
+    if uri == "unity://spec/script-edits":
+        spec_json = (
                 '{\n'
                 '  "name": "Unity MCP — Script Edits v1",\n'
                 '  "target_tool": "script_apply_edits",\n'
@@ -202,17 +205,32 @@ if hasattr(mcp, "resource") and hasattr(getattr(mcp, "resource"), "read"):
                 '    }\n'
                 '  ]\n'
                 '}\n'
-            )
-            return {"mimeType": "application/json", "text": spec_json}
-        p = _resolve_safe_path_from_uri(uri)
-        if not p or not p.exists():
-            return {"mimeType": "text/plain", "text": f"Resource not found: {uri}"}
-        try:
-            text = p.read_text(encoding="utf-8")
-            sha = hashlib.sha256(text.encode("utf-8")).hexdigest()
-            return {"mimeType": "text/plain", "text": text, "metadata": {"sha256": sha}}
-        except Exception as e:
-            return {"mimeType": "text/plain", "text": f"Error reading resource: {e}"}
+        )
+        return {"mimeType": "application/json", "text": spec_json}
+    p = _resolve_safe_path_from_uri(uri)
+    if not p or not p.exists():
+        return {"mimeType": "text/plain", "text": f"Resource not found: {uri}"}
+    try:
+        text = p.read_text(encoding="utf-8")
+        sha = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return {"mimeType": "text/plain", "text": text, "metadata": {"sha256": sha}}
+    except Exception as e:
+        return {"mimeType": "text/plain", "text": f"Error reading resource: {e}"}
+
+
+# Choose resource API variant (singular vs plural) and register
+_res_api = getattr(mcp, "resource", None) or getattr(mcp, "resources", None)
+if _res_api and hasattr(_res_api, "list") and hasattr(_res_api, "read"):
+    @_res_api.list()
+    def list_resources(ctx: Context) -> list[dict]:  # type: ignore[override]
+        logger.debug("Resources API registered via %s.list", _res_api.__class__.__name__ if hasattr(_res_api, "__class__") else "resource")
+        return _list_resources_impl()
+
+    @_res_api.read()
+    def read_resource(ctx: Context, uri: str) -> dict:  # type: ignore[override]
+        return _read_resource_impl(uri)
+else:
+    logger.warning("MCP resources API not available; native resource listing will be empty for ListMcpResourcesTool")
 
 # Run the server
 if __name__ == "__main__":
