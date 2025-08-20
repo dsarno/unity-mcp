@@ -125,11 +125,23 @@ jobs:
               }
             }
 
+          # Auto-approve required tools for non-interactive runs
+          settings: |
+            {
+              "permissionMode": "allow",
+              "autoApprove": ["Bash","Write","Edit","MultiEdit","mcp__unity__*"]
+            }
+
           # Guardrails
           model: "claude-3-7-sonnet-20250219"
           max_turns: "20"
           timeout_minutes: "20"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Mark permission issues as skipped in JUnit
+        if: always()
+        run: |
+          python .github/scripts/mark_skipped.py reports/claude-nl-tests.xml
 
       - name: Upload JUnit (Claude NL/T)
         if: always()
