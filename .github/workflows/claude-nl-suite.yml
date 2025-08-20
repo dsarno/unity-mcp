@@ -100,8 +100,8 @@ jobs:
           # Test instructions live here
           prompt_file: .claude/prompts/nl-unity-suite.md
 
-          # Tight tool allowlist (permit basic shell ops + git)
-          allowed_tools: "Bash(mkdir:*,ls:*,ps:*,cat:*,tee:*,git:*),View,GlobTool,GrepTool,BatchTool,mcp__unity__*"
+          # Tight tool allowlist (permit basic shell ops + git + mcp unity tools)
+          allowed_tools: "Bash(mkdir:*,ls:*,ps:*,cat:*,tee:*,find:*,head:*,tail:*,git:*),View,GlobTool,GrepTool,BatchTool,mcp__unity__*"
 
           # MCP server path
           mcp_config: |
@@ -125,7 +125,7 @@ jobs:
 
           # Guardrails
           model: "claude-3-7-sonnet-20250219"
-          max_turns: "10"
+          max_turns: "20"
           timeout_minutes: "20"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
