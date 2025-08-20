@@ -7,7 +7,6 @@ permissions:
   contents: write        # allow Claude to write test artifacts
   pull-requests: write   # allow annotations / comments
   issues: write
-  checks: write          # required for PR annotations
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -89,12 +88,17 @@ jobs:
           uv --version || true
           uv run --active --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
 
+      # --- Detect Anthropic key and skip Claude steps if not present (e.g., forks) ---
+      - name: Detect Anthropic key
+        id: detect_key
+        run: |
+          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then echo "has_key=true" >> "$GITHUB_OUTPUT"; else echo "has_key=false" >> "$GITHUB_OUTPUT"; fi
+
       # ---------- Claude: startup sanity (ensures Unity MCP server connects) ----------
       - name: Run Claude startup test suite
         id: claude_startup
         uses: anthropics/claude-code-base-action@beta
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        if: steps.detect_key.outputs.has_key == 'true'
         with:
           prompt_file: .claude/prompts/nl-startuptest.md
 
@@ -195,6 +199,7 @@ jobs:
           model: "claude-3-7-sonnet-20250219"
           max_turns: "12"
           timeout_minutes: "10"
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       # Optional: dump the settings Claude actually wrote (helps verify permissionMode)
       - name: Show effective Claude settings (diagnostic)
@@ -205,11 +210,9 @@ jobs:
 
       # ---------- Claude: full NL/T suite ----------
       - name: Run Claude NL/T test suite
-        if: steps.claude_startup.outcome == 'success'
+        if: steps.detect_key.outputs.has_key == 'true' && steps.claude_startup.outcome == 'success'
         id: claude
         uses: anthropics/claude-code-base-action@beta
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
           prompt_file: .claude/prompts/nl-unity-suite.md
 
@@ -309,6 +312,7 @@ jobs:
           model: "claude-3-7-sonnet-20250219"
           max_turns: "20"
           timeout_minutes: "20"
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Mark permission issues as skipped in JUnit
         if: always()
