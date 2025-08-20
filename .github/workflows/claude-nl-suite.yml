@@ -5,9 +5,8 @@ on:
 
 permissions:
   contents: write        # allow Claude to write test artifacts
-  pull-requests: write   # allow PR comments if needed
+  pull-requests: write   # allow annotations / comments
   issues: write
-  checks: write          # REQUIRED for dorny/test-reporter to publish annotations
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -73,9 +72,40 @@ jobs:
       - name: Ensure artifact dirs exist
         run: mkdir -p reports
 
+      # Seed Claude settings on-disk so CI never prompts for permissions.
+      # (We include both the legacy and current keys; the action will pick up what it understands.)
+      - name: Seed Claude settings (auto-approve MCP + filesystem tools)
+        run: |
+          set -eux
+          mkdir -p "$HOME/.claude"
+          cat > "$HOME/.claude/settings.json" <<'JSON'
+          {
+            "enableAllProjectMcpServers": true,
+
+            /* Legacy keys used by some builds */
+            "permissionMode": "allow",
+            "autoApprove": ["Bash","Write","Edit","MultiEdit","mcp__unity__*","ListMcpResourcesTool","ReadMcpResourceTool","Read","LS","Glob","Grep"],
+
+            /* Current keys used by newer builds */
+            "defaultMode": "bypassPermissions",
+            "permissionStorage": "none",
+            "permissions": {
+              "allow": [
+                "Read", "Write", "LS", "Glob", "Grep",
+                "Bash(git:*)",
+                "mcp__unity__*",
+                "ListMcpResourcesTool",
+                "ReadMcpResourceTool"
+              ]
+            }
+          }
+          JSON
+          echo "Seeded settings:"
+          cat "$HOME/.claude/settings.json"
+
       - name: Log MCP server location (diagnostic)
         run: |
-          set -ux  # do not -e; we want logs even if missing
+          set -ux
           SRV_DIR="UnityMcpBridge/UnityMcpServer~/src"
           echo "MCP server dir := ${SRV_DIR}"
           python - <<'PY'
@@ -95,7 +125,7 @@ jobs:
         uses: anthropics/claude-code-base-action@beta
         with:
           prompt_file: .claude/prompts/nl-startuptest.md
-          allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,mcp__unity__*"
+          allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,ListMcpResourcesTool,ReadMcpResourceTool,mcp__unity__*"
           mcp_config: |
             {
               "mcpServers": {
@@ -114,12 +144,28 @@ jobs:
                 }
               }
             }
-          # Auto-approve in CI (no interactive prompts)
+          # Force auto-approval in the runner (both legacy and current schema)
           settings: |
             {
               "permissionMode": "allow",
-              "autoApprove": ["Bash","Read","Write","Edit","MultiEdit","LS","Glob","Grep","mcp__unity__*"]
+              "autoApprove": ["Bash","Write","Edit","MultiEdit","mcp__unity__*","ListMcpResourcesTool","ReadMcpResourceTool","Read","LS","Glob","Grep"],
+              "defaultMode": "bypassPermissions",
+              "permissionStorage": "none",
+              "permissions": {
+                "allow": [
+                  "Read", "Write", "LS", "Glob", "Grep",
+                  "Bash(git:*)",
+                  "mcp__unity__*",
+                  "ListMcpResourcesTool",
+                  "ReadMcpResourceTool"
+                ]
+              }
             }
+          # Nudge the agent to use the correct base dir for this repo (no Assets/)
+          append_system_prompt: |
+            IMPORTANT: This repository root does not contain an Assets/ folder.
+            When using mcp__unity__list_resources or read_resource, use under: "." or under: "ClaudeTests".
+            Do NOT rely on ListMcpResourcesTool; prefer the Unity-specific tools.
           model: "claude-3-7-sonnet-20250219"
           max_turns: "12"
           timeout_minutes: "10"
@@ -130,13 +176,8 @@ jobs:
         id: claude
         uses: anthropics/claude-code-base-action@beta
         with:
-          # Test instructions live here
           prompt_file: .claude/prompts/nl-unity-suite.md
-
-          # Restrict which tools the agent may attempt (prefer server tools over generic aggregators)
-          allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,mcp__unity__*"
-
-          # MCP server path (use active venv)
+          allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,ListMcpResourcesTool,ReadMcpResourceTool,mcp__unity__*"
           mcp_config: |
             {
               "mcpServers": {
@@ -151,22 +192,29 @@ jobs:
                     "server.py"
                   ],
                   "transport": { "type": "stdio" },
-                  "env": {
-                    "PYTHONUNBUFFERED": "1",
-                    "MCP_LOG_LEVEL": "debug"
-                  }
+                  "env": { "PYTHONUNBUFFERED": "1", "MCP_LOG_LEVEL": "debug" }
                 }
               }
             }
-
-          # Auto-approve in CI (bypass prompts)
           settings: |
             {
               "permissionMode": "allow",
-              "autoApprove": ["Bash","Read","Write","Edit","MultiEdit","LS","Glob","Grep","mcp__unity__*"]
+              "autoApprove": ["Bash","Write","Edit","MultiEdit","mcp__unity__*","ListMcpResourcesTool","ReadMcpResourceTool","Read","LS","Glob","Grep"],
+              "defaultMode": "bypassPermissions",
+              "permissionStorage": "none",
+              "permissions": {
+                "allow": [
+                  "Read", "Write", "LS", "Glob", "Grep",
+                  "Bash(git:*)",
+                  "mcp__unity__*",
+                  "ListMcpResourcesTool",
+                  "ReadMcpResourceTool"
+                ]
+              }
             }
-
-          # Guardrails
+          append_system_prompt: |
+            IMPORTANT: The workspace is not a Unity project; there is no Assets/ directory.
+            Use mcp__unity__list_resources with under: "." (or "ClaudeTests") and pattern: "*" to discover files.
           model: "claude-3-7-sonnet-20250219"
           max_turns: "20"
           timeout_minutes: "20"
@@ -175,12 +223,7 @@ jobs:
       - name: Mark permission issues as skipped in JUnit
         if: always()
         run: |
-          set -eux
-          if [ -f .github/scripts/mark_skipped.py ]; then
-            python .github/scripts/mark_skipped.py reports/claude-nl-tests.xml || true
-          else
-            echo "mark_skipped.py not present; skipping"
-          fi
+          python .github/scripts/mark_skipped.py reports/claude-nl-tests.xml
 
       - name: Ensure JUnit exists (fallback)
         if: always()
@@ -250,7 +293,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           packageMode: true
-          unityVersion: 2022.3.45f1   # set your exact version
+          unityVersion: 2022.3.45f1
           projectPath: .
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
