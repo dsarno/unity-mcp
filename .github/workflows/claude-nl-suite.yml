@@ -90,7 +90,7 @@ jobs:
           PY
           ls -la "${SRV_DIR}" || true
           uv --version || true
-          uv run --active --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
+          uv run --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
 
       - name: Run Claude NL/T test suite
         if: success()
@@ -100,8 +100,8 @@ jobs:
           # Test instructions live here
           prompt_file: .claude/prompts/nl-unity-suite.md
 
-          # Tight tool allowlist (permit basic shell ops + git + mcp unity tools)
-          allowed_tools: "Bash(mkdir:*,ls:*,ps:*,cat:*,tee:*,find:*,head:*,tail:*,git:*),View,GlobTool,GrepTool,BatchTool,mcp__unity__*"
+          # Tight tool allowlist (permit git and essential MCP tooling)
+          allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,ListMcpResourcesTool,ReadMcpResourceTool,mcp__unity__*"
 
           # MCP server path
           mcp_config: |
@@ -111,14 +111,16 @@ jobs:
                   "command": "uv",
                   "args": [
                     "run",
-                    "--active",
                     "--directory",
                     "UnityMcpBridge/UnityMcpServer~/src",
                     "python",
                     "server.py"
                   ],
-                  "type": "stdio",
-                  "env": { "UNITY_MCP_LOG": "debug" }
+                  "transport": { "type": "stdio" },
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug"
+                  }
                 }
               }
             }
