@@ -23,7 +23,7 @@ jobs:
         uses: anthropics/claude-code-base-action@beta
         with:
           prompt_file: .claude/prompts/mcp-quickprobe.md
-          allowed_tools: mcp__unity__read_resource,mcp__unity__list_resources,mcp__unity__find_in_file
+          allowed_tools: mcp__unity__find_in_file,mcp__unity__list_resources,mcp__unity__read_resource
           max_turns: "2"
           timeout_minutes: "5"
           mcp_config: |
@@ -31,9 +31,14 @@ jobs:
               "mcpServers": {
                 "unity": {
                   "command": "uv",
-                  "args": ["run","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "args": ["run","--directory",".","python","UnityMcpBridge/UnityMcpServer~/src/server.py"],
                   "transport": { "type": "stdio" },
-                  "env": { "PYTHONUNBUFFERED": "1", "MCP_LOG_LEVEL": "debug" }
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug",
+                    "PYTHONPATH": "UnityMcpBridge/UnityMcpServer~/src",
+                    "UNITY_MCP_PROJECT_ROOT": "."
+                  }
                 }
               }
             }
@@ -51,61 +56,3 @@ jobs:
           name: quickprobe-claude-execution
           path: /home/runner/work/_temp/claude-execution-output.json
           if-no-files-found: warn
-
-  smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Python + uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install UnityMcpServer (editable)
-        run: |
-          set -eux
-          if [ -f "UnityMcpBridge/UnityMcpServer~/src/pyproject.toml" ]; then
-            uv venv
-            echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
-            echo "$GITHUB_WORKSPACE/.venv/bin"       >> "$GITHUB_PATH"
-            uv pip install -e "UnityMcpBridge/UnityMcpServer~/src"
-          fi
-
-      - name: Make prompt file (smoke)
-        run: |
-          mkdir -p .claude/prompts
-          cat > .claude/prompts/mcp-smoke.md <<'MD'
-          You are running a one-shot smoke check. Do exactly one Unity MCP tool call and nothing else.
-          1) Call the tool named: mcp__unity__list_resources
-          2) Use this exact JSON input:
-             { "ctx": {}, "under": "ClaudeTests", "pattern": "*.cs" }
-          3) Print the raw tool result to the console. Do not transform it.
-          4) If the call raises a validation error, print the exception type and message exactly.
-          5) Stop.
-          MD
-
-      - name: Run smoke (single tool call)
-        uses: anthropics/claude-code-base-action@beta
-        with:
-          prompt_file: .claude/prompts/mcp-smoke.md
-          allowed_tools: mcp__unity__list_resources
-          mcp_config: |
-            {
-              "mcpServers": {
-                "unity": {
-                  "command": "uv",
-                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
-                  "transport": { "type": "stdio" },
-                  "env": { "PYTHONUNBUFFERED": "1", "MCP_LOG_LEVEL": "debug" }
-                }
-              }
-            }
-          settings: |
-            { "permissionMode": "allow", "autoApprove": ["mcp__unity__list_resources"], "defaultMode": "bypassPermissions", "permissionStorage": "none" }
-          model: claude-3-7-sonnet-20250219
-          max_turns: 3
-          timeout_minutes: 3
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
