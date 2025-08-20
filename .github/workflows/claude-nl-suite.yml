@@ -90,7 +90,7 @@ jobs:
           PY
           ls -la "${SRV_DIR}" || true
           uv --version || true
-          uv run --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
+          uv run --active --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
 
       - name: Run Claude NL/T test suite
         if: success()
@@ -111,6 +111,7 @@ jobs:
                   "command": "uv",
                   "args": [
                     "run",
+                    "--active",
                     "--directory",
                     "UnityMcpBridge/UnityMcpServer~/src",
                     "python",
