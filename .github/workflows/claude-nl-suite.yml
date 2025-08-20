@@ -90,16 +90,46 @@ jobs:
           uv --version || true
           uv run --active --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
 
-      - name: Run Claude NL/T test suite
+      - name: Run Claude startup test suite
         if: success()
+        id: claude_startup
+        uses: anthropics/claude-code-base-action@beta
+        with:
+          prompt_file: .claude/prompts/nl-startuptest.md
+          allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,mcp__unity__*"
+          mcp_config: |
+            {
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": [
+                    "run",
+                    "--active",
+                    "--directory",
+                    "UnityMcpBridge/UnityMcpServer~/src",
+                    "python",
+                    "server.py"
+                  ],
+                  "transport": { "type": "stdio" },
+                  "env": { "PYTHONUNBUFFERED": "1", "MCP_LOG_LEVEL": "debug" }
+                }
+              }
+            }
+          model: "claude-3-7-sonnet-20250219"
+          max_turns: "12"
+          timeout_minutes: "10"
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Run Claude NL/T test suite
+        if: steps.claude_startup.outcome == 'success'
         id: claude
         uses: anthropics/claude-code-base-action@beta
         with:
           # Test instructions live here
           prompt_file: .claude/prompts/nl-unity-suite.md
 
-          # Restrict which tools the agent may attempt (approvals handled via settings)
-          allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,ListMcpResourcesTool,ReadMcpResourceTool,mcp__unity__*"
+          # Restrict which tools the agent may attempt (prefer server tools over generic aggregators)
+          allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,mcp__unity__*"
 
           # MCP server path (use active venv)
           mcp_config: |
@@ -148,6 +178,25 @@ jobs:
         if: always()
         run: |
           python .github/scripts/mark_skipped.py reports/claude-nl-tests.xml
+
+      - name: Ensure JUnit exists (fallback)
+        if: always()
+        run: |
+          set -eux
+          mkdir -p reports
+          if [ ! -f reports/claude-nl-tests.xml ]; then
+            cat > reports/claude-nl-tests.xml <<'XML'
+<testsuites>
+  <testsuite name="UnityMCP.NL" tests="1" failures="1" errors="0" skipped="0" time="0.0">
+    <testcase name="Bootstrap" classname="UnityMCP.NL" time="0.0">
+      <failure message="No MCP resources detected by aggregator or test aborted early">
+        Claude ran but the startup checks failed to detect usable MCP resources; NL/T flow did not execute.
+      </failure>
+    </testcase>
+  </testsuite>
+</testsuites>
+XML
+          fi
 
       - name: Upload JUnit (Claude NL/T)
         if: always()

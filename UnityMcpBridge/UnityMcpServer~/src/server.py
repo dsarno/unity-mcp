@@ -137,6 +137,12 @@ def _list_resources_impl() -> list[dict]:
             for p in ASSETS_ROOT.rglob("*.cs"):
                 rel = p.relative_to(PROJECT_ROOT).as_posix()
                 assets.append({"uri": f"unity://path/{rel}", "name": p.name})
+        # Also include CI fixtures under ClaudeTests/
+        ct_root = (PROJECT_ROOT / "ClaudeTests").resolve()
+        if ct_root.exists():
+            for p in ct_root.rglob("*.cs"):
+                rel = p.relative_to(PROJECT_ROOT).as_posix()
+                assets.append({"uri": f"unity://path/{rel}", "name": p.name})
     except Exception as e:
         logger.debug(f"Assets enumeration failed: {e}")
     # Always include the scripted spec resource
