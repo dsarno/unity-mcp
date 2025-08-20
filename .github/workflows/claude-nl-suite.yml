@@ -7,6 +7,7 @@ permissions:
   contents: write        # allow Claude to write test artifacts
   pull-requests: write   # allow annotations / comments
   issues: write
+  checks: write          # required for PR annotations
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -72,40 +73,9 @@ jobs:
       - name: Ensure artifact dirs exist
         run: mkdir -p reports
 
-      # Seed Claude settings on-disk so CI never prompts for permissions.
-      # (We include both the legacy and current keys; the action will pick up what it understands.)
-      - name: Seed Claude settings (auto-approve MCP + filesystem tools)
-        run: |
-          set -eux
-          mkdir -p "$HOME/.claude"
-          cat > "$HOME/.claude/settings.json" <<'JSON'
-          {
-            "enableAllProjectMcpServers": true,
-
-            /* Legacy keys used by some builds */
-            "permissionMode": "allow",
-            "autoApprove": ["Bash","Write","Edit","MultiEdit","mcp__unity__*","ListMcpResourcesTool","ReadMcpResourceTool","Read","LS","Glob","Grep"],
-
-            /* Current keys used by newer builds */
-            "defaultMode": "bypassPermissions",
-            "permissionStorage": "none",
-            "permissions": {
-              "allow": [
-                "Read", "Write", "LS", "Glob", "Grep",
-                "Bash(git:*)",
-                "mcp__unity__*",
-                "ListMcpResourcesTool",
-                "ReadMcpResourceTool"
-              ]
-            }
-          }
-          JSON
-          echo "Seeded settings:"
-          cat "$HOME/.claude/settings.json"
-
       - name: Log MCP server location (diagnostic)
         run: |
-          set -ux
+          set -ux  # do not -e; we want logs even if missing
           SRV_DIR="UnityMcpBridge/UnityMcpServer~/src"
           echo "MCP server dir := ${SRV_DIR}"
           python - <<'PY'
@@ -119,13 +89,37 @@ jobs:
           uv --version || true
           uv run --active --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
 
+      # ---------- Claude: startup sanity (ensures Unity MCP server connects) ----------
       - name: Run Claude startup test suite
-        if: success()
         id: claude_startup
         uses: anthropics/claude-code-base-action@beta
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
           prompt_file: .claude/prompts/nl-startuptest.md
-          allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,ListMcpResourcesTool,ReadMcpResourceTool,mcp__unity__*"
+
+          # Be explicit: list every Unity MCP tool and the resource helpers
+          allowed_tools: >
+            Bash(git:*),Read,Write,LS,Glob,Grep,
+            ListMcpResourcesTool,ReadMcpResourceTool,
+            mcp__unity__script_apply_edits,
+            mcp__unity__apply_text_edits,
+            mcp__unity__create_script,
+            mcp__unity__delete_script,
+            mcp__unity__validate_script,
+            mcp__unity__manage_script,
+            mcp__unity__manage_scene,
+            mcp__unity__manage_editor,
+            mcp__unity__manage_gameobject,
+            mcp__unity__manage_asset,
+            mcp__unity__manage_shader,
+            mcp__unity__read_console,
+            mcp__unity__execute_menu_item,
+            mcp__unity__list_resources,
+            mcp__unity__read_resource,
+            mcp__unity__find_in_file
+
+          # Use the active venv and stdio transport
           mcp_config: |
             {
               "mcpServers": {
@@ -140,44 +134,106 @@ jobs:
                     "server.py"
                   ],
                   "transport": { "type": "stdio" },
-                  "env": { "PYTHONUNBUFFERED": "1", "MCP_LOG_LEVEL": "debug" }
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug"
+                  }
                 }
               }
             }
-          # Force auto-approval in the runner (both legacy and current schema)
+
+          # IMPORTANT: use both schemas; explicit per-tool approvals (no wildcards)
           settings: |
             {
               "permissionMode": "allow",
-              "autoApprove": ["Bash","Write","Edit","MultiEdit","mcp__unity__*","ListMcpResourcesTool","ReadMcpResourceTool","Read","LS","Glob","Grep"],
+              "autoApprove": [
+                "Read","Write","LS","Glob","Grep","Edit","MultiEdit","Bash",
+                "ListMcpResourcesTool","ReadMcpResourceTool",
+                "mcp__unity__script_apply_edits",
+                "mcp__unity__apply_text_edits",
+                "mcp__unity__create_script",
+                "mcp__unity__delete_script",
+                "mcp__unity__validate_script",
+                "mcp__unity__manage_script",
+                "mcp__unity__manage_scene",
+                "mcp__unity__manage_editor",
+                "mcp__unity__manage_gameobject",
+                "mcp__unity__manage_asset",
+                "mcp__unity__manage_shader",
+                "mcp__unity__read_console",
+                "mcp__unity__execute_menu_item",
+                "mcp__unity__list_resources",
+                "mcp__unity__read_resource",
+                "mcp__unity__find_in_file"
+              ],
               "defaultMode": "bypassPermissions",
               "permissionStorage": "none",
               "permissions": {
                 "allow": [
-                  "Read", "Write", "LS", "Glob", "Grep",
-                  "Bash(git:*)",
-                  "mcp__unity__*",
-                  "ListMcpResourcesTool",
-                  "ReadMcpResourceTool"
+                  "Read","Write","LS","Glob","Grep","Edit","MultiEdit","Bash",
+                  "ListMcpResourcesTool","ReadMcpResourceTool",
+                  "mcp__unity__script_apply_edits",
+                  "mcp__unity__apply_text_edits",
+                  "mcp__unity__create_script",
+                  "mcp__unity__delete_script",
+                  "mcp__unity__validate_script",
+                  "mcp__unity__manage_script",
+                  "mcp__unity__manage_scene",
+                  "mcp__unity__manage_editor",
+                  "mcp__unity__manage_gameobject",
+                  "mcp__unity__manage_asset",
+                  "mcp__unity__manage_shader",
+                  "mcp__unity__read_console",
+                  "mcp__unity__execute_menu_item",
+                  "mcp__unity__list_resources",
+                  "mcp__unity__read_resource",
+                  "mcp__unity__find_in_file"
                 ]
               }
             }
-          # Nudge the agent to use the correct base dir for this repo (no Assets/)
-          append_system_prompt: |
-            IMPORTANT: This repository root does not contain an Assets/ folder.
-            When using mcp__unity__list_resources or read_resource, use under: "." or under: "ClaudeTests".
-            Do NOT rely on ListMcpResourcesTool; prefer the Unity-specific tools.
+
           model: "claude-3-7-sonnet-20250219"
           max_turns: "12"
           timeout_minutes: "10"
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
+      # Optional: dump the settings Claude actually wrote (helps verify permissionMode)
+      - name: Show effective Claude settings (diagnostic)
+        if: always()
+        run: |
+          set -ux
+          cat /home/runner/.claude/settings.json || true
+
+      # ---------- Claude: full NL/T suite ----------
       - name: Run Claude NL/T test suite
         if: steps.claude_startup.outcome == 'success'
         id: claude
         uses: anthropics/claude-code-base-action@beta
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
           prompt_file: .claude/prompts/nl-unity-suite.md
-          allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,ListMcpResourcesTool,ReadMcpResourceTool,mcp__unity__*"
+
+          # Same explicit tool list; no wildcards
+          allowed_tools: >
+            Bash(git:*),Read,Write,LS,Glob,Grep,
+            ListMcpResourcesTool,ReadMcpResourceTool,
+            mcp__unity__script_apply_edits,
+            mcp__unity__apply_text_edits,
+            mcp__unity__create_script,
+            mcp__unity__delete_script,
+            mcp__unity__validate_script,
+            mcp__unity__manage_script,
+            mcp__unity__manage_scene,
+            mcp__unity__manage_editor,
+            mcp__unity__manage_gameobject,
+            mcp__unity__manage_asset,
+            mcp__unity__manage_shader,
+            mcp__unity__read_console,
+            mcp__unity__execute_menu_item,
+            mcp__unity__list_resources,
+            mcp__unity__read_resource,
+            mcp__unity__find_in_file
+
           mcp_config: |
             {
               "mcpServers": {
@@ -192,33 +248,67 @@ jobs:
                     "server.py"
                   ],
                   "transport": { "type": "stdio" },
-                  "env": { "PYTHONUNBUFFERED": "1", "MCP_LOG_LEVEL": "debug" }
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug"
+                  }
                 }
               }
             }
+
+          # Same permission model here too
           settings: |
             {
               "permissionMode": "allow",
-              "autoApprove": ["Bash","Write","Edit","MultiEdit","mcp__unity__*","ListMcpResourcesTool","ReadMcpResourceTool","Read","LS","Glob","Grep"],
+              "autoApprove": [
+                "Read","Write","LS","Glob","Grep","Edit","MultiEdit","Bash",
+                "ListMcpResourcesTool","ReadMcpResourceTool",
+                "mcp__unity__script_apply_edits",
+                "mcp__unity__apply_text_edits",
+                "mcp__unity__create_script",
+                "mcp__unity__delete_script",
+                "mcp__unity__validate_script",
+                "mcp__unity__manage_script",
+                "mcp__unity__manage_scene",
+                "mcp__unity__manage_editor",
+                "mcp__unity__manage_gameobject",
+                "mcp__unity__manage_asset",
+                "mcp__unity__manage_shader",
+                "mcp__unity__read_console",
+                "mcp__unity__execute_menu_item",
+                "mcp__unity__list_resources",
+                "mcp__unity__read_resource",
+                "mcp__unity__find_in_file"
+              ],
               "defaultMode": "bypassPermissions",
               "permissionStorage": "none",
               "permissions": {
                 "allow": [
-                  "Read", "Write", "LS", "Glob", "Grep",
-                  "Bash(git:*)",
-                  "mcp__unity__*",
-                  "ListMcpResourcesTool",
-                  "ReadMcpResourceTool"
+                  "Read","Write","LS","Glob","Grep","Edit","MultiEdit","Bash",
+                  "ListMcpResourcesTool","ReadMcpResourceTool",
+                  "mcp__unity__script_apply_edits",
+                  "mcp__unity__apply_text_edits",
+                  "mcp__unity__create_script",
+                  "mcp__unity__delete_script",
+                  "mcp__unity__validate_script",
+                  "mcp__unity__manage_script",
+                  "mcp__unity__manage_scene",
+                  "mcp__unity__manage_editor",
+                  "mcp__unity__manage_gameobject",
+                  "mcp__unity__manage_asset",
+                  "mcp__unity__manage_shader",
+                  "mcp__unity__read_console",
+                  "mcp__unity__execute_menu_item",
+                  "mcp__unity__list_resources",
+                  "mcp__unity__read_resource",
+                  "mcp__unity__find_in_file"
                 ]
               }
             }
-          append_system_prompt: |
-            IMPORTANT: The workspace is not a Unity project; there is no Assets/ directory.
-            Use mcp__unity__list_resources with under: "." (or "ClaudeTests") and pattern: "*" to discover files.
+
           model: "claude-3-7-sonnet-20250219"
           max_turns: "20"
           timeout_minutes: "20"
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Mark permission issues as skipped in JUnit
         if: always()
@@ -293,7 +383,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           packageMode: true
-          unityVersion: 2022.3.45f1
+          unityVersion: 2022.3.45f1   # set your exact version
           projectPath: .
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
