@@ -473,27 +473,46 @@ namespace UnityMcpBridge.Editor
             }
         }
 
-        // Timeout-aware exact read helper; avoids indefinite stalls
-        private static async System.Threading.Tasks.Task<byte[]> ReadExactAsync(NetworkStream stream, int count, int timeoutMs)
+        // Timeout-aware exact read helper with cancellation; avoids indefinite stalls and background task leaks
+        private static async System.Threading.Tasks.Task<byte[]> ReadExactAsync(NetworkStream stream, int count, int timeoutMs, CancellationToken cancel = default)
         {
-            byte[] data = new byte[count];
+            byte[] buffer = new byte[count];
             int offset = 0;
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             while (offset < count)
             {
-                var readTask = stream.ReadAsync(data, offset, count - offset);
-                var completed = await System.Threading.Tasks.Task.WhenAny(readTask, System.Threading.Tasks.Task.Delay(timeoutMs));
-                if (completed != readTask)
+                int remaining = count - offset;
+                int remainingTimeout = timeoutMs <= 0 ? Timeout.Infinite : Math.Max(1, timeoutMs - (int)stopwatch.ElapsedMilliseconds);
+
+                using var cts = remainingTimeout == Timeout.Infinite
+                    ? CancellationTokenSource.CreateLinkedTokenSource(cancel)
+                    : CancellationTokenSource.CreateLinkedTokenSource(cancel);
+                if (remainingTimeout != Timeout.Infinite)
+                {
+                    cts.CancelAfter(remainingTimeout);
+                }
+
+                try
+                {
+#if NETSTANDARD2_1 || NET6_0_OR_GREATER
+                    int read = await stream.ReadAsync(buffer.AsMemory(offset, remaining), cts.Token).ConfigureAwait(false);
+#else
+                    int read = await stream.ReadAsync(buffer, offset, remaining, cts.Token).ConfigureAwait(false);
+#endif
+                    if (read == 0)
+                    {
+                        throw new System.IO.IOException("Connection closed before reading expected bytes");
+                    }
+                    offset += read;
+                }
+                catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
                 {
                     throw new System.IO.IOException("Read timed out");
                 }
-                int r = readTask.Result;
-                if (r == 0)
-                {
-                    throw new System.IO.IOException("Connection closed before reading expected bytes");
-                }
-                offset += r;
             }
-            return data;
+
+            return buffer;
         }
 
         private static async System.Threading.Tasks.Task WriteFrameAsync(NetworkStream stream, byte[] payload)
