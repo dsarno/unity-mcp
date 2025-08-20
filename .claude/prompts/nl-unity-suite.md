@@ -11,6 +11,11 @@ You are running in CI at the repository root. Use only the tools that are allowe
 - For each operation, prefer structured edit tools (`replace_method`, `insert_method`, `delete_method`, `anchor_insert`, `apply_text_edits`, `regex_replace`) via the MCP server.
 - Include `precondition_sha256` for any text path write.
 
+### Preflight (must run before NL/T tests)
+- List available MCP tools from server `unity`.
+- Assert that at least these tools are present: `script_apply_edits` (structured), `manage_script` (with `apply_text_edits` action available via arguments), and resource wrappers.
+- If missing, fail fast with a concise message so logs clearly show the server didn’t advertise edit endpoints.
+
 ## Output requirements
 - Create a JUnit XML at `reports/claude-nl-tests.xml`.
 - Each test = one `<testcase>` with `classname="UnityMCP.NL"` or `UnityMCP.T`.

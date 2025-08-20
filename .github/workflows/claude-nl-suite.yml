@@ -34,12 +34,32 @@ jobs:
         run: |
           set -eux
           if [ -f "UnityMcpBridge/UnityMcpServer~/src/pyproject.toml" ]; then
+
+            uv venv
+            echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
+            echo "$GITHUB_WORKSPACE/.venv/bin"       >> "$GITHUB_PATH"
             uv pip install -e "UnityMcpBridge/UnityMcpServer~/src"
           elif [ -f "UnityMcpBridge/UnityMcpServer~/src/requirements.txt" ]; then
+            uv venv
+            echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
+            echo "$GITHUB_WORKSPACE/.venv/bin"       >> "$GITHUB_PATH"
             uv pip install -r "UnityMcpBridge/UnityMcpServer~/src/requirements.txt"
           else
-            echo "No Python deps found for UnityMcpServer~ (skipping)"
+            echo "No Python deps found (skipping)"
+
           fi
+
+      - name: Verify Python env
+        run: |
+          set -eux
+          which python
+          python -V
+          python -c "import mcp; print('mcp ok')"
+
+      - name: Prepare reports dir
+        run: |
+          set -eux
+          mkdir -p reports
 
       - name: Run Claude NL/T test suite
         id: claude
@@ -48,16 +68,24 @@ jobs:
           # Test instructions live here
           prompt_file: .claude/prompts/nl-unity-suite.md
 
-          # Tight tool allowlist
-          allowed_tools: "Bash(git:*),View,GlobTool,GrepTool,BatchTool,mcp__unity__*"
+          # Tight tool allowlist (permit basic shell ops + git)
+          allowed_tools: "Bash(mkdir:*,ls:*,ps:*,cat:*,tee:*,git:*),View,GlobTool,GrepTool,BatchTool,mcp__unity__*"
 
-          # MCP server path (matches your screenshots)
+          # MCP server path
           mcp_config: |
             {
               "mcpServers": {
                 "unity": {
-                  "command": "python",
-                  "args": ["UnityMcpBridge/UnityMcpServer~/src/server.py"]
+                  "command": "uv",
+                  "args": [
+                    "run",
+                    "--directory",
+                    "UnityMcpBridge/UnityMcpServer~/src",
+                    "python",
+                    "server.py"
+                  ],
+                  "type": "stdio",
+                  "env": { "UNITY_MCP_LOG": "debug" }
                 }
               }
             }
@@ -92,8 +120,11 @@ jobs:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         run: |
           if [ -n "$UNITY_LICENSE" ]; then echo "has_license=true" >> "$GITHUB_OUTPUT"; else echo "has_license=false" >> "$GITHUB_OUTPUT"; fi
+
           if [ -f "ProjectSettings/ProjectVersion.txt" ]; then echo "is_project=true"  >> "$GITHUB_OUTPUT"; else echo "is_project=false" >> "$GITHUB_OUTPUT"; fi
+
           if [ -f "Packages/manifest.json" ] && [ ! -f "ProjectSettings/ProjectVersion.txt" ]; then echo "is_package=true"  >> "$GITHUB_OUTPUT"; else echo "is_package=false" >> "$GITHUB_OUTPUT"; fi
+
 
       # --- Optional: Unity compile after Claude’s edits (satisfies NL-4) ---
       - name: Unity compile (Project)
