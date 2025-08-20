@@ -102,7 +102,7 @@ jobs:
         with:
           prompt_file: .claude/prompts/nl-startuptest.md
 
-          # Be explicit: list every Unity MCP tool and the resource helpers
+          # Be explicit: list every Unity MCP tool and the resource helpers (no wildcards)
           allowed_tools: >
             Bash(git:*),Read,Write,LS,Glob,Grep,
             ListMcpResourcesTool,ReadMcpResourceTool,
@@ -146,7 +146,7 @@ jobs:
               }
             }
 
-          # IMPORTANT: use both schemas; explicit per-tool approvals (no wildcards)
+          # IMPORTANT: explicit per-tool approvals (still no wildcards)
           settings: |
             {
               "permissionMode": "allow",
@@ -387,7 +387,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           packageMode: true
-          unityVersion: 2022.3.45f1   # set your exact version
+          unityVersion: 2022.3.45f1
           projectPath: .
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
