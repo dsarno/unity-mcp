@@ -59,7 +59,7 @@ jobs:
       - name: Preflight MCP modules (fail fast)
         run: |
           set -eux
-          uv run --directory UnityMcpBridge/UnityMcpServer~/src python - <<'PY'
+          uv run --active --directory UnityMcpBridge/UnityMcpServer~/src python - <<'PY'
           import sys, pkgutil
           import tools
           mods = {name for _, name, _ in pkgutil.iter_modules(tools.__path__)}
@@ -88,7 +88,7 @@ jobs:
           PY
           ls -la "${SRV_DIR}" || true
           uv --version || true
-          uv run --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
+          uv run --active --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
 
       - name: Run Claude NL/T test suite
         if: success()
@@ -98,10 +98,10 @@ jobs:
           # Test instructions live here
           prompt_file: .claude/prompts/nl-unity-suite.md
 
-          # Tight tool allowlist (permit git and essential MCP tooling)
+          # Restrict which tools the agent may attempt (approvals handled via settings)
           allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,ListMcpResourcesTool,ReadMcpResourceTool,mcp__unity__*"
 
-          # MCP server path (launched via uv without --active)
+          # MCP server path (use active venv)
           mcp_config: |
             {
               "mcpServers": {
@@ -109,6 +109,7 @@ jobs:
                   "command": "uv",
                   "args": [
                     "run",
+                    "--active",
                     "--directory",
                     "UnityMcpBridge/UnityMcpServer~/src",
                     "python",
@@ -123,9 +124,19 @@ jobs:
               }
             }
 
-          # Make CI non-interactive; names vary by action version
-          permission_mode: "auto"                       # or use the action’s supported key
-          auto_approve_tools: "mcp__unity__*,Read,Write"
+          # Auto-approve in CI (bypass prompts)
+          settings: |
+            {
+              "defaultMode": "bypassPermissions",
+              "permissionStorage": "none",
+              "permissions": {
+                "allow": [
+                  "Read", "Write", "LS", "Glob", "Grep",
+                  "Bash(git:*)",
+                  "mcp__unity"
+                ]
+              }
+            }
 
           # Guardrails
           model: "claude-3-7-sonnet-20250219"
