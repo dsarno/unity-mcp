@@ -103,7 +103,7 @@ jobs:
           # Tight tool allowlist (permit git and essential MCP tooling)
           allowed_tools: "Bash(git:*),Read,Write,LS,Glob,Grep,ListMcpResourcesTool,ReadMcpResourceTool,mcp__unity__*"
 
-          # MCP server path
+          # MCP server path (launched via uv without --active)
           mcp_config: |
             {
               "mcpServers": {
