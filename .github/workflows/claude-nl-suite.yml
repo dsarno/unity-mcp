@@ -5,8 +5,9 @@ on:
 
 permissions:
   contents: write        # allow Claude to write test artifacts
-  pull-requests: write   # allow annotations / comments
+  pull-requests: write   # allow PR comments if needed
   issues: write
+  checks: write          # REQUIRED for dorny/test-reporter to publish annotations
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -34,7 +35,6 @@ jobs:
         run: |
           set -eux
           if [ -f "UnityMcpBridge/UnityMcpServer~/src/pyproject.toml" ]; then
-
             uv venv
             echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
             echo "$GITHUB_WORKSPACE/.venv/bin"       >> "$GITHUB_PATH"
@@ -46,7 +46,6 @@ jobs:
             uv pip install -r "UnityMcpBridge/UnityMcpServer~/src/requirements.txt"
           else
             echo "No Python deps found (skipping)"
-
           fi
 
       - name: Verify Python env
@@ -115,6 +114,12 @@ jobs:
                 }
               }
             }
+          # Auto-approve in CI (no interactive prompts)
+          settings: |
+            {
+              "permissionMode": "allow",
+              "autoApprove": ["Bash","Read","Write","Edit","MultiEdit","LS","Glob","Grep","mcp__unity__*"]
+            }
           model: "claude-3-7-sonnet-20250219"
           max_turns: "12"
           timeout_minutes: "10"
@@ -157,15 +162,8 @@ jobs:
           # Auto-approve in CI (bypass prompts)
           settings: |
             {
-              "defaultMode": "bypassPermissions",
-              "permissionStorage": "none",
-              "permissions": {
-                "allow": [
-                  "Read", "Write", "LS", "Glob", "Grep",
-                  "Bash(git:*)",
-                  "mcp__unity__*"
-                ]
-              }
+              "permissionMode": "allow",
+              "autoApprove": ["Bash","Read","Write","Edit","MultiEdit","LS","Glob","Grep","mcp__unity__*"]
             }
 
           # Guardrails
@@ -177,7 +175,12 @@ jobs:
       - name: Mark permission issues as skipped in JUnit
         if: always()
         run: |
-          python .github/scripts/mark_skipped.py reports/claude-nl-tests.xml
+          set -eux
+          if [ -f .github/scripts/mark_skipped.py ]; then
+            python .github/scripts/mark_skipped.py reports/claude-nl-tests.xml || true
+          else
+            echo "mark_skipped.py not present; skipping"
+          fi
 
       - name: Ensure JUnit exists (fallback)
         if: always()
@@ -222,11 +225,8 @@ jobs:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         run: |
           if [ -n "$UNITY_LICENSE" ]; then echo "has_license=true" >> "$GITHUB_OUTPUT"; else echo "has_license=false" >> "$GITHUB_OUTPUT"; fi
-
           if [ -f "ProjectSettings/ProjectVersion.txt" ]; then echo "is_project=true"  >> "$GITHUB_OUTPUT"; else echo "is_project=false" >> "$GITHUB_OUTPUT"; fi
-
           if [ -f "Packages/manifest.json" ] && [ ! -f "ProjectSettings/ProjectVersion.txt" ]; then echo "is_package=true"  >> "$GITHUB_OUTPUT"; else echo "is_package=false" >> "$GITHUB_OUTPUT"; fi
-
 
       # --- Optional: Unity compile after Claude’s edits (satisfies NL-4) ---
       - name: Unity compile (Project)
