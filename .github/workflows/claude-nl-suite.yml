@@ -123,12 +123,11 @@ jobs:
               }
             }
 
-          # Auto-approve required tools for non-interactive runs
-          settings: |
-            {
-              "permissionMode": "allow",
-              "autoApprove": ["Bash","Write","Edit","MultiEdit","mcp__unity__*"]
-            }
+      # Make CI non-interactive; names vary by action version:
+    # e.g. permission_mode: "auto"  OR  permissions: "approveAll"  OR  auto_approve_tools: "mcp__unity__*"
+    permission_mode: "auto"
+    auto_approve_tools: "mcp__unity__*,Read,Write"
+    allowed_tools: "Read,Write,Glob,Grep,mcp__unity__*"
 
           # Guardrails
           model: "claude-3-7-sonnet-20250219"
