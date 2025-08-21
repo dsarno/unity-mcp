@@ -19,27 +19,34 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Optional but makes server startup snappier and consistent
+      - name: Editable install of UnityMcpServer
+        run: |
+          set -eux
+          uv venv
+          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/.venv/bin"       >> "$GITHUB_PATH"
+          uv pip install -e "UnityMcpBridge/UnityMcpServer~/src"
+
       - name: Run QuickProbe
         uses: anthropics/claude-code-base-action@beta
         with:
-          model: claude-3-7-sonnet-20250219
           prompt_file: .claude/prompts/mcp-quickprobe.md
-          # Only the two tools we require:
-          allowed_tools: mcp__unity__find_in_file,mcp__unity__list_resources
-          # Give room for 2 calls + responses:
-          max_turns: 4
+          # Wildcard so sub-sessions/subagents also have access
+          allowed_tools: mcp__unity__*,ListMcpResourcesTool,ReadMcpResourceTool
+          model: claude-3-7-sonnet-20250219
+          max_turns: 6
           timeout_minutes: 5
           mcp_config: |
             {
               "mcpServers": {
                 "unity": {
                   "command": "uv",
-                  "args": ["run","--directory",".","python","UnityMcpBridge/UnityMcpServer~/src/server.py"],
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
                     "MCP_LOG_LEVEL": "debug",
-                    "PYTHONPATH": "UnityMcpBridge/UnityMcpServer~/src",
                     "UNITY_MCP_PROJECT_ROOT": "."
                   }
                 }
@@ -48,9 +55,9 @@ jobs:
           settings: |
             {
               "permissionMode": "allow",
-              "autoApprove": ["mcp__unity__find_in_file","mcp__unity__list_resources"],
               "defaultMode": "bypassPermissions",
-              "permissionStorage": "none"
+              "permissionStorage": "none",
+              "autoApprove": ["mcp__unity__*"]
             }
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
