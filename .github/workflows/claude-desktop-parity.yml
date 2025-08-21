@@ -16,8 +16,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Detect Anthropic key
+        id: detect_key
+        run: |
+          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then echo "has_key=true" >> "$GITHUB_OUTPUT"; else echo "has_key=false" >> "$GITHUB_OUTPUT"; fi
+
       - name: Run Claude (desktop-parity)
         uses: anthropics/claude-code-base-action@beta
+        if: steps.detect_key.outputs.has_key == 'true'
         with:
           # Use the same model Desktop uses today in your logs
           model: claude-3-7-sonnet-20250219
@@ -57,3 +63,4 @@ jobs:
             }
 
           prompt_file: .claude/prompts/nl-unity-suite.md
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
