@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      # ---------- Detect secrets & choose licensing mode ----------
+      # ---------- Detect secrets ----------
       - name: Detect secrets (outputs)
         id: detect
         env:
@@ -31,18 +31,12 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -e
-          # Anthropic
           if [ -n "$ANTHROPIC_API_KEY" ]; then echo "anthropic_ok=true" >> "$GITHUB_OUTPUT"; else echo "anthropic_ok=false" >> "$GITHUB_OUTPUT"; fi
-          # License mode detection
-          if [ -n "$UNITY_LICENSE" ]; then
-            mode=ulf
-          elif { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; } || [ -n "$UNITY_SERIAL" ]; then
-            mode=ebl
+          if [ -n "$UNITY_LICENSE" ] || { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; } || [ -n "$UNITY_SERIAL" ]; then
+            echo "unity_ok=true" >> "$GITHUB_OUTPUT"
           else
-            mode=none
+            echo "unity_ok=false" >> "$GITHUB_OUTPUT"
           fi
-          echo "license_mode=$mode" >> "$GITHUB_OUTPUT"
-          echo "Detected license_mode=$mode"
 
       - uses: actions/checkout@v4
         with:
@@ -65,55 +59,24 @@ jobs:
             uv pip install -r UnityMcpBridge/UnityMcpServer~/src/requirements.txt
           fi
 
-      # ---------- License activation (ULF path) ----------
-      - name: Write Unity license (ULF) to host
-        if: steps.detect.outputs.license_mode == 'ulf'
-        run: |
-          set -eux
-          mkdir -p "$HOME/.local/share/unity3d" "$HOME/.config/unity3d" "$HOME/.cache/unity3d"
-          printf '%s' "${{ secrets.UNITY_LICENSE }}" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"
-          test -s "$HOME/.local/share/unity3d/Unity_lic.ulf"
-
-      - name: Activate Unity license (one-shot container, ULF)
-        if: steps.detect.outputs.license_mode == 'ulf'
-        run: |
-          set -eux
-          docker run --rm \
-            -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
-            -v "$HOME/.config/unity3d:/root/.config/unity3d" \
-            -v "$HOME/.cache/unity3d:/root/.cache/unity3d" \
-            -v "${{ github.workspace }}:/workspace" -w /workspace \
-            unityci/editor:2021.3.45f1-base-3 \
-            /opt/unity/Editor/Unity \
-              -batchmode -nographics -quit -logFile - \
-              -projectPath /workspace/TestProjects/UnityMCPTests \
-              -manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf
-
-      # ---------- License activation (EBL path: email/password and/or serial) ----------
-      - name: Activate Unity license (one-shot container, EBL)
-        if: steps.detect.outputs.license_mode == 'ebl'
+      # ---------- License prime on host (handles ULF or EBL) ----------
+      - name: Prime Unity license on host (GameCI)
+        if: steps.detect.outputs.unity_ok == 'true'
+        uses: game-ci/unity-test-runner@v4
         env:
-          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}   # optional ULF (raw or base64)
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}     # optional sign-in
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
-        run: |
-          set -eux
-          docker run --rm \
-            -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
-            -v "$HOME/.config/unity3d:/root/.config/unity3d" \
-            -v "$HOME/.cache/unity3d:/root/.cache/unity3d" \
-            -v "${{ github.workspace }}:/workspace" -w /workspace \
-            unityci/editor:2021.3.45f1-base-3 \
-            /opt/unity/Editor/Unity \
-              -batchmode -nographics -quit -logFile - \
-              -projectPath /workspace/TestProjects/UnityMCPTests \
-              ${UNITY_SERIAL:+-serial "$UNITY_SERIAL"} \
-              ${UNITY_EMAIL:+-username "$UNITY_EMAIL"} \
-              ${UNITY_PASSWORD:+-password "$UNITY_PASSWORD"}
+          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}    # optional serial
+        with:
+          projectPath: TestProjects/UnityMCPTests
+          testMode: EditMode
+          # Run no tests; just force activation & cache warmup
+          customParameters: -runTests -testFilter __NoSuchTest__ -batchmode -nographics
 
       # ---------- Start headless Unity that stays up (bridge enabled) ----------
       - name: Start Unity (persistent bridge)
-        if: steps.detect.outputs.license_mode != 'none'
+        if: steps.detect.outputs.unity_ok == 'true'
         run: |
           set -eux
           mkdir -p "$HOME/.unity-mcp" \
@@ -136,7 +99,7 @@ jobs:
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
       - name: Wait for Unity bridge
-        if: steps.detect.outputs.license_mode != 'none'
+        if: steps.detect.outputs.unity_ok == 'true'
         run: |
           set -eux
           docker logs -f unity-mcp & LOGPID=$!
@@ -156,15 +119,16 @@ jobs:
           docker logs unity-mcp || true
           exit 1
 
+      # ---------- Optional diagnostics ----------
       - name: Verify license paths (host)
-        if: steps.detect.outputs.license_mode != 'none'
+        if: steps.detect.outputs.unity_ok == 'true'
         run: |
           ls -la "$HOME/.local/share/unity3d" || true
           ls -la "$HOME/.config/unity3d" || true
           ls -la "$HOME/.cache/unity3d" || true
 
       - name: Verify license paths (container)
-        if: steps.detect.outputs.license_mode != 'none'
+        if: steps.detect.outputs.unity_ok == 'true'
         run: |
           docker exec "$(docker ps -q --filter name=unity-mcp)" bash -lc '
             ls -la /root/.local/share/unity3d || true
