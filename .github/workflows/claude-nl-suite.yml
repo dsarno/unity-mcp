@@ -7,6 +7,7 @@ permissions:
   contents: write        # allow Claude to write test artifacts
   pull-requests: write   # allow annotations / comments
   issues: write
+  checks: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
