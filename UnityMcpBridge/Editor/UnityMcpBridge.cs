@@ -415,10 +415,19 @@ namespace UnityMcpBridge.Editor
                 {
                     string handshake = "WELCOME UNITY-MCP 1 FRAMING=1\n";
                     byte[] handshakeBytes = System.Text.Encoding.ASCII.GetBytes(handshake);
-                    await stream.WriteAsync(handshakeBytes, 0, handshakeBytes.Length);
+                    using var cts = new CancellationTokenSource(FrameIOTimeoutMs);
+#if NETSTANDARD2_1 || NET6_0_OR_GREATER
+                    await stream.WriteAsync(handshakeBytes.AsMemory(0, handshakeBytes.Length), cts.Token).ConfigureAwait(false);
+#else
+                    await stream.WriteAsync(handshakeBytes, 0, handshakeBytes.Length, cts.Token).ConfigureAwait(false);
+#endif
+                    Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: Sent handshake FRAMING=1 (strict)");
                 }
-                catch { /* ignore */ }
-                Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: Sent handshake FRAMING=1 (strict)");
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"<b><color=#2EA3FF>UNITY-MCP</color></b>: Handshake failed: {ex.Message}");
+                    return; // abort this client
+                }
 
                 byte[] buffer = new byte[8192];
                 while (isRunning)
@@ -517,14 +526,29 @@ namespace UnityMcpBridge.Editor
 
         private static async System.Threading.Tasks.Task WriteFrameAsync(NetworkStream stream, byte[] payload)
         {
+            using var cts = new CancellationTokenSource(FrameIOTimeoutMs);
+            await WriteFrameAsync(stream, payload, cts.Token);
+        }
+
+        private static async System.Threading.Tasks.Task WriteFrameAsync(NetworkStream stream, byte[] payload, CancellationToken cancel)
+        {
+            if (payload == null)
+            {
+                throw new System.ArgumentNullException(nameof(payload));
+            }
             if ((ulong)payload.LongLength > MaxFrameBytes)
             {
                 throw new System.IO.IOException($"Frame too large: {payload.LongLength}");
             }
             byte[] header = new byte[8];
             WriteUInt64BigEndian(header, (ulong)payload.LongLength);
-            await stream.WriteAsync(header, 0, header.Length);
-            await stream.WriteAsync(payload, 0, payload.Length);
+#if NETSTANDARD2_1 || NET6_0_OR_GREATER
+            await stream.WriteAsync(header.AsMemory(0, header.Length), cancel).ConfigureAwait(false);
+            await stream.WriteAsync(payload.AsMemory(0, payload.Length), cancel).ConfigureAwait(false);
+#else
+            await stream.WriteAsync(header, 0, header.Length, cancel).ConfigureAwait(false);
+            await stream.WriteAsync(payload, 0, payload.Length, cancel).ConfigureAwait(false);
+#endif
         }
 
         private static async System.Threading.Tasks.Task<string> ReadFrameAsUtf8Async(NetworkStream stream, int timeoutMs)
@@ -836,7 +860,12 @@ namespace UnityMcpBridge.Editor
         {
             try
             {
-                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".unity-mcp");
+                // Allow override of status directory (useful in CI/containers)
+                string dir = Environment.GetEnvironmentVariable("UNITY_MCP_STATUS_DIR");
+                if (string.IsNullOrWhiteSpace(dir))
+                {
+                    dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".unity-mcp");
+                }
                 Directory.CreateDirectory(dir);
                 string filePath = Path.Combine(dir, $"unity-mcp-status-{ComputeProjectHash(Application.dataPath)}.json");
                 var payload = new
