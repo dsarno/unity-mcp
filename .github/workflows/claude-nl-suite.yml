@@ -20,11 +20,11 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Detect Anthropic key (env)
+      - name: Detect secrets (outputs)
+        id: detect
         run: |
-          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then echo "ANTHROPIC_OK=true" >> "$GITHUB_ENV"; else echo "ANTHROPIC_OK=false" >> "$GITHUB_ENV"; fi
-          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then echo "UNITY_LIC_OK=true" >> "$GITHUB_ENV"; else echo "UNITY_LIC_OK=false" >> "$GITHUB_ENV"; fi
-          echo "UNITY_LICENSE=${{ secrets.UNITY_LICENSE }}" >> "$GITHUB_ENV"
+          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then echo "anthropic_ok=true" >> "$GITHUB_OUTPUT"; else echo "anthropic_ok=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then echo "unity_lic_ok=true" >> "$GITHUB_OUTPUT"; else echo "unity_lic_ok=false" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
 
@@ -44,15 +44,15 @@ jobs:
           fi
 
       - name: Write Unity license (ULF) to host
-        if: env.UNITY_LIC_OK == 'true'
+        if: steps.detect.outputs.unity_lic_ok == 'true'
         run: |
           set -eux
           mkdir -p "$HOME/.local/share/unity3d" "$HOME/.config/unity3d" "$HOME/.cache/unity3d"
-          printf '%s' "$UNITY_LICENSE" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"
+          printf '%s' "${{ secrets.UNITY_LICENSE }}" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"
           test -s "$HOME/.local/share/unity3d/Unity_lic.ulf"
 
       - name: Activate Unity license (one-shot container)
-        if: env.UNITY_LIC_OK == 'true'
+        if: steps.detect.outputs.unity_lic_ok == 'true'
         run: |
           set -eux
           docker run --rm \
@@ -129,7 +129,7 @@ jobs:
       - name: Claude startup sanity
         id: claude_startup
         uses: anthropics/claude-code-base-action@beta
-        if: env.ANTHROPIC_OK == 'true'
+        if: steps.detect.outputs.anthropic_ok == 'true'
         with:
           prompt_file: .claude/prompts/nl-startuptest.md
           allowed_tools: >
@@ -165,7 +165,7 @@ jobs:
 
       - name: Claude NL/T suite
         uses: anthropics/claude-code-base-action@beta
-        if: env.ANTHROPIC_OK == 'true' && steps.claude_startup.outcome == 'success'
+        if: steps.detect.outputs.anthropic_ok == 'true' && steps.claude_startup.outcome == 'success'
         with:
           prompt_file: .claude/prompts/nl-unity-claude-tests-mini.md
           allowed_tools: >
