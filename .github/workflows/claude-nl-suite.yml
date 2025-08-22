@@ -104,15 +104,43 @@ jobs:
             echo "has_license=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # --- Prime Unity license on host (GameCI) ---
+      - name: Prime Unity license on host (GameCI)
+        if: steps.detect_unity_start.outputs.has_license == 'true'
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: TestProjects/UnityMCPTests
+          testMode: editmode
+          customParameters: -runTests -testFilter __NoSuchTest__ -batchmode -nographics
+
       # --- Write Unity license file (ULF) on host so container sees it ---
       - name: Write Unity license file (ULF)
         if: steps.detect_unity_start.outputs.has_license == 'true'
         run: |
           set -eux
           mkdir -p "$HOME/.local/share/unity3d"
-          printf '%s' "${{ secrets.UNITY_LICENSE }}" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"
+          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then printf '%s' "${{ secrets.UNITY_LICENSE }}" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"; fi
           ls -la "$HOME/.local/share/unity3d"
-          test -s "$HOME/.local/share/unity3d/Unity_lic.ulf"
+          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then test -s "$HOME/.local/share/unity3d/Unity_lic.ulf"; fi
+
+      # --- Validate license in a one-shot container ---
+      - name: Validate Unity license (one-shot container)
+        if: steps.detect_unity_start.outputs.has_license == 'true'
+        run: |
+          set -eux
+          docker run --rm \
+            -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
+            -v "${{ github.workspace }}:/workspace" -w /workspace \
+            unityci/editor:2021.3.45f1-base-3 \
+            /opt/unity/Editor/Unity \
+              -batchmode -nographics -quit -logFile - \
+              -projectPath /workspace/TestProjects/UnityMCPTests \
+              -manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf
 
       # --- Start a persistent headless Unity Editor so the MCP bridge is live ---
       - name: Start Unity Editor (persistent MCP bridge)
@@ -124,6 +152,7 @@ jobs:
             --network host \
             -e UNITY_MCP_ALLOW_BATCH=1 \
             -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
+            -e UNITY_LICENSE_FILE=/root/.local/share/unity3d/Unity_lic.ulf \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
             -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
