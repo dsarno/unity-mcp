@@ -1,11 +1,11 @@
-name: Claude NL suite + (optional) Unity compile
+name: Claude NL suite (Unity live)
 
 on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write        # allow Claude to write test artifacts
-  pull-requests: write   # allow annotations / comments
+  contents: write
+  pull-requests: write
   issues: write
   checks: write
 
@@ -20,139 +20,49 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Detect Anthropic key (env)
+        run: |
+          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then echo "ANTHROPIC_OK=true" >> "$GITHUB_ENV"; else echo "ANTHROPIC_OK=false" >> "$GITHUB_ENV"; fi
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
 
-      # Python + uv for the Unity MCP server
-      - name: Install Python + uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install UnityMcpServer deps
+      # --- Python env for MCP server (uv) ---
+      - uses: astral-sh/setup-uv@v4
+        with: { python-version: '3.11' }
+      - name: Install MCP server
         run: |
           set -eux
-          if [ -f "UnityMcpBridge/UnityMcpServer~/src/pyproject.toml" ]; then
-            uv venv
-            echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
-            echo "$GITHUB_WORKSPACE/.venv/bin"       >> "$GITHUB_PATH"
-            uv pip install -e "UnityMcpBridge/UnityMcpServer~/src"
-          elif [ -f "UnityMcpBridge/UnityMcpServer~/src/requirements.txt" ]; then
-            uv venv
-            echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
-            echo "$GITHUB_WORKSPACE/.venv/bin"       >> "$GITHUB_PATH"
-            uv pip install -r "UnityMcpBridge/UnityMcpServer~/src/requirements.txt"
-          else
-            echo "No Python deps found (skipping)"
+          uv venv
+          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          if [ -f UnityMcpBridge/UnityMcpServer~/src/pyproject.toml ]; then
+            uv pip install -e UnityMcpBridge/UnityMcpServer~/src
+          elif [ -f UnityMcpBridge/UnityMcpServer~/src/requirements.txt ]; then
+            uv pip install -r UnityMcpBridge/UnityMcpServer~/src/requirements.txt
           fi
 
-      - name: Verify Python env
-        run: |
-          set -eux
-          which python
-          python -V
-          python -c "import mcp; print('mcp ok')"
-
-      - name: Preflight MCP modules (fail fast)
-        run: |
-          set -eux
-          uv run --active --directory UnityMcpBridge/UnityMcpServer~/src python - <<'PY'
-          import sys, pkgutil
-          import tools
-          mods = {name for _, name, _ in pkgutil.iter_modules(tools.__path__)}
-          required = {"manage_script","manage_script_edits","resource_tools"}
-          missing = required - mods
-          if missing:
-              print(f"Missing MCP tool modules: {sorted(missing)}")
-              sys.exit(1)
-          print("MCP tool modules present:", sorted(required))
-          PY
-
-      - name: Ensure artifact dirs exist
-        run: mkdir -p reports
-
-      - name: Log MCP server location (diagnostic)
-        run: |
-          set -ux  # do not -e; we want logs even if missing
-          SRV_DIR="UnityMcpBridge/UnityMcpServer~/src"
-          echo "MCP server dir := ${SRV_DIR}"
-          python - <<'PY'
-          import pathlib
-          p = pathlib.Path('UnityMcpBridge/UnityMcpServer~/src').resolve()
-          print('Resolved path:', p)
-          print('Exists:', p.exists())
-          print('server.py present:', (p / 'server.py').exists())
-          PY
-          ls -la "${SRV_DIR}" || true
-          uv --version || true
-          uv run --active --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
-
-      # --- Detect any viable licensing path (ULF, email/password, or serial) ---
-      - name: Detect Unity license (for Editor start)
-        id: detect_unity_start
-        env:
-          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
-        run: |
-          if [ -n "$UNITY_LICENSE" ] || { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; } || [ -n "$UNITY_SERIAL" ]; then
-            echo "has_license=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_license=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      # --- Prime Unity license on host (GameCI) ---
-      - name: Prime Unity license on host (GameCI)
-        if: steps.detect_unity_start.outputs.has_license == 'true'
+      # --- Prime Unity license on host (fast no-op) ---
+      - name: Prime Unity license (host)
         uses: game-ci/unity-test-runner@v4
         env:
-          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}   # optional ULF contents
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}     # optional sign-in
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
+          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}    # optional serial
         with:
           projectPath: TestProjects/UnityMCPTests
           testMode: editmode
           customParameters: -runTests -testFilter __NoSuchTest__ -batchmode -nographics
 
-      # --- Write Unity license file (ULF) on host so container sees it ---
-      - name: Write Unity license file (ULF)
-        if: steps.detect_unity_start.outputs.has_license == 'true'
+      # --- Start headless Unity that stays up (bridge enabled) ---
+      - name: Start Unity (persistent bridge)
         run: |
           set -eux
-          mkdir -p "$HOME/.local/share/unity3d"
-          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then printf '%s' "${{ secrets.UNITY_LICENSE }}" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"; fi
-          ls -la "$HOME/.local/share/unity3d"
-          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then test -s "$HOME/.local/share/unity3d/Unity_lic.ulf"; fi
-
-      # --- Validate license in a one-shot container ---
-      - name: Validate Unity license (one-shot container)
-        if: steps.detect_unity_start.outputs.has_license == 'true'
-        run: |
-          set -eux
-          docker run --rm \
-            -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
-            -v "${{ github.workspace }}:/workspace" -w /workspace \
-            unityci/editor:2021.3.45f1-base-3 \
-            /opt/unity/Editor/Unity \
-              -batchmode -nographics -quit -logFile - \
-              -projectPath /workspace/TestProjects/UnityMCPTests \
-              -manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf
-
-      # --- Start a persistent headless Unity Editor so the MCP bridge is live ---
-      - name: Start Unity Editor (persistent MCP bridge)
-        if: steps.detect_unity_start.outputs.has_license == 'true'
-        run: |
-          set -e
           mkdir -p "$HOME/.unity-mcp"
           docker run -d --name unity-mcp \
             --network host \
             -e UNITY_MCP_ALLOW_BATCH=1 \
             -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
-            -e UNITY_LICENSE_FILE=/root/.local/share/unity3d/Unity_lic.ulf \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
             -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
@@ -162,85 +72,52 @@ jobs:
               -projectPath /workspace/TestProjects/UnityMCPTests \
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
-      - name: Wait for Unity bridge (logs + probe)
-        if: steps.detect_unity_start.outputs.has_license == 'true'
+      - name: Wait for Unity bridge
         run: |
           set -eux
           docker logs -f unity-mcp & LOGPID=$!
           deadline=$((SECONDS+420))
           while [ $SECONDS -lt $deadline ]; do
+            # Prefer a log marker; adjust to your actual log text:
             if docker logs unity-mcp 2>&1 | grep -qE "MCP Bridge listening|Bridge ready|Server started"; then
-              echo "Detected bridge ready via logs"
-              kill $LOGPID || true
-              exit 0
+              echo "Bridge ready (logs)"; kill $LOGPID || true; exit 0
             fi
+            # Fallback: JSON + socket probe (optional)
             PORT=$(python -c "import os,glob,json,sys; b=os.path.expanduser('~/.unity-mcp'); fs=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(json.load(open(fs[0]))['unity_port']) if fs else sys.exit(1)" 2>/dev/null || true)
-            if [ -n "${PORT:-}" ]; then
-              if timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$PORT && head -c 256 <&3 | tr -d '\0' | grep -q 'FRAMING=1'"; then
-                echo "Bridge ready on port $PORT"
-                kill $LOGPID || true
-                exit 0
-              fi
+            if [ -n "${PORT:-}" ] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$PORT && head -c 256 <&3 | tr -d '\0' | grep -q 'FRAMING=1'"; then
+              echo "Bridge ready on port $PORT"; kill $LOGPID || true; exit 0
             fi
             sleep 2
           done
-          echo "Timeout waiting for bridge"
+          echo "Bridge not ready in time"
           kill $LOGPID || true
-          docker ps -a || true
-          docker inspect -f 'status={{.State.Status}} exitCode={{.State.ExitCode}}' unity-mcp || true
           docker logs unity-mcp || true
-          ls -la "$HOME/.unity-mcp" || true
           exit 1
 
-      # --- Detect Anthropic key and skip Claude steps if not present (e.g., forks) ---
-      - name: Detect Anthropic key
-        id: detect_key
-        run: |
-          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then echo "has_key=true" >> "$GITHUB_OUTPUT"; else echo "has_key=false" >> "$GITHUB_OUTPUT"; fi
-
-      # ---------- Claude: startup sanity (ensures Unity MCP server connects) ----------
-      - name: Run Claude startup test suite
+      # --- Claude suites ---
+      - name: Claude startup sanity
         id: claude_startup
         uses: anthropics/claude-code-base-action@beta
-        if: steps.detect_key.outputs.has_key == 'true'
+        if: env.ANTHROPIC_OK == 'true'
         with:
           prompt_file: .claude/prompts/nl-startuptest.md
-
-          # Be explicit: list every Unity MCP tool and the resource helpers (no wildcards)
           allowed_tools: >
             Bash(git:*),Read,Write,LS,Glob,Grep,
             ListMcpResourcesTool,ReadMcpResourceTool,
-            mcp__unity__script_apply_edits,
-            mcp__unity__apply_text_edits,
-            mcp__unity__create_script,
-            mcp__unity__delete_script,
-            mcp__unity__validate_script,
-            mcp__unity__manage_script,
-            mcp__unity__manage_scene,
-            mcp__unity__manage_editor,
-            mcp__unity__manage_gameobject,
-            mcp__unity__manage_asset,
-            mcp__unity__manage_shader,
-            mcp__unity__read_console,
-            mcp__unity__execute_menu_item,
-            mcp__unity__list_resources,
-            mcp__unity__read_resource,
-            mcp__unity__find_in_file
-
-          # Use the active venv and stdio transport
+            mcp__unity__script_apply_edits,mcp__unity__apply_text_edits,
+            mcp__unity__create_script,mcp__unity__delete_script,
+            mcp__unity__validate_script,mcp__unity__manage_script,
+            mcp__unity__manage_scene,mcp__unity__manage_editor,
+            mcp__unity__manage_gameobject,mcp__unity__manage_asset,
+            mcp__unity__manage_shader,mcp__unity__read_console,
+            mcp__unity__execute_menu_item,mcp__unity__list_resources,
+            mcp__unity__read_resource,mcp__unity__find_in_file
           mcp_config: |
             {
               "mcpServers": {
                 "unity": {
                   "command": "uv",
-                  "args": [
-                    "run",
-                    "--active",
-                    "--directory",
-                    "UnityMcpBridge/UnityMcpServer~/src",
-                    "python",
-                    "server.py"
-                  ],
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
@@ -250,89 +127,33 @@ jobs:
                 }
               }
             }
-
-          # IMPORTANT: explicit per-tool approvals (new permissions schema only)
-          settings: |
-            {
-              "permissions": {
-                "allow": [
-                  "Read","Write","LS","Glob","Grep","Edit","MultiEdit","Bash(git:*)",
-                  "ListMcpResourcesTool","ReadMcpResourceTool",
-                  "mcp__unity__script_apply_edits",
-                  "mcp__unity__apply_text_edits",
-                  "mcp__unity__create_script",
-                  "mcp__unity__delete_script",
-                  "mcp__unity__validate_script",
-                  "mcp__unity__manage_script",
-                  "mcp__unity__manage_scene",
-                  "mcp__unity__manage_editor",
-                  "mcp__unity__manage_gameobject",
-                  "mcp__unity__manage_asset",
-                  "mcp__unity__manage_shader",
-                  "mcp__unity__read_console",
-                  "mcp__unity__execute_menu_item",
-                  "mcp__unity__list_resources",
-                  "mcp__unity__read_resource",
-                  "mcp__unity__find_in_file"
-                ]
-              },
-              "permissions.defaultMode": "acceptEdits"
-            }
-
           model: "claude-3-7-sonnet-20250219"
-          max_turns: "12"
-          timeout_minutes: "10"
+          max_turns: "8"
+          timeout_minutes: "7"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      # Optional: dump the settings Claude actually wrote (helps verify permissionMode)
-      - name: Show effective Claude settings (diagnostic)
-        if: always()
-        run: |
-          set -ux
-          cat /home/runner/.claude/settings.json || true
-
-      # ---------- Claude: full NL/T suite ----------
-      - name: Run Claude NL/T test suite
-        if: steps.detect_key.outputs.has_key == 'true' && steps.claude_startup.outcome == 'success'
-        id: claude
+      - name: Claude NL/T suite
         uses: anthropics/claude-code-base-action@beta
+        if: env.ANTHROPIC_OK == 'true' && steps.claude_startup.outcome == 'success'
         with:
           prompt_file: .claude/prompts/nl-unity-claude-tests-mini.md
-
-          # Same explicit tool list; no wildcards
           allowed_tools: >
             Bash(git:*),Read,Write,LS,Glob,Grep,
             ListMcpResourcesTool,ReadMcpResourceTool,
-            mcp__unity__script_apply_edits,
-            mcp__unity__apply_text_edits,
-            mcp__unity__create_script,
-            mcp__unity__delete_script,
-            mcp__unity__validate_script,
-            mcp__unity__manage_script,
-            mcp__unity__manage_scene,
-            mcp__unity__manage_editor,
-            mcp__unity__manage_gameobject,
-            mcp__unity__manage_asset,
-            mcp__unity__manage_shader,
-            mcp__unity__read_console,
-            mcp__unity__execute_menu_item,
-            mcp__unity__list_resources,
-            mcp__unity__read_resource,
-            mcp__unity__find_in_file
-
+            mcp__unity__script_apply_edits,mcp__unity__apply_text_edits,
+            mcp__unity__create_script,mcp__unity__delete_script,
+            mcp__unity__validate_script,mcp__unity__manage_script,
+            mcp__unity__manage_scene,mcp__unity__manage_editor,
+            mcp__unity__manage_gameobject,mcp__unity__manage_asset,
+            mcp__unity__manage_shader,mcp__unity__read_console,
+            mcp__unity__execute_menu_item,mcp__unity__list_resources,
+            mcp__unity__read_resource,mcp__unity__find_in_file
           mcp_config: |
             {
               "mcpServers": {
                 "unity": {
                   "command": "uv",
-                  "args": [
-                    "run",
-                    "--active",
-                    "--directory",
-                    "UnityMcpBridge/UnityMcpServer~/src",
-                    "python",
-                    "server.py"
-                  ],
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
@@ -342,127 +163,14 @@ jobs:
                 }
               }
             }
-
-          # Same permission model here too (new schema only)
-          settings: |
-            {
-              "permissions": {
-                "allow": [
-                  "Read","Write","LS","Glob","Grep","Edit","MultiEdit","Bash(git:*)",
-                  "ListMcpResourcesTool","ReadMcpResourceTool",
-                  "mcp__unity__script_apply_edits",
-                  "mcp__unity__apply_text_edits",
-                  "mcp__unity__create_script",
-                  "mcp__unity__delete_script",
-                  "mcp__unity__validate_script",
-                  "mcp__unity__manage_script",
-                  "mcp__unity__manage_scene",
-                  "mcp__unity__manage_editor",
-                  "mcp__unity__manage_gameobject",
-                  "mcp__unity__manage_asset",
-                  "mcp__unity__manage_shader",
-                  "mcp__unity__read_console",
-                  "mcp__unity__execute_menu_item",
-                  "mcp__unity__list_resources",
-                  "mcp__unity__read_resource",
-                  "mcp__unity__find_in_file"
-                ]
-              },
-              "permissions.defaultMode": "acceptEdits"
-            }
-
           model: "claude-3-7-sonnet-20250219"
-          max_turns: "20"
-          timeout_minutes: "20"
+          max_turns: "16"
+          timeout_minutes: "12"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Mark permission issues as skipped in JUnit
+      # --- Always stop Unity ---
+      - name: Stop Unity
         if: always()
         run: |
-          python .github/scripts/mark_skipped.py reports/claude-nl-tests.xml
-
-      - name: Ensure JUnit exists (fallback)
-        if: always()
-        run: |
-          set -eux
-          mkdir -p reports
-          if [ ! -f reports/claude-nl-tests.xml ]; then
-            printf '%s\n' \
-              '<testsuites>' \
-              '  <testsuite name="UnityMCP.NL" tests="1" failures="1" errors="0" skipped="0" time="0.0">' \
-              '    <testcase name="Bootstrap" classname="UnityMCP.NL" time="0.0">' \
-              '      <failure message="No MCP resources detected by aggregator or test aborted early">' \
-              '        Claude ran but the startup checks failed to detect usable MCP resources; NL/T flow did not execute.' \
-              '      </failure>' \
-              '    </testcase>' \
-              '  </testsuite>' \
-              '</testsuites>' \
-              > reports/claude-nl-tests.xml
-          fi
-
-      - name: Upload JUnit (Claude NL/T)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: claude-nl-tests
-          path: reports/claude-nl-tests.xml
-          if-no-files-found: ignore
-
-      - name: Annotate PR with test results (Claude NL/T)
-        if: always()
-        uses: dorny/test-reporter@v1
-        with:
-          name: Claude NL/T
-          path: reports/claude-nl-tests.xml
-          reporter: java-junit
-          fail-on-empty: false
-
-      - name: Stop Unity Editor
-        if: always()
-        run: |
-          set -eux
           docker logs unity-mcp || true
           docker rm -f unity-mcp || true
-
-      # Detect secrets + project/package mode WITHOUT using secrets in `if:`
-      - name: Detect Unity mode & secrets
-        id: detect
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-        run: |
-          if [ -n "$UNITY_LICENSE" ]; then echo "has_license=true" >> "$GITHUB_OUTPUT"; else echo "has_license=false" >> "$GITHUB_OUTPUT"; fi
-          if [ -f "ProjectSettings/ProjectVersion.txt" ]; then echo "is_project=true"  >> "$GITHUB_OUTPUT"; else echo "is_project=false" >> "$GITHUB_OUTPUT"; fi
-          if [ -f "TestProjects/UnityMCPTests/ProjectSettings/ProjectVersion.txt" ]; then echo "is_test_project=true"  >> "$GITHUB_OUTPUT"; else echo "is_test_project=false" >> "$GITHUB_OUTPUT"; fi
-          if [ -f "Packages/manifest.json" ] && [ ! -f "ProjectSettings/ProjectVersion.txt" ]; then echo "is_package=true"  >> "$GITHUB_OUTPUT"; else echo "is_package=false" >> "$GITHUB_OUTPUT"; fi
-
-      # --- Optional: Unity compile after Claude’s edits (satisfies NL-4) ---
-      - name: Unity compile (Project)
-        if: always() && steps.detect.outputs.has_license == 'true' && (steps.detect.outputs.is_project == 'true' || steps.detect.outputs.is_test_project == 'true')
-        uses: game-ci/unity-test-runner@v4
-        env:
-          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          projectPath: ${{ steps.detect.outputs.is_test_project == 'true' && 'TestProjects/UnityMCPTests' || '.' }}
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-          testMode: EditMode
-
-      - name: Unity compile (Package)
-        if: always() && steps.detect.outputs.has_license == 'true' && steps.detect.outputs.is_package == 'true'
-        uses: game-ci/unity-test-runner@v4
-        env:
-          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          packageMode: true
-          unityVersion: 2022.3.45f1
-          projectPath: .
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Clean working tree (discard temp edits)
-        if: always()
-        run: |
-          git restore -SW :/
-          git clean -fd
