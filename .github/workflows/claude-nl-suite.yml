@@ -100,14 +100,18 @@ jobs:
       # --- Start a persistent headless Unity Editor so the MCP bridge is live ---
       - name: Start Unity Editor (persistent MCP bridge)
         if: steps.detect_unity_start.outputs.has_license == 'true'
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         run: |
-          set -eux
+          set -e
           mkdir -p "$HOME/.unity-mcp"
           docker run -d --name unity-mcp \
             --network host \
-            -e UNITY_LICENSE="${{ secrets.UNITY_LICENSE }}" \
-            -e UNITY_EMAIL="${{ secrets.UNITY_EMAIL }}" \
-            -e UNITY_PASSWORD="${{ secrets.UNITY_PASSWORD }}" \
+            --env UNITY_LICENSE \
+            --env UNITY_EMAIL \
+            --env UNITY_PASSWORD \
             -e UNITY_MCP_ALLOW_BATCH=1 \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
