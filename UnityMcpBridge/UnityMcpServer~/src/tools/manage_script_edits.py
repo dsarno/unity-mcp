@@ -384,7 +384,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     )
 
         # Decide routing: structured vs text vs mixed
-        STRUCT = {"replace_class","delete_class","replace_method","delete_method","insert_method","anchor_insert","anchor_delete","anchor_replace"}
+        STRUCT = {"replace_class","delete_class","replace_method","delete_method","insert_method","anchor_delete","anchor_replace"}
         TEXT = {"prepend","append","replace_range","regex_replace","anchor_insert"}
         ops_set = { (e.get("op") or "").lower() for e in edits or [] }
         all_struct = ops_set.issubset(STRUCT)
@@ -484,11 +484,12 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                             at_edits.append({"startLine": sl, "startCol": sc, "endLine": sl, "endCol": sc, "newText": text_field})
                             current_text = text_field + current_text
                         else:
-                            lines = current_text.splitlines(keepends=True)
-                            sl = len(lines) + (0 if current_text.endswith("\n") else 1)
-                            sc = 1
-                            at_edits.append({"startLine": sl, "startCol": sc, "endLine": sl, "endCol": sc, "newText": ("\n" if not current_text.endswith("\n") else "") + text_field})
-                            current_text = current_text + ("\n" if not current_text.endswith("\n") else "") + text_field
+                            # Insert at true EOF position (handles both \n and \r\n correctly)
+                            eof_idx = len(current_text)
+                            sl, sc = line_col_from_index(eof_idx)
+                            new_text = ("\n" if not current_text.endswith("\n") else "") + text_field
+                            at_edits.append({"startLine": sl, "startCol": sc, "endLine": sl, "endCol": sc, "newText": new_text})
+                            current_text = current_text + new_text
                     else:
                         return _with_norm(_err("unknown_op", f"Unsupported text edit op: {opx}", normalized=normalized_for_echo, routing="mixed/text-first"), normalized_for_echo, routing="mixed/text-first")
 

@@ -4,7 +4,7 @@ You are running inside CI for the **unity-mcp** repository. Your task is to demo
 
 ## Mission
 1) **Discover capabilities.** Quietly inspect the tools and any connected servers that are available to you at session start. If the server offers a primer or capabilities resource, read it before acting.
-2) **Choose a target file.** Prefer `TestProjects/UnityMCPTests/Assets/Scripts/longUnityScript-claudeTest.cs` if it exists; otherwise choose a simple, safe C# script under `TestProjects/UnityMCPTests/Assets/`.
+2) **Choose a target file.** Prefer `TestProjects/UnityMCPTests/Assets/Scripts/LongUnityScriptClaudeTest.cs` if it exists; otherwise choose a simple, safe C# script under `TestProjects/UnityMCPTests/Assets/`.
 3) **Perform a small set of realistic edits** using minimal, precise changes (not full-file rewrites). Examples of small edits you may choose from (pick 3–6 total):
    - Insert a new, small helper method (e.g., a logger or counter) in a sensible location.
    - Add a short anchor comment near a key method (e.g., above `Update()`), then add or modify a few lines nearby.
