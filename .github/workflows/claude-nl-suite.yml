@@ -45,21 +45,34 @@ jobs:
             uv pip install -e UnityMcpBridge/UnityMcpServer~/src
           elif [ -f UnityMcpBridge/UnityMcpServer~/src/requirements.txt ]; then
             uv pip install -r UnityMcpBridge/UnityMcpServer~/src/requirements.txt
+          elif [ -f UnityMcpBridge/UnityMcpServer~/pyproject.toml ]; then
+            uv pip install -e UnityMcpBridge/UnityMcpServer~/
+          elif [ -f UnityMcpBridge/UnityMcpServer~/requirements.txt ]; then
+            uv pip install -r UnityMcpBridge/UnityMcpServer~/requirements.txt
+          else
+            echo "No Python deps found (skipping explicit install)"
           fi
+          python -c "import mcp; print('mcp import OK')"
 
       # --- License: write ULF to host and activate in a one-shot container ---
       - name: Write Unity license (ULF) to host
         if: steps.detect.outputs.unity_lic_ok == 'true'
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         run: |
           set -eux
           mkdir -p "$HOME/.local/share/unity3d" "$HOME/.config/unity3d" "$HOME/.cache/unity3d"
-          printf '%s' "${{ secrets.UNITY_LICENSE }}" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"
+          printf '%s' "$UNITY_LICENSE" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"
           test -s "$HOME/.local/share/unity3d/Unity_lic.ulf"
 
       - name: Activate Unity license (one-shot container)
         if: steps.detect.outputs.unity_lic_ok == 'true'
         run: |
           set -eux
+          if [ ! -d "${{ github.workspace }}/TestProjects/UnityMCPTests/ProjectSettings" ]; then
+            echo "Unity test project not found; skipping activation.";
+            exit 0;
+          fi
           docker run --rm \
             -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
             -v "$HOME/.config/unity3d:/root/.config/unity3d" \
@@ -76,10 +89,15 @@ jobs:
         if: steps.detect.outputs.unity_lic_ok == 'true'
         run: |
           set -eux
+          if [ ! -d "${{ github.workspace }}/TestProjects/UnityMCPTests/ProjectSettings" ]; then
+            echo "Unity test project not found; skipping Unity start.";
+            exit 0;
+          fi
           mkdir -p "$HOME/.unity-mcp" \
                    "$HOME/.local/share/unity3d" \
                    "$HOME/.config/unity3d" \
                    "$HOME/.cache/unity3d"
+          docker rm -f unity-mcp || true
           docker run -d --name unity-mcp \
             --network host \
             -e UNITY_MCP_ALLOW_BATCH=1 \
@@ -142,7 +160,7 @@ jobs:
         with:
           prompt_file: .claude/prompts/nl-startuptest.md
           allowed_tools: >
-            Bash(git:*),Read,Write,LS,Glob,Grep,
+            Bash(git:*),Bash,Read,Write,LS,Glob,Grep,Edit,MultiEdit,
             ListMcpResourcesTool,ReadMcpResourceTool,
             mcp__unity__script_apply_edits,mcp__unity__apply_text_edits,
             mcp__unity__create_script,mcp__unity__delete_script,
@@ -156,8 +174,8 @@ jobs:
             {
               "mcpServers": {
                 "unity": {
-                  "command": "uv",
-                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "command": "python",
+                  "args": ["UnityMcpBridge/UnityMcpServer~/src/server.py"],
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
@@ -178,7 +196,7 @@ jobs:
         with:
           prompt_file: .claude/prompts/nl-unity-claude-tests-mini.md
           allowed_tools: >
-            Bash(git:*),Read,Write,LS,Glob,Grep,
+            Bash(git:*),Bash,Read,Write,LS,Glob,Grep,Edit,MultiEdit,
             ListMcpResourcesTool,ReadMcpResourceTool,
             mcp__unity__script_apply_edits,mcp__unity__apply_text_edits,
             mcp__unity__create_script,mcp__unity__delete_script,
@@ -192,8 +210,8 @@ jobs:
             {
               "mcpServers": {
                 "unity": {
-                  "command": "uv",
-                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "command": "python",
+                  "args": ["UnityMcpBridge/UnityMcpServer~/src/server.py"],
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
