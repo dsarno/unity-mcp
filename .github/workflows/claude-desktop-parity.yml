@@ -29,16 +29,18 @@ jobs:
           model: claude-3-7-sonnet-20250219
 
           # Let it actually think & iterate like Desktop
-          max_turns: 60
+          max_turns: 2
           timeout_minutes: 15
 
-          # Give it the standard code tools + your Unity MCP tools
-          allowed_tools: >
-            Bash(git:*),Read,Write,Edit,MultiEdit,LS,Glob,Grep,BashOutput,KillBash,
-            mcp__unity__*
-
-          # Prevent planner/subagent drift that doesn't carry MCP tools
-          disallowed_tools: TodoWrite
+          allowed_tools: mcp__unity__find_in_file,mcp__unity__list_resources,mcp__unity__read_resource
+          disallowed_tools: TodoWrite,WebSearch,Bash,Read,Write,Edit,MultiEdit,NotebookEdit,KillBash
+          settings: |
+            {
+              "permissionMode": "allow",
+              "autoApprove": ["mcp__unity__*"],
+              "defaultMode": "bypassPermissions",
+              "permissionStorage": "none"
+            }
 
           # Keep the exact MCP wiring you already use
           mcp_config: |
@@ -53,14 +55,7 @@ jobs:
               }
             }
 
-          # Map Desktop’s “click allow” to CI: auto-approve only what you intend
-          settings: |
-            {
-              "permissionMode": "allow",
-              "defaultMode": "bypassPermissions",
-              "permissionStorage": "none",
-              "autoApprove": ["Bash","Write","Edit","MultiEdit","mcp__unity__*"]
-            }
+       
 
           prompt_file: .claude/prompts/nl-unity-suite.md
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
