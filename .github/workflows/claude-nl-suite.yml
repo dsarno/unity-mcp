@@ -20,17 +20,35 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      # ---------- Detect secrets & choose licensing mode ----------
       - name: Detect secrets (outputs)
         id: detect
+        env:
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then echo "anthropic_ok=true" >> "$GITHUB_OUTPUT"; else echo "anthropic_ok=false" >> "$GITHUB_OUTPUT"; fi
-          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then echo "unity_lic_ok=true" >> "$GITHUB_OUTPUT"; else echo "unity_lic_ok=false" >> "$GITHUB_OUTPUT"; fi
+          set -e
+          # Anthropic
+          if [ -n "$ANTHROPIC_API_KEY" ]; then echo "anthropic_ok=true" >> "$GITHUB_OUTPUT"; else echo "anthropic_ok=false" >> "$GITHUB_OUTPUT"; fi
+          # License mode detection
+          if [ -n "$UNITY_LICENSE" ]; then
+            mode=ulf
+          elif { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; } || [ -n "$UNITY_SERIAL" ]; then
+            mode=ebl
+          else
+            mode=none
+          fi
+          echo "license_mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Detected license_mode=$mode"
 
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # --- Python env for MCP server (uv) ---
+      # ---------- Python env for MCP server (uv) ----------
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: '3.11'
@@ -45,34 +63,21 @@ jobs:
             uv pip install -e UnityMcpBridge/UnityMcpServer~/src
           elif [ -f UnityMcpBridge/UnityMcpServer~/src/requirements.txt ]; then
             uv pip install -r UnityMcpBridge/UnityMcpServer~/src/requirements.txt
-          elif [ -f UnityMcpBridge/UnityMcpServer~/pyproject.toml ]; then
-            uv pip install -e UnityMcpBridge/UnityMcpServer~/
-          elif [ -f UnityMcpBridge/UnityMcpServer~/requirements.txt ]; then
-            uv pip install -r UnityMcpBridge/UnityMcpServer~/requirements.txt
-          else
-            echo "No Python deps found (skipping explicit install)"
           fi
-          python -c "import mcp; print('mcp import OK')"
 
-      # --- License: write ULF to host and activate in a one-shot container ---
+      # ---------- License activation (ULF path) ----------
       - name: Write Unity license (ULF) to host
-        if: steps.detect.outputs.unity_lic_ok == 'true'
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        if: steps.detect.outputs.license_mode == 'ulf'
         run: |
           set -eux
           mkdir -p "$HOME/.local/share/unity3d" "$HOME/.config/unity3d" "$HOME/.cache/unity3d"
-          printf '%s' "$UNITY_LICENSE" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"
+          printf '%s' "${{ secrets.UNITY_LICENSE }}" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"
           test -s "$HOME/.local/share/unity3d/Unity_lic.ulf"
 
-      - name: Activate Unity license (one-shot container)
-        if: steps.detect.outputs.unity_lic_ok == 'true'
+      - name: Activate Unity license (one-shot container, ULF)
+        if: steps.detect.outputs.license_mode == 'ulf'
         run: |
           set -eux
-          if [ ! -d "${{ github.workspace }}/TestProjects/UnityMCPTests/ProjectSettings" ]; then
-            echo "Unity test project not found; skipping activation.";
-            exit 0;
-          fi
           docker run --rm \
             -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
             -v "$HOME/.config/unity3d:/root/.config/unity3d" \
@@ -84,20 +89,37 @@ jobs:
               -projectPath /workspace/TestProjects/UnityMCPTests \
               -manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf
 
-      # --- Start headless Unity that stays up (bridge enabled) ---
-      - name: Start Unity (persistent bridge)
-        if: steps.detect.outputs.unity_lic_ok == 'true'
+      # ---------- License activation (EBL path: email/password and/or serial) ----------
+      - name: Activate Unity license (one-shot container, EBL)
+        if: steps.detect.outputs.license_mode == 'ebl'
+        env:
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
         run: |
           set -eux
-          if [ ! -d "${{ github.workspace }}/TestProjects/UnityMCPTests/ProjectSettings" ]; then
-            echo "Unity test project not found; skipping Unity start.";
-            exit 0;
-          fi
+          docker run --rm \
+            -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
+            -v "$HOME/.config/unity3d:/root/.config/unity3d" \
+            -v "$HOME/.cache/unity3d:/root/.cache/unity3d" \
+            -v "${{ github.workspace }}:/workspace" -w /workspace \
+            unityci/editor:2021.3.45f1-base-3 \
+            /opt/unity/Editor/Unity \
+              -batchmode -nographics -quit -logFile - \
+              -projectPath /workspace/TestProjects/UnityMCPTests \
+              ${UNITY_SERIAL:+-serial "$UNITY_SERIAL"} \
+              ${UNITY_EMAIL:+-username "$UNITY_EMAIL"} \
+              ${UNITY_PASSWORD:+-password "$UNITY_PASSWORD"}
+
+      # ---------- Start headless Unity that stays up (bridge enabled) ----------
+      - name: Start Unity (persistent bridge)
+        if: steps.detect.outputs.license_mode != 'none'
+        run: |
+          set -eux
           mkdir -p "$HOME/.unity-mcp" \
                    "$HOME/.local/share/unity3d" \
                    "$HOME/.config/unity3d" \
                    "$HOME/.cache/unity3d"
-          docker rm -f unity-mcp || true
           docker run -d --name unity-mcp \
             --network host \
             -e UNITY_MCP_ALLOW_BATCH=1 \
@@ -114,17 +136,15 @@ jobs:
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
       - name: Wait for Unity bridge
-        if: steps.detect.outputs.unity_lic_ok == 'true'
+        if: steps.detect.outputs.license_mode != 'none'
         run: |
           set -eux
           docker logs -f unity-mcp & LOGPID=$!
           deadline=$((SECONDS+420))
           while [ $SECONDS -lt $deadline ]; do
-            # Prefer a log marker; adjust to your actual log text:
             if docker logs unity-mcp 2>&1 | grep -qE "MCP Bridge listening|Bridge ready|Server started"; then
               echo "Bridge ready (logs)"; kill $LOGPID || true; exit 0
             fi
-            # Fallback: JSON + socket probe (optional)
             PORT=$(python -c "import os,glob,json,sys; b=os.path.expanduser('~/.unity-mcp'); fs=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(json.load(open(fs[0]))['unity_port']) if fs else sys.exit(1)" 2>/dev/null || true)
             if [ -n "${PORT:-}" ] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$PORT && head -c 256 <&3 | tr -d '\0' | grep -q 'FRAMING=1'"; then
               echo "Bridge ready on port $PORT"; kill $LOGPID || true; exit 0
@@ -137,14 +157,14 @@ jobs:
           exit 1
 
       - name: Verify license paths (host)
-        if: steps.detect.outputs.unity_lic_ok == 'true'
+        if: steps.detect.outputs.license_mode != 'none'
         run: |
           ls -la "$HOME/.local/share/unity3d" || true
           ls -la "$HOME/.config/unity3d" || true
           ls -la "$HOME/.cache/unity3d" || true
 
       - name: Verify license paths (container)
-        if: steps.detect.outputs.unity_lic_ok == 'true'
+        if: steps.detect.outputs.license_mode != 'none'
         run: |
           docker exec "$(docker ps -q --filter name=unity-mcp)" bash -lc '
             ls -la /root/.local/share/unity3d || true
@@ -152,7 +172,7 @@ jobs:
             ls -la /root/.cache/unity3d || true
           '
 
-      # --- Claude suites ---
+      # ---------- Claude suites ----------
       - name: Claude startup sanity
         id: claude_startup
         uses: anthropics/claude-code-base-action@beta
@@ -160,7 +180,7 @@ jobs:
         with:
           prompt_file: .claude/prompts/nl-startuptest.md
           allowed_tools: >
-            Bash(git:*),Bash,Read,Write,LS,Glob,Grep,Edit,MultiEdit,
+            Bash(git:*),Read,Write,LS,Glob,Grep,
             ListMcpResourcesTool,ReadMcpResourceTool,
             mcp__unity__script_apply_edits,mcp__unity__apply_text_edits,
             mcp__unity__create_script,mcp__unity__delete_script,
@@ -174,8 +194,8 @@ jobs:
             {
               "mcpServers": {
                 "unity": {
-                  "command": "python",
-                  "args": ["UnityMcpBridge/UnityMcpServer~/src/server.py"],
+                  "command": "uv",
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
@@ -196,7 +216,7 @@ jobs:
         with:
           prompt_file: .claude/prompts/nl-unity-claude-tests-mini.md
           allowed_tools: >
-            Bash(git:*),Bash,Read,Write,LS,Glob,Grep,Edit,MultiEdit,
+            Bash(git:*),Read,Write,LS,Glob,Grep,
             ListMcpResourcesTool,ReadMcpResourceTool,
             mcp__unity__script_apply_edits,mcp__unity__apply_text_edits,
             mcp__unity__create_script,mcp__unity__delete_script,
@@ -210,8 +230,8 @@ jobs:
             {
               "mcpServers": {
                 "unity": {
-                  "command": "python",
-                  "args": ["UnityMcpBridge/UnityMcpServer~/src/server.py"],
+                  "command": "uv",
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
@@ -226,7 +246,7 @@ jobs:
           timeout_minutes: "12"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      # --- Always stop Unity ---
+      # ---------- Always stop Unity ----------
       - name: Stop Unity
         if: always()
         run: |
