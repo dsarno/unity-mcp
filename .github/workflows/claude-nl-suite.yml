@@ -89,13 +89,20 @@ jobs:
           uv --version || true
           uv run --active --directory "${SRV_DIR}" python -c "import os,sys,pathlib; print('uv cwd:', os.getcwd()); print('server.py exists:', pathlib.Path('server.py').exists())" || true
 
-      # --- Detect Unity license for conditional Editor start ---
+      # --- Detect any viable licensing path (ULF, email/password, or serial) ---
       - name: Detect Unity license (for Editor start)
         id: detect_unity_start
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
         run: |
-          if [ -n "$UNITY_LICENSE" ]; then echo "has_license=true" >> "$GITHUB_OUTPUT"; else echo "has_license=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$UNITY_LICENSE" ] || { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; } || [ -n "$UNITY_SERIAL" ]; then
+            echo "has_license=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_license=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # --- Write Unity license file (ULF) on host so container sees it ---
       - name: Write Unity license file (ULF)
@@ -116,6 +123,7 @@ jobs:
           docker run -d --name unity-mcp \
             --network host \
             -e UNITY_MCP_ALLOW_BATCH=1 \
+            -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
             -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
@@ -125,24 +133,34 @@ jobs:
               -projectPath /workspace/TestProjects/UnityMCPTests \
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
-      - name: Wait for Unity bridge (handshake check)
+      - name: Wait for Unity bridge (logs + probe)
         if: steps.detect_unity_start.outputs.has_license == 'true'
         run: |
-          set -e
-          end=$((SECONDS+240))
-          while [ $SECONDS -lt $end ]; do
-            PORT=$(python -c "import os,glob,json,sys; b=os.path.expanduser('~/.unity-mcp'); f=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(json.load(open(f[0]))['unity_port']) if f else sys.exit(1)" 2>/dev/null || true)
-            if [ -n "$PORT" ]; then
-              if timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$PORT && head -c 256 <&3 | grep -q 'FRAMING=1'"; then
-                echo "Bridge ready on port $PORT"; exit 0
+          set -eux
+          docker logs -f unity-mcp & LOGPID=$!
+          deadline=$((SECONDS+420))
+          while [ $SECONDS -lt $deadline ]; do
+            if docker logs unity-mcp 2>&1 | grep -qE "MCP Bridge listening|Bridge ready|Server started"; then
+              echo "Detected bridge ready via logs"
+              kill $LOGPID || true
+              exit 0
+            fi
+            PORT=$(python -c "import os,glob,json,sys; b=os.path.expanduser('~/.unity-mcp'); fs=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(json.load(open(fs[0]))['unity_port']) if fs else sys.exit(1)" 2>/dev/null || true)
+            if [ -n "${PORT:-}" ]; then
+              if timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$PORT && head -c 256 <&3 | tr -d '\0' | grep -q 'FRAMING=1'"; then
+                echo "Bridge ready on port $PORT"
+                kill $LOGPID || true
+                exit 0
               fi
             fi
             sleep 2
           done
-          echo "Bridge did not signal ready in time; dumping recent logs and status files"
+          echo "Timeout waiting for bridge"
+          kill $LOGPID || true
+          docker ps -a || true
+          docker inspect -f 'status={{.State.Status}} exitCode={{.State.ExitCode}}' unity-mcp || true
           docker logs unity-mcp || true
           ls -la "$HOME/.unity-mcp" || true
-          tail -n +1 "$HOME/.unity-mcp"/unity-mcp-*.json 2>/dev/null || true
           exit 1
 
       # --- Detect Anthropic key and skip Claude steps if not present (e.g., forks) ---
