@@ -35,3 +35,5 @@ CONTRIBUTING.md.meta
 .vscode/
 .aider*
 .DS_Store*
+# Unity test project lock files
+TestProjects/UnityMCPTests/Packages/packages-lock.json
