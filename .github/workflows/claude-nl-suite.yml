@@ -25,12 +25,16 @@ jobs:
         run: |
           if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then echo "anthropic_ok=true" >> "$GITHUB_OUTPUT"; else echo "anthropic_ok=false" >> "$GITHUB_OUTPUT"; fi
           if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then echo "unity_lic_ok=true" >> "$GITHUB_OUTPUT"; else echo "unity_lic_ok=false" >> "$GITHUB_OUTPUT"; fi
+
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
 
       # --- Python env for MCP server (uv) ---
       - uses: astral-sh/setup-uv@v4
-        with: { python-version: '3.11' }
+        with:
+          python-version: '3.11'
+
       - name: Install MCP server
         run: |
           set -eux
@@ -43,6 +47,7 @@ jobs:
             uv pip install -r UnityMcpBridge/UnityMcpServer~/src/requirements.txt
           fi
 
+      # --- License: write ULF to host and activate in a one-shot container ---
       - name: Write Unity license (ULF) to host
         if: steps.detect.outputs.unity_lic_ok == 'true'
         run: |
@@ -65,9 +70,10 @@ jobs:
               -batchmode -nographics -quit -logFile - \
               -projectPath /workspace/TestProjects/UnityMCPTests \
               -manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf
-          
+
       # --- Start headless Unity that stays up (bridge enabled) ---
       - name: Start Unity (persistent bridge)
+        if: steps.detect.outputs.unity_lic_ok == 'true'
         run: |
           set -eux
           mkdir -p "$HOME/.unity-mcp" \
@@ -90,6 +96,7 @@ jobs:
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
       - name: Wait for Unity bridge
+        if: steps.detect.outputs.unity_lic_ok == 'true'
         run: |
           set -eux
           docker logs -f unity-mcp & LOGPID=$!
@@ -112,19 +119,21 @@ jobs:
           exit 1
 
       - name: Verify license paths (host)
+        if: steps.detect.outputs.unity_lic_ok == 'true'
         run: |
-          ls -la $HOME/.local/share/unity3d || true
-          ls -la $HOME/.config/unity3d || true
-          ls -la $HOME/.cache/unity3d || true
+          ls -la "$HOME/.local/share/unity3d" || true
+          ls -la "$HOME/.config/unity3d" || true
+          ls -la "$HOME/.cache/unity3d" || true
 
       - name: Verify license paths (container)
+        if: steps.detect.outputs.unity_lic_ok == 'true'
         run: |
-          docker exec $(docker ps -q --filter name=unity-mcp) bash -lc '
+          docker exec "$(docker ps -q --filter name=unity-mcp)" bash -lc '
             ls -la /root/.local/share/unity3d || true
             ls -la /root/.config/unity3d || true
             ls -la /root/.cache/unity3d || true
           '
-        
+
       # --- Claude suites ---
       - name: Claude startup sanity
         id: claude_startup
