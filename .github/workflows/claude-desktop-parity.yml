@@ -36,10 +36,10 @@ jobs:
           disallowed_tools: TodoWrite,PlannerTool,SubagentSpawn,WebSearch,Bash,Read,Write,Edit,MultiEdit,NotebookEdit,KillBash
           settings: |
             {
-              "permissionMode": "allow",
-              "autoApprove": ["mcp__unity__*"],
-              "defaultMode": "bypassPermissions",
-              "permissionStorage": "none"
+              "permissions": {
+                "allow": ["mcp__unity__*"]
+              },
+              "permissions.defaultMode": "acceptEdits"
             }
 
           # Keep the exact MCP wiring you already use

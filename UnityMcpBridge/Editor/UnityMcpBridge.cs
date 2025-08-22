@@ -483,11 +483,17 @@ namespace UnityMcpBridge.Editor
             while (offset < count)
             {
                 int remaining = count - offset;
-                int remainingTimeout = timeoutMs <= 0 ? Timeout.Infinite : Math.Max(1, timeoutMs - (int)stopwatch.ElapsedMilliseconds);
+                int remainingTimeout = timeoutMs <= 0
+                    ? Timeout.Infinite
+                    : timeoutMs - (int)stopwatch.ElapsedMilliseconds;
 
-                using var cts = remainingTimeout == Timeout.Infinite
-                    ? CancellationTokenSource.CreateLinkedTokenSource(cancel)
-                    : CancellationTokenSource.CreateLinkedTokenSource(cancel);
+                // If a finite timeout is configured and already elapsed, fail immediately
+                if (remainingTimeout != Timeout.Infinite && remainingTimeout <= 0)
+                {
+                    throw new System.IO.IOException("Read timed out");
+                }
+
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
                 if (remainingTimeout != Timeout.Infinite)
                 {
                     cts.CancelAfter(remainingTimeout);
