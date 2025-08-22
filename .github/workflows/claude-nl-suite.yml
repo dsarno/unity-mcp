@@ -140,7 +140,8 @@ jobs:
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
-                    "MCP_LOG_LEVEL": "debug"
+                    "MCP_LOG_LEVEL": "debug",
+                    "UNITY_PROJECT_ROOT": "TestProjects/UnityMCPTests"
                   }
                 }
               }
@@ -192,7 +193,7 @@ jobs:
         id: claude
         uses: anthropics/claude-code-base-action@beta
         with:
-          prompt_file: .claude/prompts/nl-unity-suite.md
+          prompt_file: .claude/prompts/nl-unity-claude-tests-mini.md
 
           # Same explicit tool list; no wildcards
           allowed_tools: >
@@ -231,7 +232,8 @@ jobs:
                   "transport": { "type": "stdio" },
                   "env": {
                     "PYTHONUNBUFFERED": "1",
-                    "MCP_LOG_LEVEL": "debug"
+                    "MCP_LOG_LEVEL": "debug",
+                    "UNITY_PROJECT_ROOT": "TestProjects/UnityMCPTests"
                   }
                 }
               }
@@ -319,18 +321,19 @@ jobs:
         run: |
           if [ -n "$UNITY_LICENSE" ]; then echo "has_license=true" >> "$GITHUB_OUTPUT"; else echo "has_license=false" >> "$GITHUB_OUTPUT"; fi
           if [ -f "ProjectSettings/ProjectVersion.txt" ]; then echo "is_project=true"  >> "$GITHUB_OUTPUT"; else echo "is_project=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -f "TestProjects/UnityMCPTests/ProjectSettings/ProjectVersion.txt" ]; then echo "is_test_project=true"  >> "$GITHUB_OUTPUT"; else echo "is_test_project=false" >> "$GITHUB_OUTPUT"; fi
           if [ -f "Packages/manifest.json" ] && [ ! -f "ProjectSettings/ProjectVersion.txt" ]; then echo "is_package=true"  >> "$GITHUB_OUTPUT"; else echo "is_package=false" >> "$GITHUB_OUTPUT"; fi
 
       # --- Optional: Unity compile after Claude’s edits (satisfies NL-4) ---
       - name: Unity compile (Project)
-        if: always() && steps.detect.outputs.has_license == 'true' && steps.detect.outputs.is_project == 'true'
+        if: always() && steps.detect.outputs.has_license == 'true' && (steps.detect.outputs.is_project == 'true' || steps.detect.outputs.is_test_project == 'true')
         uses: game-ci/unity-test-runner@v4
         env:
           UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
-          projectPath: .
+          projectPath: ${{ steps.detect.outputs.is_test_project == 'true' && 'TestProjects/UnityMCPTests' || '.' }}
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           testMode: EditMode
 

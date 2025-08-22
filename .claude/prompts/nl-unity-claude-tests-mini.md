@@ -4,7 +4,7 @@ You are running inside CI for the **unity-mcp** repository. Your task is to demo
 
 ## Mission
 1) **Discover capabilities.** Quietly inspect the tools and any connected servers that are available to you at session start. If the server offers a primer or capabilities resource, read it before acting.
-2) **Choose a target file.** Prefer `ClaudeTests/longUnityScript-claudeTest.cs` if it exists; otherwise choose a simple, safe C# script under `ClaudeTests/` or `Assets/`.
+2) **Choose a target file.** Prefer `TestProjects/UnityMCPTests/Assets/Scripts/longUnityScript-claudeTest.cs` if it exists; otherwise choose a simple, safe C# script under `TestProjects/UnityMCPTests/Assets/`.
 3) **Perform a small set of realistic edits** using minimal, precise changes (not full-file rewrites). Examples of small edits you may choose from (pick 3–6 total):
    - Insert a new, small helper method (e.g., a logger or counter) in a sensible location.
    - Add a short anchor comment near a key method (e.g., above `Update()`), then add or modify a few lines nearby.
@@ -19,6 +19,10 @@ You are running inside CI for the **unity-mcp** repository. Your task is to demo
 
 ## Assumptions & Hints (non‑prescriptive)
 - A Unity‑oriented MCP server is expected to be connected. If a server‑provided **primer/capabilities** resource exists, read it first. If no primer is available, infer capabilities from your visible tools in the session.
+- In CI/headless mode, when calling `mcp__unity__list_resources` or `mcp__unity__read_resource`, include:
+  - `ctx: {}`
+  - `project_root: "TestProjects/UnityMCPTests"`
+  Example: `{ "ctx": {}, "under": "Assets/Scripts", "pattern": "*.cs", "project_root": "TestProjects/UnityMCPTests" }`
 - If the preferred file isn’t present, locate a fallback C# file with simple, local methods you can edit safely.
 - If a compile command is available in this environment, you may optionally trigger it; if not, rely on structural checks and localized validation.
 

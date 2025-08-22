@@ -46,7 +46,22 @@ def _resolve_project_root(override: str | None) -> Path:
         if cur.parent == cur:
             break
         cur = cur.parent
-    # 5) Fallback: CWD
+    # 5) Search downwards (shallow) from repo root for first folder with Assets + ProjectSettings
+    try:
+        root = Path.cwd().resolve()
+        max_depth = 3
+        for path in root.rglob("*"):
+            try:
+                rel_depth = len(path.relative_to(root).parts)
+            except Exception:
+                continue
+            if rel_depth > max_depth:
+                continue
+            if path.is_dir() and (path / "Assets").exists() and (path / "ProjectSettings").exists():
+                return path
+    except Exception:
+        pass
+    # 6) Fallback: CWD
     return Path.cwd().resolve()
 
 
@@ -73,7 +88,7 @@ def register_resource_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def list_resources(
-        ctx: Context,
+        ctx: Context | None = None,
         pattern: str | None = "*.cs",
         under: str = "Assets",
         limit: int = 200,
@@ -114,8 +129,8 @@ def register_resource_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def read_resource(
-        ctx: Context,
         uri: str,
+        ctx: Context | None = None,
         start_line: int | None = None,
         line_count: int | None = None,
         head_bytes: int | None = None,
@@ -251,9 +266,9 @@ def register_resource_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def find_in_file(
-        ctx: Context,
         uri: str,
         pattern: str,
+        ctx: Context | None = None,
         ignore_case: bool | None = True,
         project_root: str | None = None,
         max_results: int | None = 200,

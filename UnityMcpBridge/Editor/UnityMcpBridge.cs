@@ -424,20 +424,13 @@ namespace UnityMcpBridge.Editor
                 {
                     try
                     {
-                        // Strict framed mode
-                        string commandText = null;
-                        bool usedFraming = true;
-
-                        if (true)
-                        {
-                            // Enforced framed mode for this connection
-                            commandText = await ReadFrameAsUtf8Async(stream, FrameIOTimeoutMs);
-                        }
+                        // Strict framed mode only: enforced framed I/O for this connection
+                        string commandText = await ReadFrameAsUtf8Async(stream, FrameIOTimeoutMs);
 
                         try
                         {
                             var preview = commandText.Length > 120 ? commandText.Substring(0, 120) + "…" : commandText;
-                            Debug.Log($"<b><color=#2EA3FF>UNITY-MCP</color></b>: recv {(usedFraming ? "framed" : "legacy")}: {preview}");
+                            Debug.Log($"<b><color=#2EA3FF>UNITY-MCP</color></b>: recv framed: {preview}");
                         }
                         catch { }
                         string commandId = Guid.NewGuid().ToString();
