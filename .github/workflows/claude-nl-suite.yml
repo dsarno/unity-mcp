@@ -87,7 +87,7 @@ jobs:
         if: steps.detect.outputs.unity_ok == 'true'
         run: |
           set -eux
-          find "${{ env.UNITY_CACHE_ROOT }}" -maxdepth 4 -type f \( -name '*.ulf' -o -name 'user.json' \) -print || true
+          find "${{ env.UNITY_CACHE_ROOT }}" -maxdepth 4 \( -path "*/.cache" -prune -o -type f \( -name '*.ulf' -o -name 'user.json' \) -print \) 2>/dev/null || true
 
       # ---------- Start headless Unity that stays up (bridge enabled) ----------
       - name: Start Unity (persistent bridge)
@@ -95,19 +95,14 @@ jobs:
         run: |
           set -eux
           mkdir -p "$HOME/.unity-mcp"
-          docker run -d --name unity-mcp \
-            --network host \
-            -e UNITY_MCP_ALLOW_BATCH=1 \
-            -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
+          docker run -d --name unity-mcp --network host \
+            -e UNITY_MCP_ALLOW_BATCH=1 -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
-            # Mount the EXACT paths GameCI wrote:
             -v "${{ env.UNITY_CACHE_ROOT }}/.local/share/unity3d:/root/.local/share/unity3d" \
             -v "${{ env.UNITY_CACHE_ROOT }}/.config/unity3d:/root/.config/unity3d" \
             -v "${{ env.UNITY_CACHE_ROOT }}/.cache/unity3d:/root/.cache/unity3d" \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
-            ${{ env.UNITY_IMAGE }} \
-            /opt/unity/Editor/Unity \
-              -batchmode -nographics -logFile - \
+            ${{ env.UNITY_IMAGE }} /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
               -projectPath /workspace/TestProjects/UnityMCPTests \
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
