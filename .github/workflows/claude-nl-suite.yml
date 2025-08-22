@@ -23,6 +23,8 @@ jobs:
       - name: Detect Anthropic key (env)
         run: |
           if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then echo "ANTHROPIC_OK=true" >> "$GITHUB_ENV"; else echo "ANTHROPIC_OK=false" >> "$GITHUB_ENV"; fi
+          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then echo "UNITY_LIC_OK=true" >> "$GITHUB_ENV"; else echo "UNITY_LIC_OK=false" >> "$GITHUB_ENV"; fi
+          echo "UNITY_LICENSE=${{ secrets.UNITY_LICENSE }}" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
 
@@ -41,19 +43,29 @@ jobs:
             uv pip install -r UnityMcpBridge/UnityMcpServer~/src/requirements.txt
           fi
 
-      # --- Prime Unity license on host (fast no-op) ---
-      - name: Prime Unity license (host)
-        uses: game-ci/unity-test-runner@v4
-        env:
-          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}   # optional ULF contents
-          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}     # optional sign-in
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}    # optional serial
-        with:
-          projectPath: TestProjects/UnityMCPTests
-          testMode: editmode
-          customParameters: -runTests -testFilter __NoSuchTest__ -batchmode -nographics
+      - name: Write Unity license (ULF) to host
+        if: env.UNITY_LIC_OK == 'true'
+        run: |
+          set -eux
+          mkdir -p "$HOME/.local/share/unity3d" "$HOME/.config/unity3d" "$HOME/.cache/unity3d"
+          printf '%s' "$UNITY_LICENSE" | tr -d '\r' > "$HOME/.local/share/unity3d/Unity_lic.ulf"
+          test -s "$HOME/.local/share/unity3d/Unity_lic.ulf"
 
+      - name: Activate Unity license (one-shot container)
+        if: env.UNITY_LIC_OK == 'true'
+        run: |
+          set -eux
+          docker run --rm \
+            -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
+            -v "$HOME/.config/unity3d:/root/.config/unity3d" \
+            -v "$HOME/.cache/unity3d:/root/.cache/unity3d" \
+            -v "${{ github.workspace }}:/workspace" -w /workspace \
+            unityci/editor:2021.3.45f1-base-3 \
+            /opt/unity/Editor/Unity \
+              -batchmode -nographics -quit -logFile - \
+              -projectPath /workspace/TestProjects/UnityMCPTests \
+              -manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf
+          
       # --- Start headless Unity that stays up (bridge enabled) ---
       - name: Start Unity (persistent bridge)
         run: |
@@ -99,6 +111,20 @@ jobs:
           docker logs unity-mcp || true
           exit 1
 
+      - name: Verify license paths (host)
+        run: |
+          ls -la $HOME/.local/share/unity3d || true
+          ls -la $HOME/.config/unity3d || true
+          ls -la $HOME/.cache/unity3d || true
+
+      - name: Verify license paths (container)
+        run: |
+          docker exec $(docker ps -q --filter name=unity-mcp) bash -lc '
+            ls -la /root/.local/share/unity3d || true
+            ls -la /root/.config/unity3d || true
+            ls -la /root/.cache/unity3d || true
+          '
+        
       # --- Claude suites ---
       - name: Claude startup sanity
         id: claude_startup
