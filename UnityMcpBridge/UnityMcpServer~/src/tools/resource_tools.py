@@ -25,7 +25,9 @@ def _resolve_project_root(override: str | None) -> Path:
     # 2) Environment
     env = os.environ.get("UNITY_PROJECT_ROOT")
     if env:
-        pr = Path(env).expanduser().resolve()
+        env_path = Path(env).expanduser()
+        # If UNITY_PROJECT_ROOT is relative, resolve against repo root (cwd's repo) instead of src dir
+        pr = (Path.cwd() / env_path).resolve() if not env_path.is_absolute() else env_path.resolve()
         if (pr / "Assets").exists():
             return pr
     # 3) Ask Unity via manage_editor.get_project_root
@@ -143,8 +145,8 @@ def register_resource_tools(mcp: FastMCP) -> None:
         One of line window (start_line/line_count) or head_bytes can be used to limit size.
         """
         try:
-            # Serve the canonical spec directly when requested
-            if uri == "unity://spec/script-edits":
+            # Serve the canonical spec directly when requested (allow bare or with scheme)
+            if uri in ("unity://spec/script-edits", "spec/script-edits", "script-edits"):
                 spec_json = (
                     '{\n'
                     '  "name": "Unity MCP — Script Edits v1",\n'

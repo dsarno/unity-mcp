@@ -21,7 +21,7 @@ You are running inside CI for the **unity-mcp** repository. Your task is to demo
 - A Unity‑oriented MCP server is expected to be connected. If a server‑provided **primer/capabilities** resource exists, read it first. If no primer is available, infer capabilities from your visible tools in the session.
 - In CI/headless mode, when calling `mcp__unity__list_resources` or `mcp__unity__read_resource`, include:
   - `ctx: {}`
-  - `project_root: "TestProjects/UnityMCPTests"`
+  - `project_root: "TestProjects/UnityMCPTests"` (the server will also accept the absolute path passed via env)
   Example: `{ "ctx": {}, "under": "Assets/Scripts", "pattern": "*.cs", "project_root": "TestProjects/UnityMCPTests" }`
 - If the preferred file isn’t present, locate a fallback C# file with simple, local methods you can edit safely.
 - If a compile command is available in this environment, you may optionally trigger it; if not, rely on structural checks and localized validation.

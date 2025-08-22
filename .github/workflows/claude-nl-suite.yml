@@ -142,7 +142,7 @@ jobs:
                   "env": {
                     "PYTHONUNBUFFERED": "1",
                     "MCP_LOG_LEVEL": "debug",
-                    "UNITY_PROJECT_ROOT": "TestProjects/UnityMCPTests"
+                    "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
                   }
                 }
               }
@@ -234,7 +234,7 @@ jobs:
                   "env": {
                     "PYTHONUNBUFFERED": "1",
                     "MCP_LOG_LEVEL": "debug",
-                    "UNITY_PROJECT_ROOT": "TestProjects/UnityMCPTests"
+                    "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
                   }
                 }
               }
