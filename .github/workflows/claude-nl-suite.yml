@@ -58,13 +58,18 @@ jobs:
       - name: Start Unity (persistent bridge)
         run: |
           set -eux
-          mkdir -p "$HOME/.unity-mcp"
+          mkdir -p "$HOME/.unity-mcp" \
+                   "$HOME/.local/share/unity3d" \
+                   "$HOME/.config/unity3d" \
+                   "$HOME/.cache/unity3d"
           docker run -d --name unity-mcp \
             --network host \
             -e UNITY_MCP_ALLOW_BATCH=1 \
             -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
             -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
+            -v "$HOME/.config/unity3d:/root/.config/unity3d" \
+            -v "$HOME/.cache/unity3d:/root/.cache/unity3d" \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
             unityci/editor:2021.3.45f1-base-3 \
             /opt/unity/Editor/Unity \
