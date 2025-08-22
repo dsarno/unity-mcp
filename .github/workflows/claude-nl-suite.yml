@@ -97,6 +97,19 @@ jobs:
         run: |
           if [ -n "$UNITY_LICENSE" ]; then echo "has_license=true" >> "$GITHUB_OUTPUT"; else echo "has_license=false" >> "$GITHUB_OUTPUT"; fi
 
+      # --- Prime Unity license on host so the container sees a ULF ---
+      - name: Prime Unity license (one-shot activation)
+        if: steps.detect_unity_start.outputs.has_license == 'true'
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: TestProjects/UnityMCPTests
+          testMode: EditMode
+          customParameters: -runTests -testFilter __DoesNotExist__
+
       # --- Start a persistent headless Unity Editor so the MCP bridge is live ---
       - name: Start Unity Editor (persistent MCP bridge)
         if: steps.detect_unity_start.outputs.has_license == 'true'
@@ -114,6 +127,7 @@ jobs:
             --env UNITY_PASSWORD \
             -e UNITY_MCP_ALLOW_BATCH=1 \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
+            -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
             unityci/editor:2021.3.45f1-base-3 \
             /opt/unity/Editor/Unity \
@@ -125,7 +139,7 @@ jobs:
         if: steps.detect_unity_start.outputs.has_license == 'true'
         run: |
           set -e
-          end=$((SECONDS+240))
+          end=$((SECONDS+480))
           while [ $SECONDS -lt $end ]; do
             PORT=$(python -c "import os,glob,json,sys; b=os.path.expanduser('~/.unity-mcp'); f=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(json.load(open(f[0]))['unity_port']) if f else sys.exit(1)" 2>/dev/null || true)
             if [ -n "$PORT" ]; then
