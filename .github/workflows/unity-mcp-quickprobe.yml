@@ -1,0 +1,41 @@
+name: Unity MCP — Quickprobe
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  quickprobe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python + uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: '3.11'
+
+      - name: Run Claude quickprobe
+        uses: anthropics/claude-code-base-action@beta
+        with:
+          model: claude-3-7-sonnet-20250219
+          max_turns: 2
+          timeout_minutes: 5
+          allowed_tools: mcp__unity__find_in_file,mcp__unity__list_resources
+          disallowed_tools: TodoWrite,WebSearch,Bash,Read,Write,Edit,MultiEdit,NotebookEdit,KillBash
+          mcp_config: |
+            {
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": ["run","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "transport": { "type": "stdio" },
+                  "env": { "PYTHONUNBUFFERED": "1", "MCP_LOG_LEVEL": "debug" }
+                }
+              }
+            }
+          prompt_file: .claude/prompts/mcp-quickprobe.md
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+

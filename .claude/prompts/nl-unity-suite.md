@@ -1,6 +1,6 @@
 # Unity NL Editing Suite — Natural Mode
 
-You are running inside CI for the **unity-mcp** repository. Your task is to demonstrate end‑to‑end **natural‑language code editing** on a representative Unity C# script using whatever capabilities and servers are already available in this session. Work autonomously. Do not ask the user for input.
+You are running inside CI for the **unity-mcp** repository. Your task is to demonstrate end‑to‑end **natural‑language code editing** on a representative Unity C# script using whatever capabilities and servers are already available in this session. Work autonomously. Do not ask the user for input. Do NOT spawn subagents, as they will not have access to the mcp server process on the top-level agent.
 
 ## Mission
 1) **Discover capabilities.** Quietly inspect the tools and any connected servers that are available to you at session start. If the server offers a primer or capabilities resource, read it before acting.
