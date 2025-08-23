@@ -13,6 +13,21 @@ You are running in CI at the repository root. Use only the tools allowed by the 
 - Each test must write an explicit verdict string in `<system-out>` as the last line: `VERDICT: PASS` or `VERDICT: FAIL`.
 - On failure: include `<failure>` with a concise message and an evidence window (10–20 lines) from the target file around the anchor/edited region, in addition to the diff.
 - Summary markdown at `reports/claude-nl-tests.md` with checkboxes, windowed reads, and inline diffs for changed tests.
+- XML safety: Wrap all `<system-out>`, `<system-err>`, and `<failure>` contents in CDATA blocks to avoid XML escaping issues (e.g., `&` in code). Use the following rule for embedded CDATA terminators: if `]]>` appears in content, split as `]]]]><![CDATA[>`. Example:
+
+  ```xml
+  <testcase classname="UnityMCP.NL" name="Example">
+    <system-out><![CDATA[
+Tail window...
+--- a/File.cs
++++ b/File.cs
+@@ ...
+VERDICT: PASS
+]]></system-out>
+  </testcase>
+  ```
+
+  JUnit pass/fail is determined by the presence of `<failure>` or `<error>`. Keep `VERDICT: ...` for human readability inside CDATA; do not rely on it for status.
 - Restore workspace at end (clean tree).
 
 ## Safety & hygiene
