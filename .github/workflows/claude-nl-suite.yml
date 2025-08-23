@@ -104,6 +104,7 @@ jobs:
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
             ${{ env.UNITY_IMAGE }} /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
               -projectPath /workspace/TestProjects/UnityMCPTests \
+              -manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf \
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
       - name: Wait for Unity bridge
