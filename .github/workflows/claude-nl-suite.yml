@@ -195,7 +195,7 @@ jobs:
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.claude_startup.outcome == 'success'
         with:
-          prompt_file: .claude/prompts/nl-unity-claude-tests-mini.md
+          prompt_file: .claude/prompts/nl-unity-suite-full.md
           allowed_tools: >
             Bash(git:*),Read,Write,LS,Glob,Grep,
             ListMcpResourcesTool,ReadMcpResourceTool,
