@@ -179,7 +179,7 @@ jobs:
             }
           model: "claude-3-7-sonnet-20250219"
           max_turns: "250"
-          timeout_minutes: "12"
+          timeout_minutes: "30"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Publish JUnit report
