@@ -95,6 +95,11 @@ jobs:
         run: |
           set -eux
           mkdir -p "$HOME/.unity-mcp"
+          # Only pass manualLicenseFile if the ULF actually exists from priming
+          MANUAL_ARG=()
+          if [ -f "${UNITY_CACHE_ROOT}/.local/share/unity3d/Unity_lic.ulf" ]; then
+            MANUAL_ARG=(-manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf)
+          fi
           docker run -d --name unity-mcp --network host \
             -e HOME=/root \
             -e UNITY_MCP_ALLOW_BATCH=1 -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
@@ -103,7 +108,7 @@ jobs:
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
             ${{ env.UNITY_IMAGE }} /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
               -projectPath /workspace/TestProjects/UnityMCPTests \
-              -manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf \
+              "${MANUAL_ARG[@]}" \
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
       - name: Check license inside persistent container (optional)
