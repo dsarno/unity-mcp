@@ -64,6 +64,12 @@ jobs:
             uv pip install -e UnityMcpBridge/UnityMcpServer~/src
           elif [ -f UnityMcpBridge/UnityMcpServer~/src/requirements.txt ]; then
             uv pip install -r UnityMcpBridge/UnityMcpServer~/src/requirements.txt
+          elif [ -f UnityMcpBridge/UnityMcpServer~/pyproject.toml ]; then
+            uv pip install -e UnityMcpBridge/UnityMcpServer~/
+          elif [ -f UnityMcpBridge/UnityMcpServer~/requirements.txt ]; then
+            uv pip install -r UnityMcpBridge/UnityMcpServer~/requirements.txt
+          else
+            echo "No MCP Python deps found under UnityMcpBridge/UnityMcpServer~/{src,/} (skipping install)"
           fi
 
       # ---------- License prime on host (handles ULF or EBL) ----------
@@ -98,6 +104,10 @@ jobs:
           UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
         run: |
           set -eu
+          if [ ! -d "${{ github.workspace }}/TestProjects/UnityMCPTests/ProjectSettings" ]; then
+            echo "Unity project not found; skipping Editor start."
+            exit 0
+          fi
           mkdir -p "$HOME/.unity-mcp"
           # Only pass manualLicenseFile if the ULF actually exists from priming
           MANUAL_ARG=()
@@ -126,6 +136,10 @@ jobs:
         if: steps.detect.outputs.unity_ok == 'true'
         run: |
           set -eux
+          if ! docker ps --format '{{.Names}}' | grep -qx 'unity-mcp'; then
+            echo "Unity container not running; skipping wait."
+            exit 0
+          fi
           docker logs -f unity-mcp & LOGPID=$!
           deadline=$((SECONDS+420))
           while [ $SECONDS -lt $deadline ]; do
@@ -159,7 +173,7 @@ jobs:
         with:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           allowed_tools: >
-            Bash(git:*),Read,Write,LS,Glob,Grep,
+            Bash(git:*),Bash,Read,Write,LS,Glob,Grep,Edit,MultiEdit,
             ListMcpResourcesTool,ReadMcpResourceTool,
             mcp__unity__script_apply_edits,mcp__unity__apply_text_edits,
             mcp__unity__create_script,mcp__unity__delete_script,
