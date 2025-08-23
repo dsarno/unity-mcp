@@ -98,13 +98,13 @@ jobs:
           # Only pass manualLicenseFile if the ULF actually exists from priming
           MANUAL_ARG=()
           if [ -f "${UNITY_CACHE_ROOT}/.local/share/unity3d/Unity_lic.ulf" ]; then
-            MANUAL_ARG=(-manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf)
+            MANUAL_ARG=(-manualLicenseFile /github/home/.local/share/unity3d/Unity_lic.ulf)
           fi
           docker run -d --name unity-mcp --network host \
-            -e HOME=/root \
+            -e HOME=/github/home \
             -e UNITY_MCP_ALLOW_BATCH=1 -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
-            -v "${{ env.UNITY_CACHE_ROOT }}:/root" \
+            -v "${{ env.UNITY_CACHE_ROOT }}:/github/home" \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
             ${{ env.UNITY_IMAGE }} /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
               -projectPath /workspace/TestProjects/UnityMCPTests \
@@ -116,8 +116,10 @@ jobs:
         run: |
           docker exec unity-mcp bash -lc '
             set -eux
-            ls -ld /root /root/.local/share/unity3d /root/.config/unity3d /root/.cache/unity3d || true
-            stat -c "%n %s bytes" /root/.local/share/unity3d/Unity_lic.ulf || true
+            echo "HOME is: $HOME" || true
+            ls -ld /github/home /github/home/.local/share/unity3d /github/home/.config/unity3d /github/home/.cache/unity3d || true
+            ls -l /github/home/.config/unity3d || true
+            stat -c "%n %s bytes" /github/home/.local/share/unity3d/Unity_lic.ulf || true
           '
 
       - name: Wait for Unity bridge
