@@ -203,6 +203,14 @@ jobs:
           timeout_minutes: "30"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
+      - name: Sanitize NL/T markdown (UTF-8, strip NULs)
+        if: always()
+        run: |
+          set -eu
+          if [ -f reports/claude-nl-tests.md ]; then
+            python -c "from pathlib import Path; p=Path('reports/claude-nl-tests.md'); b=p.read_bytes().replace(b'\x00', b''); s=b.decode('utf-8','replace').replace('\r\n','\n'); p.write_text(s, encoding='utf-8', newline='\n')"
+          fi
+
       - name: Publish JUnit report
         if: always()
         uses: mikepenz/action-junit-report@v4
