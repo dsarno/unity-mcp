@@ -15,7 +15,7 @@ concurrency:
 
 env:
   UNITY_VERSION: 2021.3.45f1
-  # Use the SAME image everywhere to avoid a second pull and env drift
+  # Use the SAME image everywhere to avoid a s econd pull and env drift
   UNITY_IMAGE: unityci/editor:ubuntu-2021.3.45f1-linux-il2cpp-3
   # Where GameCI writes /root in its container on the host:
   UNITY_CACHE_ROOT: /home/runner/work/_temp/_github_home
@@ -121,17 +121,7 @@ jobs:
               "${EBL_ARGS[@]}" \
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
-      - name: Check license inside persistent container (optional)
-        if: steps.detect.outputs.unity_ok == 'true'
-        run: |
-          docker exec unity-mcp bash -lc '
-            set -eux
-            echo "HOME is: $HOME" || true
-            ls -ld /root /root/.local/share/unity3d /root/.config/unity3d /root/.cache/unity3d || true
-            ls -l /root/.config/unity3d || true
-            stat -c "%n %s bytes" /root/.local/share/unity3d/Unity_lic.ulf || true
-          '
-
+      # ---------- Wait for Unity bridge ----------
       - name: Wait for Unity bridge
         if: steps.detect.outputs.unity_ok == 'true'
         run: |
@@ -188,7 +178,7 @@ jobs:
               }
             }
           model: "claude-3-7-sonnet-20250219"
-          max_turns: "50"
+          max_turns: "250"
           timeout_minutes: "12"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
