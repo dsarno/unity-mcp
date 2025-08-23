@@ -525,17 +525,22 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // Header guard: refuse edits that touch before the first 'using ' directive (after optional BOM) to prevent file corruption
-            int headerBoundary = 0;
-            if (original.Length > 0 && original[0] == '\uFEFF') headerBoundary = 1; // skip BOM
-            // Find first top-level using (very simple scan of start of file)
-            var mUsing = System.Text.RegularExpressions.Regex.Match(original, @"(?m)^(?:\uFEFF)?using\s+\w+", System.Text.RegularExpressions.RegexOptions.None);
+            int headerBoundary = (original.Length > 0 && original[0] == '\uFEFF') ? 1 : 0; // skip BOM once if present
+            // Find first top-level using (supports alias, static, and dotted namespaces)
+            var mUsing = System.Text.RegularExpressions.Regex.Match(
+                original,
+                @"(?m)^\s*using\s+(?:static\s+)?(?:[A-Za-z_]\w*\s*=\s*)?[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*;",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant
+            );
             if (mUsing.Success)
+            {
                 headerBoundary = Math.Min(Math.Max(headerBoundary, mUsing.Index), original.Length);
+            }
             foreach (var sp in spans)
             {
                 if (sp.start < headerBoundary)
                 {
-                    return Response.Error("header_guard", new { status = "header_guard", hint = "Refusing to edit before the first 'using'. Use anchor_insert near a method or a structured edit." });
+                    return Response.Error("using_guard", new { status = "using_guard", hint = "Refusing to edit before the first 'using'. Use anchor_insert near a method or a structured edit." });
                 }
             }
 
