@@ -96,16 +96,24 @@ jobs:
           set -eux
           mkdir -p "$HOME/.unity-mcp"
           docker run -d --name unity-mcp --network host \
+            -e HOME=/root \
             -e UNITY_MCP_ALLOW_BATCH=1 -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
-            -v "${{ env.UNITY_CACHE_ROOT }}/.local/share/unity3d:/root/.local/share/unity3d" \
-            -v "${{ env.UNITY_CACHE_ROOT }}/.config/unity3d:/root/.config/unity3d" \
-            -v "${{ env.UNITY_CACHE_ROOT }}/.cache/unity3d:/root/.cache/unity3d" \
+            -v "${{ env.UNITY_CACHE_ROOT }}:/root" \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
             ${{ env.UNITY_IMAGE }} /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
               -projectPath /workspace/TestProjects/UnityMCPTests \
               -manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf \
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
+
+      - name: Check license inside persistent container (optional)
+        if: steps.detect.outputs.unity_ok == 'true'
+        run: |
+          docker exec unity-mcp bash -lc '
+            set -eux
+            ls -ld /root /root/.local/share/unity3d /root/.config/unity3d /root/.cache/unity3d || true
+            stat -c "%n %s bytes" /root/.local/share/unity3d/Unity_lic.ulf || true
+          '
 
       - name: Wait for Unity bridge
         if: steps.detect.outputs.unity_ok == 'true'
