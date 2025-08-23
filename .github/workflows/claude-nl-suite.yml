@@ -15,9 +15,7 @@ concurrency:
 
 env:
   UNITY_VERSION: 2021.3.45f1
-  # Use the SAME image everywhere to avoid a s econd pull and env drift
   UNITY_IMAGE: unityci/editor:ubuntu-2021.3.45f1-linux-il2cpp-3
-  # Where GameCI writes /root in its container on the host:
   UNITY_CACHE_ROOT: /home/runner/work/_temp/_github_home
 
 jobs:
@@ -64,6 +62,12 @@ jobs:
             uv pip install -e UnityMcpBridge/UnityMcpServer~/src
           elif [ -f UnityMcpBridge/UnityMcpServer~/src/requirements.txt ]; then
             uv pip install -r UnityMcpBridge/UnityMcpServer~/src/requirements.txt
+          elif [ -f UnityMcpBridge/UnityMcpServer~/pyproject.toml ]; then
+            uv pip install -e UnityMcpBridge/UnityMcpServer~/
+          elif [ -f UnityMcpBridge/UnityMcpServer~/requirements.txt ]; then
+            uv pip install -r UnityMcpBridge/UnityMcpServer~/requirements.txt
+          else
+            echo "No MCP Python deps found (skipping)"
           fi
 
       # ---------- License prime on host (handles ULF or EBL) ----------
@@ -71,15 +75,14 @@ jobs:
         if: steps.detect.outputs.unity_ok == 'true'
         uses: game-ci/unity-test-runner@v4
         env:
-          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}   # optional ULF (raw or base64)
-          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}     # optional sign-in
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}    # optional serial
+          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
         with:
           projectPath: TestProjects/UnityMCPTests
           testMode: EditMode
           customParameters: -runTests -testFilter __NoSuchTest__ -batchmode -nographics
-          # Ensure GameCI uses the same editor version
           unityVersion: ${{ env.UNITY_VERSION }}
 
       # (Optional) Show where the license actually got written
@@ -98,13 +101,15 @@ jobs:
           UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
         run: |
           set -eu
+          if [ ! -d "${{ github.workspace }}/TestProjects/UnityMCPTests/ProjectSettings" ]; then
+            echo "Unity project not found; failing fast."
+            exit 1
+          fi
           mkdir -p "$HOME/.unity-mcp"
-          # Only pass manualLicenseFile if the ULF actually exists from priming
           MANUAL_ARG=()
           if [ -f "${UNITY_CACHE_ROOT}/.local/share/unity3d/Unity_lic.ulf" ]; then
             MANUAL_ARG=(-manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf)
           fi
-          # Only pass EBL args that are present
           EBL_ARGS=()
           [ -n "${UNITY_SERIAL:-}" ]   && EBL_ARGS+=(-serial "$UNITY_SERIAL")
           [ -n "${UNITY_EMAIL:-}" ]    && EBL_ARGS+=(-username "$UNITY_EMAIL")
@@ -121,11 +126,14 @@ jobs:
               "${EBL_ARGS[@]}" \
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
-      # ---------- Wait for Unity bridge ----------
+      # ---------- Wait for Unity bridge (fail fast if not running/ready) ----------
       - name: Wait for Unity bridge
         if: steps.detect.outputs.unity_ok == 'true'
         run: |
           set -eux
+          if ! docker ps --format '{{.Names}}' | grep -qx 'unity-mcp'; then
+            echo "Unity container failed to start"; docker ps -a || true; exit 1
+          fi
           docker logs -f unity-mcp & LOGPID=$!
           deadline=$((SECONDS+420))
           while [ $SECONDS -lt $deadline ]; do
@@ -143,9 +151,7 @@ jobs:
           docker logs unity-mcp || true
           exit 1
 
-      # ---------- Claude suites ----------
-      # Removed short sanity suite; full suite below contains coverage
-
+      # ---------- Prepare reports ----------
       - name: Prepare NL/T reports dir
         run: |
           set -eux
@@ -153,12 +159,13 @@ jobs:
           : > reports/claude-nl-tests.xml
           : > reports/claude-nl-tests.md
 
+      # ---------- Claude NL/T suite (full) ----------
       - name: Claude NL/T suite (full)
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         with:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
-          allowed_tools: >
+          allowed_tools: >  # RESTRICTED like “71”
             Bash(git:*),Read,Write,LS,Glob,Grep,
             ListMcpResourcesTool,ReadMcpResourceTool,
             mcp__unity__script_apply_edits,mcp__unity__apply_text_edits,
@@ -188,6 +195,21 @@ jobs:
           max_turns: "250"
           timeout_minutes: "30"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      # sanitize only the markdown (does not touch JUnit xml)
+      - name: Sanitize NL/T markdown (UTF-8, strip NULs)
+        if: always()
+        run: |
+          set -eu
+          if [ -f reports/claude-nl-tests.md ]; then
+            python - <<'PY'
+            from pathlib import Path
+            p=Path('reports/claude-nl-tests.md')
+            b=p.read_bytes().replace(b'\x00', b'')
+            s=b.decode('utf-8','replace').replace('\r\n','\n')
+            p.write_text(s, encoding='utf-8', newline='\n')
+            PY
+          fi
 
       - name: Publish JUnit report
         if: always()
