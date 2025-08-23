@@ -146,6 +146,13 @@ jobs:
       # ---------- Claude suites ----------
       # Removed short sanity suite; full suite below contains coverage
 
+      - name: Prepare NL/T reports dir
+        run: |
+          set -eux
+          mkdir -p reports
+          : > reports/claude-nl-tests.xml
+          : > reports/claude-nl-tests.md
+
       - name: Claude NL/T suite (full)
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
