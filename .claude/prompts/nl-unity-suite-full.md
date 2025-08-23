@@ -9,8 +9,10 @@ You are running in CI at the repository root. Use only the tools allowed by the 
 
 ## Output requirements
 - JUnit XML at `reports/claude-nl-tests.xml`; each test = one `<testcase>` with `classname="UnityMCP.NL"` or `UnityMCP.T`.
-- On failure: include `<failure>` with concise message and last evidence window (10–20 lines).
-- Summary markdown at `reports/claude-nl-tests.md` with checkboxes and windowed reads.
+- For any test that performs changes, include a compact unified diff of the changes in `<system-out>` (preferred) or in the `<failure>`/`<skipped>` body when applicable. Use standard unified diff format with context (e.g., starting with `---`/`+++` and `@@` hunks).
+- Each test must write an explicit verdict string in `<system-out>` as the last line: `VERDICT: PASS` or `VERDICT: FAIL`.
+- On failure: include `<failure>` with a concise message and an evidence window (10–20 lines) from the target file around the anchor/edited region, in addition to the diff.
+- Summary markdown at `reports/claude-nl-tests.md` with checkboxes, windowed reads, and inline diffs for changed tests.
 - Restore workspace at end (clean tree).
 
 ## Safety & hygiene
