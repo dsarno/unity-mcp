@@ -92,23 +92,33 @@ jobs:
       # ---------- Start headless Unity that stays up (bridge enabled) ----------
       - name: Start Unity (persistent bridge)
         if: steps.detect.outputs.unity_ok == 'true'
+        env:
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
         run: |
-          set -eux
+          set -eu
           mkdir -p "$HOME/.unity-mcp"
           # Only pass manualLicenseFile if the ULF actually exists from priming
           MANUAL_ARG=()
           if [ -f "${UNITY_CACHE_ROOT}/.local/share/unity3d/Unity_lic.ulf" ]; then
-            MANUAL_ARG=(-manualLicenseFile /github/home/.local/share/unity3d/Unity_lic.ulf)
+            MANUAL_ARG=(-manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf)
           fi
+          # Only pass EBL args that are present
+          EBL_ARGS=()
+          [ -n "${UNITY_SERIAL:-}" ]   && EBL_ARGS+=(-serial "$UNITY_SERIAL")
+          [ -n "${UNITY_EMAIL:-}" ]    && EBL_ARGS+=(-username "$UNITY_EMAIL")
+          [ -n "${UNITY_PASSWORD:-}" ] && EBL_ARGS+=(-password "$UNITY_PASSWORD")
           docker run -d --name unity-mcp --network host \
-            -e HOME=/github/home \
+            -e HOME=/root \
             -e UNITY_MCP_ALLOW_BATCH=1 -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
-            -v "${{ env.UNITY_CACHE_ROOT }}:/github/home" \
+            -v "${{ env.UNITY_CACHE_ROOT }}:/root" \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
             ${{ env.UNITY_IMAGE }} /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
               -projectPath /workspace/TestProjects/UnityMCPTests \
               "${MANUAL_ARG[@]}" \
+              "${EBL_ARGS[@]}" \
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
       - name: Check license inside persistent container (optional)
@@ -117,9 +127,9 @@ jobs:
           docker exec unity-mcp bash -lc '
             set -eux
             echo "HOME is: $HOME" || true
-            ls -ld /github/home /github/home/.local/share/unity3d /github/home/.config/unity3d /github/home/.cache/unity3d || true
-            ls -l /github/home/.config/unity3d || true
-            stat -c "%n %s bytes" /github/home/.local/share/unity3d/Unity_lic.ulf || true
+            ls -ld /root /root/.local/share/unity3d /root/.config/unity3d /root/.cache/unity3d || true
+            ls -l /root/.config/unity3d || true
+            stat -c "%n %s bytes" /root/.local/share/unity3d/Unity_lic.ulf || true
           '
 
       - name: Wait for Unity bridge
@@ -129,7 +139,7 @@ jobs:
           docker logs -f unity-mcp & LOGPID=$!
           deadline=$((SECONDS+420))
           while [ $SECONDS -lt $deadline ]; do
-            if docker logs unity-mcp 2>&1 | grep -qE "MCP Bridge listening|Bridge ready|Server started"; then
+            if docker logs unity-mcp 2>&1 | grep -qE "MCP Bridge listening|Bridge ready|Server started|Pro License: YES"; then
               echo "Bridge ready (logs)"; kill $LOGPID || true; exit 0
             fi
             PORT=$(python -c "import os,glob,json,sys; b=os.path.expanduser('~/.unity-mcp'); fs=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(json.load(open(fs[0]))['unity_port']) if fs else sys.exit(1)" 2>/dev/null || true)
