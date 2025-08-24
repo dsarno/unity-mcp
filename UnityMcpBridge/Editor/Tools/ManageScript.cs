@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
-using UnityMcpBridge.Editor.Helpers;
+using MCPForUnity.Editor.Helpers;
 
 #if USE_ROSLYN
 using Microsoft.CodeAnalysis;
@@ -17,7 +17,7 @@ using UnityEditor.Compilation;
 #endif
 
 
-namespace UnityMcpBridge.Editor.Tools
+namespace MCPForUnity.Editor.Tools
 {
     /// <summary>
     /// Handles CRUD operations for C# scripts within the Unity project.
@@ -217,7 +217,7 @@ namespace UnityMcpBridge.Editor.Tools
 
             try
             {
-                File.WriteAllText(fullPath, contents);
+                File.WriteAllText(fullPath, contents, new System.Text.UTF8Encoding(false));
                 AssetDatabase.ImportAsset(relativePath);
                 AssetDatabase.Refresh(); // Ensure Unity recognizes the new script
                 return Response.Success(
@@ -298,7 +298,7 @@ namespace UnityMcpBridge.Editor.Tools
 
             try
             {
-                File.WriteAllText(fullPath, contents);
+                File.WriteAllText(fullPath, contents, new System.Text.UTF8Encoding(false));
                 AssetDatabase.ImportAsset(relativePath); // Re-import to reflect changes
                 AssetDatabase.Refresh();
                 return Response.Success(
@@ -411,7 +411,7 @@ namespace UnityMcpBridge.Editor.Tools
         /// </summary>
         private static ValidationLevel GetValidationLevelFromGUI()
         {
-            string savedLevel = EditorPrefs.GetString("UnityMCP_ScriptValidationLevel", "standard");
+            string savedLevel = EditorPrefs.GetString("MCPForUnity_ScriptValidationLevel", "standard");
             return savedLevel.ToLower() switch
             {
                 "basic" => ValidationLevel.Basic,

@@ -1,9 +1,9 @@
 using System.Runtime.InteropServices;
 using UnityEditor;
 using UnityEngine;
-using UnityMcpBridge.Editor.Models;
+using MCPForUnity.Editor.Models;
 
-namespace UnityMcpBridge.Editor.Windows
+namespace MCPForUnity.Editor.Windows
 {
     public class VSCodeManualSetupWindow : ManualConfigEditorWindow
     {
@@ -57,7 +57,7 @@ namespace UnityMcpBridge.Editor.Windows
                     headerRect.width - 16,
                     headerRect.height
                 ),
-                "Setting up GitHub Copilot in VSCode with Unity MCP",
+                "Setting up GitHub Copilot in VSCode with MCP for Unity",
                 EditorStyles.boldLabel
             );
             EditorGUILayout.Space(10);
@@ -265,7 +265,7 @@ namespace UnityMcpBridge.Editor.Windows
                 instructionStyle
             );
             EditorGUILayout.LabelField(
-                "• Remember to have the Unity MCP Bridge running in Unity Editor",
+                "• Remember to have the MCP for Unity Bridge running in Unity Editor",
                 instructionStyle
             );
 

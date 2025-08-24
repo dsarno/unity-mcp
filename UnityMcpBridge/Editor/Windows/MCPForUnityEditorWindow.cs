@@ -9,15 +9,16 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
-using UnityMcpBridge.Editor.Data;
-using UnityMcpBridge.Editor.Helpers;
-using UnityMcpBridge.Editor.Models;
+using MCPForUnity.Editor.Data;
+using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Models;
 
-namespace UnityMcpBridge.Editor.Windows
+namespace MCPForUnity.Editor.Windows
 {
-    public class UnityMcpEditorWindow : EditorWindow
+    public class MCPForUnityEditorWindow : EditorWindow
     {
         private bool isUnityBridgeRunning = false;
         private Vector2 scrollPosition;
@@ -44,10 +45,10 @@ namespace UnityMcpBridge.Editor.Windows
         // UI state
         private int selectedClientIndex = 0;
 
-        [MenuItem("Window/Unity MCP")]
+        [MenuItem("Window/MCP for Unity")]
         public static void ShowWindow()
         {
-            GetWindow<UnityMcpEditorWindow>("MCP Editor");
+            GetWindow<MCPForUnityEditorWindow>("MCP for Unity");
         }
 
         private void OnEnable()
@@ -55,9 +56,9 @@ namespace UnityMcpBridge.Editor.Windows
             UpdatePythonServerInstallationStatus();
 
             // Refresh bridge status
-            isUnityBridgeRunning = UnityMcpBridge.IsRunning;
-            autoRegisterEnabled = EditorPrefs.GetBool("UnityMCP.AutoRegisterEnabled", true);
-            debugLogsEnabled = EditorPrefs.GetBool("UnityMCP.DebugLogs", false);
+            isUnityBridgeRunning = MCPForUnityBridge.IsRunning;
+            autoRegisterEnabled = EditorPrefs.GetBool("MCPForUnity.AutoRegisterEnabled", true);
+            debugLogsEnabled = EditorPrefs.GetBool("MCPForUnity.DebugLogs", false);
             foreach (McpClient mcpClient in mcpClients.clients)
             {
                 CheckMcpConfiguration(mcpClient);
@@ -76,7 +77,7 @@ namespace UnityMcpBridge.Editor.Windows
         private void OnFocus()
         {
             // Refresh bridge running state on focus in case initialization completed after domain reload
-            isUnityBridgeRunning = UnityMcpBridge.IsRunning;
+            isUnityBridgeRunning = MCPForUnityBridge.IsRunning;
             if (mcpClients.clients.Count > 0 && selectedClientIndex < mcpClients.clients.Count)
             {
                 McpClient selectedClient = mcpClients.clients[selectedClientIndex];
@@ -230,7 +231,7 @@ namespace UnityMcpBridge.Editor.Windows
             
             GUI.Label(
                 new Rect(titleRect.x + 15, titleRect.y + 8, titleRect.width - 30, titleRect.height),
-                "Unity MCP Editor",
+                "MCP for Unity Editor",
                 titleStyle
             );
 
@@ -241,7 +242,7 @@ namespace UnityMcpBridge.Editor.Windows
             if (newDebug != debugLogsEnabled)
             {
                 debugLogsEnabled = newDebug;
-                EditorPrefs.SetBool("UnityMCP.DebugLogs", debugLogsEnabled);
+                EditorPrefs.SetBool("MCPForUnity.DebugLogs", debugLogsEnabled);
             }
             EditorGUILayout.Space(15);
         }
@@ -272,13 +273,13 @@ namespace UnityMcpBridge.Editor.Windows
             EditorGUILayout.Space(5);
             
             EditorGUILayout.BeginHorizontal();
-            bool isAutoMode = UnityMcpBridge.IsAutoConnectMode();
+            bool isAutoMode = MCPForUnityBridge.IsAutoConnectMode();
             GUIStyle modeStyle = new GUIStyle(EditorStyles.miniLabel) { fontSize = 11 };
             EditorGUILayout.LabelField($"Mode: {(isAutoMode ? "Auto" : "Standard")}", modeStyle);
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
             
-            int currentUnityPort = UnityMcpBridge.GetCurrentPort();
+            int currentUnityPort = MCPForUnityBridge.GetCurrentPort();
             GUIStyle portStyle = new GUIStyle(EditorStyles.miniLabel)
             {
                 fontSize = 11
@@ -304,15 +305,15 @@ namespace UnityMcpBridge.Editor.Windows
                 );
                 if (GUILayout.Button(repairLabel, GUILayout.Width(160), GUILayout.Height(22)))
                 {
-                    bool ok = global::UnityMcpBridge.Editor.Helpers.ServerInstaller.RepairPythonEnvironment();
+                    bool ok = global::MCPForUnity.Editor.Helpers.ServerInstaller.RepairPythonEnvironment();
                     if (ok)
                     {
-                        EditorUtility.DisplayDialog("Unity MCP", "Python environment repaired.", "OK");
+                        EditorUtility.DisplayDialog("MCP for Unity", "Python environment repaired.", "OK");
                         UpdatePythonServerInstallationStatus();
                     }
                     else
                     {
-                        EditorUtility.DisplayDialog("Unity MCP", "Repair failed. Please check Console for details.", "OK");
+                        EditorUtility.DisplayDialog("MCP for Unity", "Repair failed. Please check Console for details.", "OK");
                     }
                 }
             }
@@ -328,7 +329,7 @@ namespace UnityMcpBridge.Editor.Windows
                 EditorGUILayout.LabelField("<color=#cc3333><b>Warning:</b></color> No Python installation found.", warnStyle);
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    if (GUILayout.Button("Open install instructions", GUILayout.Width(200)))
+                    if (GUILayout.Button("Open Install Instructions", GUILayout.Width(200)))
                     {
                         Application.OpenURL("https://www.python.org/downloads/");
                     }
@@ -347,7 +348,7 @@ namespace UnityMcpBridge.Editor.Windows
                         if (!string.IsNullOrEmpty(picked) && File.Exists(Path.Combine(picked, "server.py")))
                         {
                             pythonDirOverride = picked;
-                            EditorPrefs.SetString("UnityMCP.PythonDirOverride", pythonDirOverride);
+                            EditorPrefs.SetString("MCPForUnity.PythonDirOverride", pythonDirOverride);
                             UpdatePythonServerInstallationStatus();
                         }
                         else if (!string.IsNullOrEmpty(picked))
@@ -369,7 +370,7 @@ namespace UnityMcpBridge.Editor.Windows
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             
             // Always reflect the live state each repaint to avoid stale UI after recompiles
-            isUnityBridgeRunning = UnityMcpBridge.IsRunning;
+            isUnityBridgeRunning = MCPForUnityBridge.IsRunning;
 
             GUIStyle sectionTitleStyle = new GUIStyle(EditorStyles.boldLabel)
             {
@@ -467,14 +468,14 @@ namespace UnityMcpBridge.Editor.Windows
             {
                 // Project-scoped one-time flag
                 string projectPath = Application.dataPath ?? string.Empty;
-                string key = $"UnityMCP.AutoRegistered.{ComputeSha1(projectPath)}";
+                string key = $"MCPForUnity.AutoRegistered.{ComputeSha1(projectPath)}";
                 if (EditorPrefs.GetBool(key, false))
                 {
                     return;
                 }
 
                 // Attempt client registration using discovered Python server dir
-                pythonDirOverride ??= EditorPrefs.GetString("UnityMCP.PythonDirOverride", null);
+                pythonDirOverride ??= EditorPrefs.GetString("MCPForUnity.PythonDirOverride", null);
                 string pythonDir = !string.IsNullOrEmpty(pythonDirOverride) ? pythonDirOverride : FindPackagePythonDirectory();
                 if (!string.IsNullOrEmpty(pythonDir) && File.Exists(Path.Combine(pythonDir, "server.py")))
                 {
@@ -511,12 +512,12 @@ namespace UnityMcpBridge.Editor.Windows
                 }
 
                 // Ensure the bridge is listening and has a fresh saved port
-                if (!UnityMcpBridge.IsRunning)
+                if (!MCPForUnityBridge.IsRunning)
                 {
                     try
                     {
-                        UnityMcpBridge.StartAutoConnect();
-                        isUnityBridgeRunning = UnityMcpBridge.IsRunning;
+                        MCPForUnityBridge.StartAutoConnect();
+                        isUnityBridgeRunning = MCPForUnityBridge.IsRunning;
                         Repaint();
                     }
                     catch (Exception ex)
@@ -526,13 +527,13 @@ namespace UnityMcpBridge.Editor.Windows
                 }
 
                 // Verify bridge with a quick ping
-                lastBridgeVerifiedOk = VerifyBridgePing(UnityMcpBridge.GetCurrentPort());
+                lastBridgeVerifiedOk = VerifyBridgePing(MCPForUnityBridge.GetCurrentPort());
 
                 EditorPrefs.SetBool(key, true);
             }
             catch (Exception e)
             {
-                UnityEngine.Debug.LogWarning($"Unity MCP auto-setup skipped: {e.Message}");
+                UnityEngine.Debug.LogWarning($"MCP for Unity auto-setup skipped: {e.Message}");
             }
         }
 
@@ -561,7 +562,7 @@ namespace UnityMcpBridge.Editor.Windows
             // Force a one-shot setup regardless of first-run flag
             try
             {
-                pythonDirOverride ??= EditorPrefs.GetString("UnityMCP.PythonDirOverride", null);
+                pythonDirOverride ??= EditorPrefs.GetString("MCPForUnity.PythonDirOverride", null);
                 string pythonDir = !string.IsNullOrEmpty(pythonDirOverride) ? pythonDirOverride : FindPackagePythonDirectory();
                 if (string.IsNullOrEmpty(pythonDir) || !File.Exists(Path.Combine(pythonDir, "server.py")))
                 {
@@ -599,11 +600,11 @@ namespace UnityMcpBridge.Editor.Windows
                 lastClientRegisteredOk = anyRegistered || IsCursorConfigured(pythonDir) || IsClaudeConfigured();
 
                 // Restart/ensure bridge
-                UnityMcpBridge.StartAutoConnect();
-                isUnityBridgeRunning = UnityMcpBridge.IsRunning;
+                MCPForUnityBridge.StartAutoConnect();
+                isUnityBridgeRunning = MCPForUnityBridge.IsRunning;
 
                 // Verify
-                lastBridgeVerifiedOk = VerifyBridgePing(UnityMcpBridge.GetCurrentPort());
+                lastBridgeVerifiedOk = VerifyBridgePing(MCPForUnityBridge.GetCurrentPort());
                 Repaint();
             }
             catch (Exception e)
@@ -786,13 +787,13 @@ namespace UnityMcpBridge.Editor.Windows
 
 				EditorGUILayout.Space(8);
 				EditorGUILayout.BeginHorizontal();
-				if (GUILayout.Button("Choose UV Install Location", GUILayout.Width(260), GUILayout.Height(22)))
+				if (GUILayout.Button("Choose uv Install Location", GUILayout.Width(260), GUILayout.Height(22)))
 				{
 					string suggested = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "/opt/homebrew/bin" : Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
 					string picked = EditorUtility.OpenFilePanel("Select 'uv' binary", suggested, "");
 					if (!string.IsNullOrEmpty(picked))
 					{
-						EditorPrefs.SetString("UnityMCP.UvPath", picked);
+						EditorPrefs.SetString("MCPForUnity.UvPath", picked);
 						ConfigureMcpClient(mcpClient);
 						Repaint();
 					}
@@ -817,7 +818,7 @@ namespace UnityMcpBridge.Editor.Windows
 				if (claudeAvailable)
 				{
 					bool isConfigured = mcpClient.status == McpStatus.Configured;
-					string buttonText = isConfigured ? "Unregister UnityMCP with Claude Code" : "Register with Claude Code";
+					string buttonText = isConfigured ? "Unregister MCP for Unity with Claude Code" : "Register with Claude Code";
 					if (GUILayout.Button(buttonText, GUILayout.Height(32)))
 					{
 						if (isConfigured)
@@ -934,14 +935,14 @@ namespace UnityMcpBridge.Editor.Windows
         {
             if (isUnityBridgeRunning)
             {
-                UnityMcpBridge.Stop();
+                MCPForUnityBridge.Stop();
             }
             else
             {
-                UnityMcpBridge.Start();
+                MCPForUnityBridge.Start();
             }
             // Reflect the actual state post-operation (avoid optimistic toggle)
-            isUnityBridgeRunning = UnityMcpBridge.IsRunning;
+            isUnityBridgeRunning = MCPForUnityBridge.IsRunning;
             Repaint();
         }
 
@@ -1003,7 +1004,7 @@ namespace UnityMcpBridge.Editor.Windows
 		private string WriteToConfig(string pythonDir, string configPath, McpClient mcpClient = null)
         {
 			// 0) Respect explicit lock (hidden pref or UI toggle)
-			try { if (UnityEditor.EditorPrefs.GetBool("UnityMCP.LockCursorConfig", false)) return "Skipped (locked)"; } catch { }
+			try { if (UnityEditor.EditorPrefs.GetBool("MCPForUnity.LockCursorConfig", false)) return "Skipped (locked)"; } catch { }
 
             JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
 
@@ -1078,7 +1079,7 @@ namespace UnityMcpBridge.Editor.Windows
 			// Hard-block PackageCache on Windows unless dev override is set
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
 				&& serverSrc.IndexOf(@"\Library\PackageCache\", StringComparison.OrdinalIgnoreCase) >= 0
-				&& !UnityEditor.EditorPrefs.GetBool("UnityMCP.UseEmbeddedServer", false))
+				&& !UnityEditor.EditorPrefs.GetBool("MCPForUnity.UseEmbeddedServer", false))
 			{
 				serverSrc = ServerInstaller.GetServerPath();
 			}
@@ -1095,33 +1096,26 @@ namespace UnityMcpBridge.Editor.Windows
 			}
 
 			// 4) Ensure containers exist and write back minimal changes
-			if (isVSCode)
-			{
-				if (existingConfig.servers == null) existingConfig.servers = new Newtonsoft.Json.Linq.JObject();
-				if (existingConfig.servers.unityMCP == null) existingConfig.servers.unityMCP = new Newtonsoft.Json.Linq.JObject();
-				existingConfig.servers.unityMCP.command = uvPath;
-				existingConfig.servers.unityMCP.args = Newtonsoft.Json.Linq.JArray.FromObject(newArgs);
-				existingConfig.servers.unityMCP.type = "stdio";
-			}
-			else
-			{
-				if (existingConfig.mcpServers == null) existingConfig.mcpServers = new Newtonsoft.Json.Linq.JObject();
-				if (existingConfig.mcpServers.unityMCP == null) existingConfig.mcpServers.unityMCP = new Newtonsoft.Json.Linq.JObject();
-				existingConfig.mcpServers.unityMCP.command = uvPath;
-				existingConfig.mcpServers.unityMCP.args = Newtonsoft.Json.Linq.JArray.FromObject(newArgs);
-			}
+            JObject existingRoot;
+            if (existingConfig is JObject eo)
+                existingRoot = eo;
+            else
+                existingRoot = JObject.FromObject(existingConfig);
 
-			string mergedJson = JsonConvert.SerializeObject(existingConfig, jsonSettings);
+            existingRoot = ConfigJsonBuilder.ApplyUnityServerToExistingConfig(existingRoot, uvPath, serverSrc, mcpClient);
+
+			string mergedJson = JsonConvert.SerializeObject(existingRoot, jsonSettings);
 			string tmp = configPath + ".tmp";
-			System.IO.File.WriteAllText(tmp, mergedJson, System.Text.Encoding.UTF8);
+			// Write UTF-8 without BOM to avoid issues on Windows editors/tools
+			System.IO.File.WriteAllText(tmp, mergedJson, new System.Text.UTF8Encoding(false));
 			if (System.IO.File.Exists(configPath))
 				System.IO.File.Replace(tmp, configPath, null);
 			else
 				System.IO.File.Move(tmp, configPath);
 			try
 			{
-				if (IsValidUv(uvPath)) UnityEditor.EditorPrefs.SetString("UnityMCP.UvPath", uvPath);
-				UnityEditor.EditorPrefs.SetString("UnityMCP.ServerSrc", serverSrc);
+				if (IsValidUv(uvPath)) UnityEditor.EditorPrefs.SetString("MCPForUnity.UvPath", uvPath);
+				UnityEditor.EditorPrefs.SetString("MCPForUnity.ServerSrc", serverSrc);
 			}
 			catch { }
 
@@ -1143,62 +1137,15 @@ namespace UnityMcpBridge.Editor.Windows
         {
             // Get the Python directory path using Package Manager API
             string pythonDir = FindPackagePythonDirectory();
-            string manualConfigJson;
-            
-            // Create common JsonSerializerSettings
-            JsonSerializerSettings jsonSettings = new() { Formatting = Formatting.Indented };
-            
-            // Use switch statement to handle different client types
-            switch (mcpClient.mcpType)
+            // Build manual JSON centrally using the shared builder
+            string uvPathForManual = FindUvPath();
+            if (uvPathForManual == null)
             {
-				case McpTypes.VSCode:
-					// Resolve uv so VSCode launches the correct executable even if not on PATH
-					string uvPathManual = FindUvPath();
-					if (uvPathManual == null)
-					{
-						UnityEngine.Debug.LogError("UV package manager not found. Cannot generate manual configuration.");
-						return;
-					}
-					// Create VSCode-specific configuration with proper format
-					var vscodeConfig = new
-					{
-						servers = new
-						{
-							unityMCP = new
-							{
-								command = uvPathManual,
-								args = new[] { "run", "--directory", pythonDir, "server.py" },
-								type = "stdio"
-							}
-						}
-					};
-					manualConfigJson = JsonConvert.SerializeObject(vscodeConfig, jsonSettings);
-					break;
-                    
-                default:
-                    // Create standard MCP configuration for other clients
-                    string uvPath = FindUvPath();
-                    if (uvPath == null)
-                    {
-                        UnityEngine.Debug.LogError("UV package manager not found. Cannot configure manual setup.");
-                        return;
-                    }
-                    
-                    McpConfig jsonConfig = new()
-                    {
-                        mcpServers = new McpConfigServers
-                        {
-                            unityMCP = new McpConfigServer
-                            {
-                                command = uvPath,
-                                args = new[] { "run", "--directory", pythonDir, "server.py" },
-                            },
-                        },
-                    };
-                    manualConfigJson = JsonConvert.SerializeObject(jsonConfig, jsonSettings);
-                    break;
+                UnityEngine.Debug.LogError("UV package manager not found. Cannot generate manual configuration.");
+                return;
             }
 
+            string manualConfigJson = ConfigJsonBuilder.BuildManualConfigJson(uvPathForManual, pythonDir, mcpClient);
             ManualConfigEditorWindow.ShowWindow(configPath, manualConfigJson, mcpClient);
         }
 
@@ -1206,7 +1153,7 @@ namespace UnityMcpBridge.Editor.Windows
 		{
 			try
 			{
-				string remembered = UnityEditor.EditorPrefs.GetString("UnityMCP.ServerSrc", string.Empty);
+				string remembered = UnityEditor.EditorPrefs.GetString("MCPForUnity.ServerSrc", string.Empty);
 				if (!string.IsNullOrEmpty(remembered) && File.Exists(Path.Combine(remembered, "server.py")))
 				{
 					return remembered;
@@ -1219,7 +1166,7 @@ namespace UnityMcpBridge.Editor.Windows
 					return installed;
 				}
 
-				bool useEmbedded = UnityEditor.EditorPrefs.GetBool("UnityMCP.UseEmbeddedServer", false);
+				bool useEmbedded = UnityEditor.EditorPrefs.GetBool("MCPForUnity.UseEmbeddedServer", false);
 				if (useEmbedded && ServerPathResolver.TryFindEmbeddedServerSource(out string embedded)
 					&& File.Exists(Path.Combine(embedded, "server.py")))
 				{
@@ -1261,7 +1208,7 @@ namespace UnityMcpBridge.Editor.Windows
                 }
 
 				// Resolve via shared helper (handles local registry and older fallback) only if dev override on
-				if (UnityEditor.EditorPrefs.GetBool("UnityMCP.UseEmbeddedServer", false))
+				if (UnityEditor.EditorPrefs.GetBool("MCPForUnity.UseEmbeddedServer", false))
 				{
 					if (ServerPathResolver.TryFindEmbeddedServerSource(out string embedded))
 					{
@@ -1424,7 +1371,7 @@ namespace UnityMcpBridge.Editor.Windows
 
         private void LoadValidationLevelSetting()
         {
-            string savedLevel = EditorPrefs.GetString("UnityMCP_ScriptValidationLevel", "standard");
+            string savedLevel = EditorPrefs.GetString("MCPForUnity_ScriptValidationLevel", "standard");
             validationLevelIndex = savedLevel.ToLower() switch
             {
                 "basic" => 0,
@@ -1445,7 +1392,7 @@ namespace UnityMcpBridge.Editor.Windows
                 3 => "strict",
                 _ => "standard"
             };
-            EditorPrefs.SetString("UnityMCP_ScriptValidationLevel", levelString);
+            EditorPrefs.SetString("MCPForUnity_ScriptValidationLevel", levelString);
         }
 
         private string GetValidationLevelDescription(int index)
@@ -1462,7 +1409,7 @@ namespace UnityMcpBridge.Editor.Windows
 
         public static string GetCurrentValidationLevel()
         {
-            string savedLevel = EditorPrefs.GetString("UnityMCP_ScriptValidationLevel", "standard");
+            string savedLevel = EditorPrefs.GetString("MCPForUnity_ScriptValidationLevel", "standard");
             return savedLevel;
         }
 
@@ -1558,7 +1505,7 @@ namespace UnityMcpBridge.Editor.Windows
                             {
                                 if (debugLogsEnabled)
                                 {
-                                    UnityEngine.Debug.Log($"UnityMCP: Auto-updated MCP config for '{mcpClient.name}' to new path: {pythonDir}");
+                                    UnityEngine.Debug.Log($"MCP for Unity: Auto-updated MCP config for '{mcpClient.name}' to new path: {pythonDir}");
                                 }
                                 mcpClient.SetStatus(McpStatus.Configured);
                             }
@@ -1572,7 +1519,7 @@ namespace UnityMcpBridge.Editor.Windows
                             mcpClient.SetStatus(McpStatus.IncorrectPath);
                             if (debugLogsEnabled)
                             {
-                                UnityEngine.Debug.LogWarning($"UnityMCP: Auto-config rewrite failed for '{mcpClient.name}': {ex.Message}");
+                                UnityEngine.Debug.LogWarning($"MCP for Unity: Auto-config rewrite failed for '{mcpClient.name}': {ex.Message}");
                             }
                         }
                     }
@@ -1594,7 +1541,7 @@ namespace UnityMcpBridge.Editor.Windows
             string claudePath = ExecPath.ResolveClaude();
             if (string.IsNullOrEmpty(claudePath))
             {
-                UnityEngine.Debug.LogError("UnityMCP: Claude CLI not found. Set a path in this window or install the CLI, then try again.");
+                UnityEngine.Debug.LogError("MCP for Unity: Claude CLI not found. Set a path in this window or install the CLI, then try again.");
                 return;
             }
             string uvPath = ExecPath.ResolveUv() ?? "uv";
@@ -1623,11 +1570,11 @@ namespace UnityMcpBridge.Editor.Windows
                     var existingClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
                     if (existingClient != null) CheckClaudeCodeConfiguration(existingClient);
                     Repaint();
-                    UnityEngine.Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: UnityMCP already registered with Claude Code.");
+                    UnityEngine.Debug.Log("<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: MCP for Unity already registered with Claude Code.");
                 }
                 else
                 {
-                    UnityEngine.Debug.LogError($"UnityMCP: Failed to start Claude CLI.\n{stderr}\n{stdout}");
+                    UnityEngine.Debug.LogError($"MCP for Unity: Failed to start Claude CLI.\n{stderr}\n{stdout}");
                 }
                 return;
             }
@@ -1636,7 +1583,7 @@ namespace UnityMcpBridge.Editor.Windows
             var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
             if (claudeClient != null) CheckClaudeCodeConfiguration(claudeClient);
             Repaint();
-            UnityEngine.Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: Registered with Claude Code.");
+            UnityEngine.Debug.Log("<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: Registered with Claude Code.");
         }
 
         private void UnregisterWithClaudeCode()
@@ -1644,7 +1591,7 @@ namespace UnityMcpBridge.Editor.Windows
             string claudePath = ExecPath.ResolveClaude();
             if (string.IsNullOrEmpty(claudePath))
             {
-                UnityEngine.Debug.LogError("UnityMCP: Claude CLI not found. Set a path in this window or install the CLI, then try again.");
+                UnityEngine.Debug.LogError("MCP for Unity: Claude CLI not found. Set a path in this window or install the CLI, then try again.");
                 return;
             }
 
@@ -1653,7 +1600,7 @@ namespace UnityMcpBridge.Editor.Windows
                 ? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
                 : null; // On Windows, don't modify PATH - use system PATH as-is
 
-			// Determine if Claude has a UnityMCP server registered by using exit codes from `claude mcp get <name>`
+			// Determine if Claude has a "UnityMCP" server registered by using exit codes from `claude mcp get <name>`
 			string[] candidateNamesForGet = { "UnityMCP", "unityMCP", "unity-mcp", "UnityMcpServer" };
 			List<string> existingNames = new List<string>();
 			foreach (var candidate in candidateNamesForGet)
@@ -1672,7 +1619,7 @@ namespace UnityMcpBridge.Editor.Windows
 				if (claudeClient != null)
 				{
 					claudeClient.SetStatus(McpStatus.NotConfigured);
-					UnityEngine.Debug.Log("Claude CLI reports no UnityMCP server via 'mcp get' – setting status to NotConfigured and aborting unregister.");
+					UnityEngine.Debug.Log("Claude CLI reports no MCP for Unity server via 'mcp get' - setting status to NotConfigured and aborting unregister.");
 					Repaint();
 				}
 				return;
@@ -1687,7 +1634,7 @@ namespace UnityMcpBridge.Editor.Windows
                 if (ExecPath.TryRun(claudePath, $"mcp remove {serverName}", projectDir, out var stdout, out var stderr, 10000, pathPrepend))
                 {
                     success = true;
-                    UnityEngine.Debug.Log($"Successfully removed MCP server: {serverName}");
+                    UnityEngine.Debug.Log($"MCP for Unity: Successfully removed MCP server: {serverName}");
                     break;
                 }
                 else if (!string.IsNullOrEmpty(stderr) &&
@@ -1709,7 +1656,7 @@ namespace UnityMcpBridge.Editor.Windows
                     CheckClaudeCodeConfiguration(claudeClient);
                 }
                 Repaint();
-                UnityEngine.Debug.Log("UnityMCP server successfully unregistered from Claude Code.");
+                UnityEngine.Debug.Log("MCP for Unity: MCP server successfully unregistered from Claude Code.");
             }
             else
             {
@@ -1732,7 +1679,7 @@ namespace UnityMcpBridge.Editor.Windows
             {
                 UnityEngine.Debug.Log($"Claude MCP servers (text): {listStdout}");
                 
-                // Check if output indicates no servers or contains UnityMCP variants
+                // Check if output indicates no servers or contains "UnityMCP" variants
                 if (listStdout.Contains("No MCP servers configured") || 
                     listStdout.Contains("no servers") ||
                     listStdout.Contains("No servers") ||
@@ -1742,7 +1689,7 @@ namespace UnityMcpBridge.Editor.Windows
                     return false;
                 }
                 
-                // Look for UnityMCP variants in the output
+                // Look for "UnityMCP" variants in the output
                 return listStdout.Contains("UnityMCP") || 
                        listStdout.Contains("unityMCP") || 
                        listStdout.Contains("unity-mcp");
@@ -2148,13 +2095,13 @@ namespace UnityMcpBridge.Editor.Windows
                 string configJson = File.ReadAllText(configPath);
                 dynamic claudeConfig = JsonConvert.DeserializeObject(configJson);
                 
-                // Check for UnityMCP server in the mcpServers section (current format)
+                // Check for "UnityMCP" server in the mcpServers section (current format)
                 if (claudeConfig?.mcpServers != null)
                 {
                     var servers = claudeConfig.mcpServers;
                     if (servers.UnityMCP != null || servers.unityMCP != null)
                     {
-                        // Found UnityMCP configured
+                        // Found MCP for Unity configured
                         mcpClient.SetStatus(McpStatus.Configured);
                         return;
                     }
@@ -2174,11 +2121,11 @@ namespace UnityMcpBridge.Editor.Windows
                         
                         if (string.Equals(normalizedProjectPath, normalizedProjectDir, StringComparison.OrdinalIgnoreCase) && project.Value?.mcpServers != null)
                         {
-                            // Check for UnityMCP (case variations)
+                            // Check for "UnityMCP" (case variations)
                             var servers = project.Value.mcpServers;
                             if (servers.UnityMCP != null || servers.unityMCP != null)
                             {
-                                // Found UnityMCP configured for this project
+                                // Found MCP for Unity configured for this project
                                 mcpClient.SetStatus(McpStatus.Configured);
                                 return;
                             }

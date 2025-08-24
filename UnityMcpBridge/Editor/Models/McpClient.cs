@@ -1,4 +1,4 @@
-namespace UnityMcpBridge.Editor.Models
+namespace MCPForUnity.Editor.Models
 {
     public class McpClient
     {
@@ -22,7 +22,7 @@ namespace UnityMcpBridge.Editor.Models
                 McpStatus.CommunicationError => "Communication Error",
                 McpStatus.NoResponse => "No Response",
                 McpStatus.UnsupportedOS => "Unsupported OS",
-                McpStatus.MissingConfig => "Missing UnityMCP Config",
+                McpStatus.MissingConfig => "Missing MCPForUnity Config",
                 McpStatus.Error => configStatus.StartsWith("Error:") ? configStatus : "Error",
                 _ => "Unknown",
             };

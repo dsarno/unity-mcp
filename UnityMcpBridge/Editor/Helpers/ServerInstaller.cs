@@ -5,7 +5,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 
-namespace UnityMcpBridge.Editor.Helpers
+namespace MCPForUnity.Editor.Helpers
 {
     public static class ServerInstaller
     {
@@ -13,7 +13,7 @@ namespace UnityMcpBridge.Editor.Helpers
         private const string ServerFolder = "UnityMcpServer";
 
         /// <summary>
-        /// Ensures the unity-mcp-server is installed locally by copying from the embedded package source.
+        /// Ensures the mcp-for-unity-server is installed locally by copying from the embedded package source.
         /// No network calls or Git operations are performed.
         /// </summary>
         public static void EnsureServerInstalled()
@@ -49,7 +49,7 @@ namespace UnityMcpBridge.Editor.Helpers
 
                 if (hasInstalled || TryGetEmbeddedServerSource(out _))
                 {
-                    Debug.LogWarning($"UnityMCP: Using existing server; skipped install. Details: {ex.Message}");
+                    Debug.LogWarning($"MCP for Unity: Using existing server; skipped install. Details: {ex.Message}");
                     return;
                 }
 
@@ -246,7 +246,7 @@ namespace UnityMcpBridge.Editor.Helpers
                     return false;
                 }
 
-                Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: Python environment repaired successfully.");
+                Debug.Log("<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: Python environment repaired successfully.");
                 return true;
             }
             catch (Exception ex)
@@ -261,7 +261,7 @@ namespace UnityMcpBridge.Editor.Helpers
             // Allow user override via EditorPrefs
             try
             {
-                string overridePath = EditorPrefs.GetString("UnityMCP.UvPath", string.Empty);
+                string overridePath = EditorPrefs.GetString("MCPForUnity.UvPath", string.Empty);
                 if (!string.IsNullOrEmpty(overridePath) && File.Exists(overridePath))
                 {
                     if (ValidateUvBinary(overridePath)) return overridePath;
