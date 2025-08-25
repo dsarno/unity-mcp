@@ -6,13 +6,9 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
-<<<<<<< HEAD
-using UnityMcpBridge.Editor.Helpers;
+using MCPForUnity.Editor.Helpers;
 using System.Threading;
 using System.Security.Cryptography;
-=======
-using MCPForUnity.Editor.Helpers;
->>>>>>> fix/installer-cleanup-v2
 
 #if USE_ROSLYN
 using Microsoft.CodeAnalysis;
@@ -304,31 +300,22 @@ namespace MCPForUnity.Editor.Tools
 
             try
             {
-<<<<<<< HEAD
-                // Atomic-ish create
-                var enc = System.Text.Encoding.UTF8;
+                // Atomic create without BOM; schedule refresh after reply
+                var enc = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
                 var tmp = fullPath + ".tmp";
                 File.WriteAllText(tmp, contents, enc);
                 try
                 {
-                    // Prefer atomic move within same volume
                     File.Move(tmp, fullPath);
                 }
                 catch (IOException)
                 {
-                    // Cross-volume or other IO constraint: fallback to copy
                     File.Copy(tmp, fullPath, overwrite: true);
                     try { File.Delete(tmp); } catch { }
                 }
 
                 var uri = $"unity://path/{relativePath}";
                 var ok = Response.Success(
-=======
-                File.WriteAllText(fullPath, contents, new System.Text.UTF8Encoding(false));
-                AssetDatabase.ImportAsset(relativePath);
-                AssetDatabase.Refresh(); // Ensure Unity recognizes the new script
-                return Response.Success(
->>>>>>> fix/installer-cleanup-v2
                     $"Script '{name}.cs' created successfully at '{relativePath}'.",
                     new { uri, scheduledRefresh = true }
                 );
@@ -412,9 +399,8 @@ namespace MCPForUnity.Editor.Tools
 
             try
             {
-<<<<<<< HEAD
-                // Safe write with atomic replace when available
-                var encoding = System.Text.Encoding.UTF8;
+                // Safe write with atomic replace when available, without BOM
+                var encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
                 string tempPath = fullPath + ".tmp";
                 File.WriteAllText(tempPath, contents, encoding);
 
@@ -422,16 +408,7 @@ namespace MCPForUnity.Editor.Tools
                 try
                 {
                     File.Replace(tempPath, fullPath, backupPath);
-                    // Clean up backup to avoid stray assets inside the project
-                    try
-                    {
-                        if (File.Exists(backupPath))
-                            File.Delete(backupPath);
-                    }
-                    catch
-                    {
-                        // ignore failures deleting the backup
-                    }
+                    try { if (File.Exists(backupPath)) File.Delete(backupPath); } catch { }
                 }
                 catch (PlatformNotSupportedException)
                 {
@@ -441,7 +418,6 @@ namespace MCPForUnity.Editor.Tools
                 }
                 catch (IOException)
                 {
-                    // Cross-volume moves can throw IOException; fallback to copy
                     File.Copy(tempPath, fullPath, true);
                     try { File.Delete(tempPath); } catch { }
                     try { if (File.Exists(backupPath)) File.Delete(backupPath); } catch { }
@@ -450,12 +426,6 @@ namespace MCPForUnity.Editor.Tools
                 // Prepare success response BEFORE any operation that can trigger a domain reload
                 var uri = $"unity://path/{relativePath}";
                 var ok = Response.Success(
-=======
-                File.WriteAllText(fullPath, contents, new System.Text.UTF8Encoding(false));
-                AssetDatabase.ImportAsset(relativePath); // Re-import to reflect changes
-                AssetDatabase.Refresh();
-                return Response.Success(
->>>>>>> fix/installer-cleanup-v2
                     $"Script '{name}.cs' updated successfully at '{relativePath}'.",
                     new { uri, path = relativePath, scheduledRefresh = true }
                 );

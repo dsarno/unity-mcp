@@ -1181,32 +1181,12 @@ namespace MCPForUnity.Editor.Windows
 				serverSrc = ServerInstaller.GetServerPath();
 			}
 
-			// 2) Canonical args order (add quiet flag to prevent stdout noise breaking MCP stdio)
-			var newArgs = new[] { "-q", "run", "--directory", serverSrc, "server.py" };
+			// 2) Canonical args order
+			var newArgs = new[] { "run", "--directory", serverSrc, "server.py" };
 
 			// 3) Only write if changed
 			bool changed = !string.Equals(existingCommand, uvPath, StringComparison.Ordinal)
 				|| !ArgsEqual(existingArgs, newArgs);
-
-			// If the existing file contains a UTF-8 BOM, force a rewrite to remove it
-			try
-			{
-				if (System.IO.File.Exists(configPath))
-				{
-					using (var fs = new System.IO.FileStream(configPath, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite))
-					{
-						if (fs.Length >= 3)
-						{
-							int b1 = fs.ReadByte();
-							int b2 = fs.ReadByte();
-							int b3 = fs.ReadByte();
-							bool hasBom = (b1 == 0xEF && b2 == 0xBB && b3 == 0xBF);
-							if (hasBom) changed = true;
-						}
-					}
-				}
-			}
-			catch { }
 			if (!changed)
 			{
 				return "Configured successfully"; // nothing to do
@@ -1219,32 +1199,6 @@ namespace MCPForUnity.Editor.Windows
             else
                 existingRoot = JObject.FromObject(existingConfig);
 
-<<<<<<< HEAD:UnityMcpBridge/Editor/Windows/UnityMcpEditorWindow.cs
-			string mergedJson = JsonConvert.SerializeObject(existingConfig, jsonSettings);
-
-			// Write without BOM and fsync to avoid transient parse failures
-			try
-			{
-				WriteJsonAtomicallyNoBom(configPath, mergedJson);
-			}
-			catch
-			{
-				// Fallback simple write if atomic path fails
-				var encNoBom = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-				System.IO.File.WriteAllText(configPath, mergedJson, encNoBom);
-			}
-
-			// Validate that resulting file is valid JSON
-			try
-			{
-				var verify = System.IO.File.ReadAllText(configPath);
-				JsonConvert.DeserializeObject(verify);
-			}
-			catch (Exception ex)
-			{
-				UnityEngine.Debug.LogWarning($"UnityMCP: Wrote config but JSON re-parse failed: {ex.Message}");
-			}
-=======
             existingRoot = ConfigJsonBuilder.ApplyUnityServerToExistingConfig(existingRoot, uvPath, serverSrc, mcpClient);
 
 			string mergedJson = JsonConvert.SerializeObject(existingRoot, jsonSettings);
@@ -1255,7 +1209,6 @@ namespace MCPForUnity.Editor.Windows
 				System.IO.File.Replace(tmp, configPath, null);
 			else
 				System.IO.File.Move(tmp, configPath);
->>>>>>> fix/installer-cleanup-v2:UnityMcpBridge/Editor/Windows/MCPForUnityEditorWindow.cs
 			try
 			{
 				if (IsValidUv(uvPath)) UnityEditor.EditorPrefs.SetString("MCPForUnity.UvPath", uvPath);
@@ -1265,23 +1218,6 @@ namespace MCPForUnity.Editor.Windows
 
 			return "Configured successfully";
         }
-
-		private static void WriteJsonAtomicallyNoBom(string path, string json)
-		{
-			string tmp = path + ".tmp";
-			var encNoBom = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-			using (var fs = new System.IO.FileStream(tmp, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
-			using (var sw = new System.IO.StreamWriter(fs, encNoBom))
-			{
-				sw.Write(json);
-				sw.Flush();
-				fs.Flush(true);
-			}
-			if (System.IO.File.Exists(path))
-				System.IO.File.Replace(tmp, path, null);
-			else
-				System.IO.File.Move(tmp, path);
-		}
 
         private void ShowManualConfigurationInstructions(
             string configPath,
@@ -1436,13 +1372,10 @@ namespace MCPForUnity.Editor.Windows
                 {
                     configPath = mcpClient.windowsConfigPath;
                 }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                {
-                    configPath = string.IsNullOrEmpty(mcpClient.macConfigPath)
-                        ? mcpClient.linuxConfigPath
-                        : mcpClient.macConfigPath;
-                }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                else if (
+                    RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                    || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                )
                 {
                     configPath = mcpClient.linuxConfigPath;
                 }
@@ -1464,22 +1397,6 @@ namespace MCPForUnity.Editor.Windows
                 }
 
                 string result = WriteToConfig(pythonDir, configPath, mcpClient);
-
-                // On macOS for Claude Desktop, also mirror to Linux-style path for backward compatibility
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    && mcpClient?.mcpType == McpTypes.ClaudeDesktop)
-                {
-                    string altPath = mcpClient.linuxConfigPath;
-                    if (!string.IsNullOrEmpty(altPath) && !string.Equals(configPath, altPath, StringComparison.Ordinal))
-                    {
-                        try
-                        {
-                            Directory.CreateDirectory(Path.GetDirectoryName(altPath));
-                            WriteToConfig(pythonDir, altPath, mcpClient);
-                        }
-                        catch { }
-                    }
-                }
 
                 // Update the client status after successful configuration
                 if (result == "Configured successfully")
@@ -1609,13 +1526,10 @@ namespace MCPForUnity.Editor.Windows
                 {
                     configPath = mcpClient.windowsConfigPath;
                 }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                {
-                    configPath = string.IsNullOrEmpty(mcpClient.macConfigPath)
-                        ? mcpClient.linuxConfigPath
-                        : mcpClient.macConfigPath;
-                }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                else if (
+                    RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                    || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                )
                 {
                     configPath = mcpClient.linuxConfigPath;
                 }
@@ -1627,26 +1541,8 @@ namespace MCPForUnity.Editor.Windows
 
                 if (!File.Exists(configPath))
                 {
-                    // On macOS for Claude Desktop, fall back to Linux-style path if present
-                    if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                        && mcpClient?.mcpType == McpTypes.ClaudeDesktop)
-                    {
-                        string altPath = mcpClient.linuxConfigPath;
-                        if (!string.IsNullOrEmpty(altPath) && File.Exists(altPath))
-                        {
-                            configPath = altPath; // read from fallback
-                        }
-                        else
-                        {
-                            mcpClient.SetStatus(McpStatus.NotConfigured);
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        mcpClient.SetStatus(McpStatus.NotConfigured);
-                        return;
-                    }
+                    mcpClient.SetStatus(McpStatus.NotConfigured);
+                    return;
                 }
 
                 string configJson = File.ReadAllText(configPath);
@@ -1699,50 +1595,29 @@ namespace MCPForUnity.Editor.Windows
                     }
                     else
                     {
-                        // Attempt auto-rewrite once if the package path changed, but only when explicitly enabled
-                        bool autoManage = UnityEditor.EditorPrefs.GetBool("UnityMCP.AutoManageIDEConfig", false);
-                        if (autoManage)
+                        // Attempt auto-rewrite once if the package path changed
+                        try
                         {
-                            try
+                            string rewriteResult = WriteToConfig(pythonDir, configPath, mcpClient);
+                            if (rewriteResult == "Configured successfully")
                             {
-                                string rewriteResult = WriteToConfig(pythonDir, configPath, mcpClient);
-                                if (rewriteResult == "Configured successfully")
-                                {
-<<<<<<< HEAD:UnityMcpBridge/Editor/Windows/UnityMcpEditorWindow.cs
-                                    if (debugLogsEnabled)
-                                    {
-                                        UnityEngine.Debug.Log($"UnityMCP: Auto-updated MCP config for '{mcpClient.name}' to new path: {pythonDir}");
-                                    }
-                                    mcpClient.SetStatus(McpStatus.Configured);
-                                }
-                                else
-                                {
-                                    mcpClient.SetStatus(McpStatus.IncorrectPath);
-=======
-                                    UnityEngine.Debug.Log($"MCP for Unity: Auto-updated MCP config for '{mcpClient.name}' to new path: {pythonDir}");
->>>>>>> fix/installer-cleanup-v2:UnityMcpBridge/Editor/Windows/MCPForUnityEditorWindow.cs
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                mcpClient.SetStatus(McpStatus.IncorrectPath);
                                 if (debugLogsEnabled)
                                 {
-                                    UnityEngine.Debug.LogWarning($"UnityMCP: Auto-config rewrite failed for '{mcpClient.name}': {ex.Message}");
+                                    UnityEngine.Debug.Log($"MCP for Unity: Auto-updated MCP config for '{mcpClient.name}' to new path: {pythonDir}");
                                 }
+                                mcpClient.SetStatus(McpStatus.Configured);
+                            }
+                            else
+                            {
+                                mcpClient.SetStatus(McpStatus.IncorrectPath);
                             }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            // Surface mismatch even if auto-manage is disabled
                             mcpClient.SetStatus(McpStatus.IncorrectPath);
                             if (debugLogsEnabled)
                             {
-<<<<<<< HEAD:UnityMcpBridge/Editor/Windows/UnityMcpEditorWindow.cs
-                                UnityEngine.Debug.Log($"UnityMCP: IDE config mismatch for '{mcpClient.name}' and auto-manage disabled");
-=======
                                 UnityEngine.Debug.LogWarning($"MCP for Unity: Auto-config rewrite failed for '{mcpClient.name}': {ex.Message}");
->>>>>>> fix/installer-cleanup-v2:UnityMcpBridge/Editor/Windows/MCPForUnityEditorWindow.cs
                             }
                         }
                     }

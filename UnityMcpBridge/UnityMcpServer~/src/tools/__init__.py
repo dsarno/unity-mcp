@@ -10,17 +10,13 @@ from .read_console import register_read_console_tools
 from .execute_menu_item import register_execute_menu_item_tools
 from .resource_tools import register_resource_tools
 
-logger = logging.getLogger("unity-mcp-server")
+logger = logging.getLogger("mcp-for-unity-server")
 
 def register_all_tools(mcp):
     """Register all refactored tools with the MCP server."""
-<<<<<<< HEAD
-    logger.info("Registering Unity MCP Server refactored tools...")
     # Prefer the surgical edits tool so LLMs discover it first
+    logger.info("Registering MCP for Unity Server refactored tools...")
     register_manage_script_edits_tools(mcp)
-=======
-    print("Registering MCP for Unity Server refactored tools...")
->>>>>>> fix/installer-cleanup-v2
     register_manage_script_tools(mcp)
     register_manage_scene_tools(mcp)
     register_manage_editor_tools(mcp)
@@ -29,10 +25,6 @@ def register_all_tools(mcp):
     register_manage_shader_tools(mcp)
     register_read_console_tools(mcp)
     register_execute_menu_item_tools(mcp)
-<<<<<<< HEAD
     # Expose resource wrappers as normal tools so IDEs without resources primitive can use them
     register_resource_tools(mcp)
-    logger.info("Unity MCP Server tool registration complete.")
-=======
-    print("MCP for Unity Server tool registration complete.")
->>>>>>> fix/installer-cleanup-v2
+    logger.info("MCP for Unity Server tool registration complete.")
