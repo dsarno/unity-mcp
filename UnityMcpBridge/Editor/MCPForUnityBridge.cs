@@ -10,14 +10,14 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
-using UnityMcpBridge.Editor.Helpers;
-using UnityMcpBridge.Editor.Models;
-using UnityMcpBridge.Editor.Tools;
+using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Models;
+using MCPForUnity.Editor.Tools;
 
-namespace UnityMcpBridge.Editor
+namespace MCPForUnity.Editor
 {
     [InitializeOnLoad]
-    public static partial class UnityMcpBridge
+    public static partial class MCPForUnityBridge
     {
         private static TcpListener listener;
         private static bool isRunning = false;
@@ -41,14 +41,14 @@ namespace UnityMcpBridge.Editor
         // Debug helpers
         private static bool IsDebugEnabled()
         {
-            try { return EditorPrefs.GetBool("UnityMCP.DebugLogs", false); } catch { return false; }
+            try { return EditorPrefs.GetBool("MCPForUnity.DebugLogs", false); } catch { return false; }
         }
         
         private static void LogBreadcrumb(string stage)
         {
             if (IsDebugEnabled())
             {
-                Debug.Log($"<b><color=#2EA3FF>UNITY-MCP</color></b>: [{stage}]");
+                Debug.Log($"<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: [{stage}]");
             }
         }
 
@@ -96,7 +96,7 @@ namespace UnityMcpBridge.Editor
             return Directory.Exists(fullPath);
         }
 
-        static UnityMcpBridge()
+        static MCPForUnityBridge()
         {
             // Skip bridge in headless/batch environments (CI/builds) unless explicitly allowed via env
             // CI override: set UNITY_MCP_ALLOW_BATCH=1 to allow the bridge in batch mode
@@ -230,7 +230,7 @@ namespace UnityMcpBridge.Editor
                 // Don't restart if already running on a working port
                 if (isRunning && listener != null)
                 {
-                    Debug.Log($"<b><color=#2EA3FF>UNITY-MCP</color></b>: UnityMcpBridge already running on port {currentUnityPort}");
+                    Debug.Log($"<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: MCPForUnityBridge already running on port {currentUnityPort}");
                     return;
                 }
 
@@ -313,7 +313,9 @@ namespace UnityMcpBridge.Editor
 
                     isRunning = true;
                     isAutoConnectMode = false;
-                    Debug.Log($"<b><color=#2EA3FF>UNITY-MCP</color></b>: UnityMcpBridge started on port {currentUnityPort}.");
+                    string platform = Application.platform.ToString();
+                    string serverVer = ReadInstalledServerVersionSafe();
+                    Debug.Log($"<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: MCPForUnityBridge started on port {currentUnityPort}. (OS={platform}, server={serverVer})");
                     Task.Run(ListenerLoop);
                     EditorApplication.update += ProcessCommands;
                     // Write initial heartbeat immediately
@@ -346,11 +348,11 @@ namespace UnityMcpBridge.Editor
                     listener?.Stop();
                     listener = null;
                     EditorApplication.update -= ProcessCommands;
-                    Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: UnityMcpBridge stopped.");
+                    Debug.Log("<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: MCPForUnityBridge stopped.");
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"Error stopping UnityMcpBridge: {ex.Message}");
+                    Debug.LogError($"Error stopping MCPForUnityBridge: {ex.Message}");
                 }
             }
         }
@@ -877,12 +879,28 @@ namespace UnityMcpBridge.Editor
                     project_path = Application.dataPath,
                     last_heartbeat = DateTime.UtcNow.ToString("O")
                 };
-                File.WriteAllText(filePath, JsonConvert.SerializeObject(payload));
+                File.WriteAllText(filePath, JsonConvert.SerializeObject(payload), new System.Text.UTF8Encoding(false));
             }
             catch (Exception)
             {
                 // Best-effort only
             }
+        }
+
+        private static string ReadInstalledServerVersionSafe()
+        {
+            try
+            {
+                string serverSrc = ServerInstaller.GetServerPath();
+                string verFile = Path.Combine(serverSrc, "server_version.txt");
+                if (File.Exists(verFile))
+                {
+                    string v = File.ReadAllText(verFile)?.Trim();
+                    if (!string.IsNullOrEmpty(v)) return v;
+                }
+            }
+            catch { }
+            return "unknown";
         }
 
         private static string ComputeProjectHash(string input)

@@ -6,9 +6,13 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
+<<<<<<< HEAD
 using UnityMcpBridge.Editor.Helpers;
 using System.Threading;
 using System.Security.Cryptography;
+=======
+using MCPForUnity.Editor.Helpers;
+>>>>>>> fix/installer-cleanup-v2
 
 #if USE_ROSLYN
 using Microsoft.CodeAnalysis;
@@ -21,7 +25,7 @@ using UnityEditor.Compilation;
 #endif
 
 
-namespace UnityMcpBridge.Editor.Tools
+namespace MCPForUnity.Editor.Tools
 {
     /// <summary>
     /// Handles CRUD operations for C# scripts within the Unity project.
@@ -300,6 +304,7 @@ namespace UnityMcpBridge.Editor.Tools
 
             try
             {
+<<<<<<< HEAD
                 // Atomic-ish create
                 var enc = System.Text.Encoding.UTF8;
                 var tmp = fullPath + ".tmp";
@@ -318,6 +323,12 @@ namespace UnityMcpBridge.Editor.Tools
 
                 var uri = $"unity://path/{relativePath}";
                 var ok = Response.Success(
+=======
+                File.WriteAllText(fullPath, contents, new System.Text.UTF8Encoding(false));
+                AssetDatabase.ImportAsset(relativePath);
+                AssetDatabase.Refresh(); // Ensure Unity recognizes the new script
+                return Response.Success(
+>>>>>>> fix/installer-cleanup-v2
                     $"Script '{name}.cs' created successfully at '{relativePath}'.",
                     new { uri, scheduledRefresh = true }
                 );
@@ -401,6 +412,7 @@ namespace UnityMcpBridge.Editor.Tools
 
             try
             {
+<<<<<<< HEAD
                 // Safe write with atomic replace when available
                 var encoding = System.Text.Encoding.UTF8;
                 string tempPath = fullPath + ".tmp";
@@ -438,6 +450,12 @@ namespace UnityMcpBridge.Editor.Tools
                 // Prepare success response BEFORE any operation that can trigger a domain reload
                 var uri = $"unity://path/{relativePath}";
                 var ok = Response.Success(
+=======
+                File.WriteAllText(fullPath, contents, new System.Text.UTF8Encoding(false));
+                AssetDatabase.ImportAsset(relativePath); // Re-import to reflect changes
+                AssetDatabase.Refresh();
+                return Response.Success(
+>>>>>>> fix/installer-cleanup-v2
                     $"Script '{name}.cs' updated successfully at '{relativePath}'.",
                     new { uri, path = relativePath, scheduledRefresh = true }
                 );
@@ -1745,7 +1763,7 @@ namespace UnityMcpBridge.Editor.Tools
         /// </summary>
         private static ValidationLevel GetValidationLevelFromGUI()
         {
-            string savedLevel = EditorPrefs.GetString("UnityMCP_ScriptValidationLevel", "standard");
+            string savedLevel = EditorPrefs.GetString("MCPForUnity_ScriptValidationLevel", "standard");
             return savedLevel.ToLower() switch
             {
                 "basic" => ValidationLevel.Basic,

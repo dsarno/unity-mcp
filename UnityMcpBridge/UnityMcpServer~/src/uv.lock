@@ -371,7 +371,11 @@ wheels = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "unitymcpserver"
+=======
+name = "mcpforunityserver"
+>>>>>>> fix/installer-cleanup-v2
 version = "2.1.2"
 source = { editable = "." }
 dependencies = [

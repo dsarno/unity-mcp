@@ -3,7 +3,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-namespace UnityMcpBridge.Editor.Helpers
+namespace MCPForUnity.Editor.Helpers
 {
     public static class ServerPathResolver
     {
@@ -113,7 +113,7 @@ namespace UnityMcpBridge.Editor.Helpers
             if (warnOnLegacyPackageId && p.name == LegacyId)
             {
                 Debug.LogWarning(
-                    "UnityMCP: Detected legacy package id 'com.justinpbarnett.unity-mcp'. " +
+                    "MCP for Unity: Detected legacy package id 'com.justinpbarnett.unity-mcp'. " +
                     "Please update Packages/manifest.json to 'com.coplaydev.unity-mcp' to avoid future breakage.");
             }
 

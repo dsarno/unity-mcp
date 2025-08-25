@@ -1,5 +1,5 @@
 """
-Port discovery utility for Unity MCP Server.
+Port discovery utility for MCP for Unity Server.
 
 What changed and why:
 - Unity now writes a per-project port file named like
@@ -7,7 +7,7 @@ What changed and why:
   each other's saved port. The legacy file `unity-mcp-port.json` may still
   exist.
 - This module now scans for both patterns, prefers the most recently
-  modified file, and verifies that the port is actually a Unity MCP listener
+  modified file, and verifies that the port is actually a MCP for Unity listener
   (quick socket connect + ping) before choosing it.
 """
 
@@ -19,7 +19,7 @@ from typing import Optional, List
 import glob
 import socket
 
-logger = logging.getLogger("unity-mcp-server")
+logger = logging.getLogger("mcp-for-unity-server")
 
 class PortDiscovery:
     """Handles port discovery from Unity Bridge registry"""
@@ -55,7 +55,7 @@ class PortDiscovery:
     
     @staticmethod
     def _try_probe_unity_mcp(port: int) -> bool:
-        """Quickly check if a Unity MCP listener is on this port.
+        """Quickly check if a MCP for Unity listener is on this port.
         Tries a short TCP connect, sends 'ping', expects a JSON 'pong'.
         """
         try:

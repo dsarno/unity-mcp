@@ -5,9 +5,9 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
-using UnityMcpBridge.Editor.Helpers;
+using MCPForUnity.Editor.Helpers;
 
-namespace UnityMcpBridge.Editor.Tools
+namespace MCPForUnity.Editor.Tools
 {
     /// <summary>
     /// Handles CRUD operations for shader files within the Unity project.
@@ -171,7 +171,7 @@ namespace UnityMcpBridge.Editor.Tools
 
             try
             {
-                File.WriteAllText(fullPath, contents);
+                File.WriteAllText(fullPath, contents, new System.Text.UTF8Encoding(false));
                 AssetDatabase.ImportAsset(relativePath);
                 AssetDatabase.Refresh(); // Ensure Unity recognizes the new shader
                 return Response.Success(
@@ -239,7 +239,7 @@ namespace UnityMcpBridge.Editor.Tools
 
             try
             {
-                File.WriteAllText(fullPath, contents);
+                File.WriteAllText(fullPath, contents, new System.Text.UTF8Encoding(false));
                 AssetDatabase.ImportAsset(relativePath);
                 AssetDatabase.Refresh();
                 return Response.Success(

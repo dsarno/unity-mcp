@@ -12,6 +12,7 @@ from pathlib import Path
 import os
 import hashlib
 
+<<<<<<< HEAD
 # Configure logging: strictly stderr/file only (never stdout)
 stderr_handler = logging.StreamHandler(stream=sys.stderr)
 stderr_handler.setFormatter(logging.Formatter(config.log_format))
@@ -40,6 +41,14 @@ try:
 except Exception:
     # If file logging setup fails, continue with stderr logging only
     pass
+=======
+# Configure logging using settings from config
+logging.basicConfig(
+    level=getattr(logging, config.log_level),
+    format=config.log_format
+)
+logger = logging.getLogger("mcp-for-unity-server")
+>>>>>>> fix/installer-cleanup-v2
 
 # Global connection state
 _unity_connection: UnityConnection = None
@@ -48,7 +57,7 @@ _unity_connection: UnityConnection = None
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     """Handle server startup and shutdown."""
     global _unity_connection
-    logger.info("Unity MCP Server starting up")
+    logger.info("MCP for Unity Server starting up")
     try:
         _unity_connection = get_unity_connection()
         logger.info("Connected to Unity on startup")
@@ -63,11 +72,11 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
         if _unity_connection:
             _unity_connection.disconnect()
             _unity_connection = None
-        logger.info("Unity MCP Server shut down")
+        logger.info("MCP for Unity Server shut down")
 
 # Initialize MCP server
 mcp = FastMCP(
-    "unity-mcp-server",
+    "mcp-for-unity-server",
     description="Unity Editor integration via Model Context Protocol",
     lifespan=server_lifespan
 )
@@ -79,8 +88,9 @@ register_all_tools(mcp)
 
 @mcp.prompt()
 def asset_creation_strategy() -> str:
-    """Guide for discovering and using Unity MCP tools effectively."""
+    """Guide for discovering and using MCP for Unity tools effectively."""
     return (
+<<<<<<< HEAD
         "Available Unity MCP Server Tools:\n\n"
         "- `manage_editor`: Controls editor state and queries info.\n"
         "- `execute_menu_item`: Executes Unity Editor menu items by path.\n"
@@ -94,6 +104,20 @@ def asset_creation_strategy() -> str:
         "- Prefer structured script edits over raw text ranges.\n"
         "- For script edits, common aliases are accepted: class_name→className; method_name/target/method→methodName; new_method/newMethod/content→replacement; anchor_method→afterMethodName/beforeMethodName based on position.\n"
         "- You can pass uri or full file path for scripts; the server normalizes to name/path.\n"
+=======
+        "Available MCP for Unity Server Tools:\\n\\n"
+        "- `manage_editor`: Controls editor state and queries info.\\n"
+        "- `execute_menu_item`: Executes Unity Editor menu items by path.\\n"
+        "- `read_console`: Reads or clears Unity console messages, with filtering options.\\n"
+        "- `manage_scene`: Manages scenes.\\n"
+        "- `manage_gameobject`: Manages GameObjects in the scene.\\n"
+        "- `manage_script`: Manages C# script files.\\n"
+        "- `manage_asset`: Manages prefabs and assets.\\n"
+        "- `manage_shader`: Manages shaders.\\n\\n"
+        "Tips:\\n"
+        "- Create prefabs for reusable GameObjects.\\n"
+        "- Always include a camera and main light in your scenes.\\n"
+>>>>>>> fix/installer-cleanup-v2
     )
 
 """
