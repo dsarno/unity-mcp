@@ -1202,13 +1202,52 @@ namespace MCPForUnity.Editor.Windows
             existingRoot = ConfigJsonBuilder.ApplyUnityServerToExistingConfig(existingRoot, uvPath, serverSrc, mcpClient);
 
 			string mergedJson = JsonConvert.SerializeObject(existingRoot, jsonSettings);
+			
+			// Use a more robust atomic write pattern
 			string tmp = configPath + ".tmp";
-			// Write UTF-8 without BOM to avoid issues on Windows editors/tools
-			System.IO.File.WriteAllText(tmp, mergedJson, new System.Text.UTF8Encoding(false));
-			if (System.IO.File.Exists(configPath))
-				System.IO.File.Replace(tmp, configPath, null);
-			else
+			string backup = configPath + ".backup";
+			
+			try
+			{
+				// Write to temp file first
+				System.IO.File.WriteAllText(tmp, mergedJson, new System.Text.UTF8Encoding(false));
+				
+				// Create backup of existing file if it exists
+				if (System.IO.File.Exists(configPath))
+				{
+					System.IO.File.Copy(configPath, backup, true);
+				}
+				
+				// Atomic move operation (more reliable than Replace on macOS)
+				if (System.IO.File.Exists(configPath))
+				{
+					System.IO.File.Delete(configPath);
+				}
 				System.IO.File.Move(tmp, configPath);
+				
+				// Clean up backup
+				if (System.IO.File.Exists(backup))
+				{
+					System.IO.File.Delete(backup);
+				}
+			}
+			catch (Exception ex)
+			{
+				// Clean up temp file
+				try { if (System.IO.File.Exists(tmp)) System.IO.File.Delete(tmp); } catch { }
+				// Restore backup if it exists
+				try { 
+					if (System.IO.File.Exists(backup)) 
+					{
+						if (System.IO.File.Exists(configPath))
+						{
+							System.IO.File.Delete(configPath);
+						}
+						System.IO.File.Move(backup, configPath); 
+					}
+				} catch { }
+				throw new Exception($"Failed to write config file '{configPath}': {ex.Message}", ex);
+			}
 			try
 			{
 				if (IsValidUv(uvPath)) UnityEditor.EditorPrefs.SetString("MCPForUnity.UvPath", uvPath);

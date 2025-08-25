@@ -71,7 +71,7 @@ namespace MCPForUnity.Editor.Data
                     "claude_desktop_config.json"
                 ),
                 macConfigPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.Personal),
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     "Library",
                     "Application Support",
                     "Claude",
