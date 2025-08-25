@@ -1413,7 +1413,14 @@ namespace MCPForUnity.Editor.Windows
                 }
                 else if (
                     RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                )
+                {
+                    configPath = string.IsNullOrEmpty(mcpClient.macConfigPath)
+                        ? mcpClient.linuxConfigPath
+                        : mcpClient.macConfigPath;
+                }
+                else if (
+                    RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
                 )
                 {
                     configPath = mcpClient.linuxConfigPath;
@@ -1455,7 +1462,14 @@ namespace MCPForUnity.Editor.Windows
                 }
                 else if (
                     RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                )
+                {
+                    configPath = string.IsNullOrEmpty(mcpClient.macConfigPath)
+                        ? mcpClient.linuxConfigPath
+                        : mcpClient.macConfigPath;
+                }
+                else if (
+                    RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
                 )
                 {
                     configPath = mcpClient.linuxConfigPath;
@@ -1567,7 +1581,14 @@ namespace MCPForUnity.Editor.Windows
                 }
                 else if (
                     RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                )
+                {
+                    configPath = string.IsNullOrEmpty(mcpClient.macConfigPath)
+                        ? mcpClient.linuxConfigPath
+                        : mcpClient.macConfigPath;
+                }
+                else if (
+                    RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
                 )
                 {
                     configPath = mcpClient.linuxConfigPath;
