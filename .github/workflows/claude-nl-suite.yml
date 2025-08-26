@@ -183,45 +183,16 @@ jobs:
           set -eux
           mkdir -p reports
 
-      # ---------- Claude shards (beta-friendly: settings + claude_env only) ----------
-      - name: "Claude shard: edits"
+      # ---------- Shard 1: preflight & quick reads ----------
+      - name: "Claude shard: edits / preflight"
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
           TEST_FILTER: group:edits
-          JUNIT_OUT: reports/junit-edits.xml
-          MD_OUT: reports/edits.md
-        with:
-          prompt_file: .claude/prompts/nl-unity-suite-full.md
-          settings: |
-            {
-              "model": "claude-3-7-sonnet-20250219",
-              "permissions": {
-                "allow": [
-                  "Bash(git:*)","Read","Write","LS","Glob","Grep",
-                  "ListMcpResourcesTool","ReadMcpResourceTool",
-                  "mcp__unity__script_apply_edits","mcp__unity__apply_text_edits",
-                  "mcp__unity__create_script","mcp__unity__delete_script",
-                  "mcp__unity__validate_script","mcp__unity__manage_script",
-                  "mcp__unity__manage_scene","mcp__unity__manage_editor",
-                  "mcp__unity__manage_gameobject","mcp__unity__manage_asset",
-                  "mcp__unity__manage_shader","mcp__unity__read_console",
-                  "mcp__unity__execute_menu_item","mcp__unity__list_resources",
-                  "mcp__unity__read_resource","mcp__unity__find_in_file"
-                ]
-              }
-            }
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-
-      - name: "Claude shard: scenes"
-        uses: anthropics/claude-code-base-action@beta
-        if: steps.detect.outputs.anthropic_ok == 'true'
-        continue-on-error: true
-        env:
-          TEST_FILTER: group:scenes
-          JUNIT_OUT: reports/junit-scenes.xml
-          MD_OUT: reports/scenes.md
+          EDITS_SUBSET: preflight
+          JUNIT_OUT: reports/junit-edits-preflight.xml
+          MD_OUT: reports/edits-preflight.md
         with:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           settings: |
@@ -242,19 +213,20 @@ jobs:
             }
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: "Claude shard: assets"
+      # ---------- Shard 2: NL core ----------
+      - name: "Claude shard: edits / nl-core"
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
-          TEST_FILTER: group:assets
-          JUNIT_OUT: reports/junit-assets.xml
-          MD_OUT: reports/assets.md
+          TEST_FILTER: group:edits
+          EDITS_SUBSET: nl-core
+          JUNIT_OUT: reports/junit-edits-nl-core.xml
+          MD_OUT: reports/edits-nl-core.md
         with:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           settings: |
-            {
-              "model": "claude-3-7-sonnet-20250219",
+            { "model": "claude-3-7-sonnet-20250219",
               "permissions": { "allow": [
                 "Bash(git:*)","Read","Write","LS","Glob","Grep",
                 "ListMcpResourcesTool","ReadMcpResourceTool",
@@ -266,23 +238,23 @@ jobs:
                 "mcp__unity__manage_shader","mcp__unity__read_console",
                 "mcp__unity__execute_menu_item","mcp__unity__list_resources",
                 "mcp__unity__read_resource","mcp__unity__find_in_file"
-              ] }
-            }
+              ] } }
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: "Claude shard: menu"
+      # ---------- Shard 3: text-basic (T-A..D) ----------
+      - name: "Claude shard: edits / text-basic"
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
-          TEST_FILTER: group:menu
-          JUNIT_OUT: reports/junit-menu.xml
-          MD_OUT: reports/menu.md
+          TEST_FILTER: group:edits
+          EDITS_SUBSET: text-basic
+          JUNIT_OUT: reports/junit-edits-text-basic.xml
+          MD_OUT: reports/edits-text-basic.md
         with:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           settings: |
-            {
-              "model": "claude-3-7-sonnet-20250219",
+            { "model": "claude-3-7-sonnet-20250219",
               "permissions": { "allow": [
                 "Bash(git:*)","Read","Write","LS","Glob","Grep",
                 "ListMcpResourcesTool","ReadMcpResourceTool",
@@ -294,23 +266,23 @@ jobs:
                 "mcp__unity__manage_shader","mcp__unity__read_console",
                 "mcp__unity__execute_menu_item","mcp__unity__list_resources",
                 "mcp__unity__read_resource","mcp__unity__find_in_file"
-              ] }
-            }
+              ] } }
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: "Claude shard: shader"
+      # ---------- Shard 4: text-adv (T-E..H) ----------
+      - name: "Claude shard: edits / text-adv"
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
-          TEST_FILTER: group:shader
-          JUNIT_OUT: reports/junit-shader.xml
-          MD_OUT: reports/shader.md
+          TEST_FILTER: group:edits
+          EDITS_SUBSET: text-adv
+          JUNIT_OUT: reports/junit-edits-text-adv.xml
+          MD_OUT: reports/edits-text-adv.md
         with:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           settings: |
-            {
-              "model": "claude-3-7-sonnet-20250219",
+            { "model": "claude-3-7-sonnet-20250219",
               "permissions": { "allow": [
                 "Bash(git:*)","Read","Write","LS","Glob","Grep",
                 "ListMcpResourcesTool","ReadMcpResourceTool",
@@ -322,23 +294,23 @@ jobs:
                 "mcp__unity__manage_shader","mcp__unity__read_console",
                 "mcp__unity__execute_menu_item","mcp__unity__list_resources",
                 "mcp__unity__read_resource","mcp__unity__find_in_file"
-              ] }
-            }
+              ] } }
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: "Claude shard: validate"
+      # ---------- Shard 5: negatives (T-I) ----------
+      - name: "Claude shard: edits / negatives"
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
-          TEST_FILTER: group:validate
-          JUNIT_OUT: reports/junit-validate.xml
-          MD_OUT: reports/validate.md
+          TEST_FILTER: group:edits
+          EDITS_SUBSET: negatives
+          JUNIT_OUT: reports/junit-edits-negatives.xml
+          MD_OUT: reports/edits-negatives.md
         with:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           settings: |
-            {
-              "model": "claude-3-7-sonnet-20250219",
+            { "model": "claude-3-7-sonnet-20250219",
               "permissions": { "allow": [
                 "Bash(git:*)","Read","Write","LS","Glob","Grep",
                 "ListMcpResourcesTool","ReadMcpResourceTool",
@@ -350,9 +322,37 @@ jobs:
                 "mcp__unity__manage_shader","mcp__unity__read_console",
                 "mcp__unity__execute_menu_item","mcp__unity__list_resources",
                 "mcp__unity__read_resource","mcp__unity__find_in_file"
-              ] }
-            }
+              ] } }
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      # ---------- Shard 6: meta (T-J) ----------
+      - name: "Claude shard: edits / meta"
+        uses: anthropics/claude-code-base-action@beta
+        if: steps.detect.outputs.anthropic_ok == 'true'
+        continue-on-error: true
+        env:
+          TEST_FILTER: group:edits
+          EDITS_SUBSET: meta
+          JUNIT_OUT: reports/junit-edits-meta.xml
+          MD_OUT: reports/edits-meta.md
+        with:
+          prompt_file: .claude/prompts/nl-unity-suite-full.md
+          settings: |
+            { "model": "claude-3-7-sonnet-20250219",
+              "permissions": { "allow": [
+                "Bash(git:*)","Read","Write","LS","Glob","Grep",
+                "ListMcpResourcesTool","ReadMcpResourceTool",
+                "mcp__unity__script_apply_edits","mcp__unity__apply_text_edits",
+                "mcp__unity__create_script","mcp__unity__delete_script",
+                "mcp__unity__validate_script","mcp__unity__manage_script",
+                "mcp__unity__manage_scene","mcp__unity__manage_editor",
+                "mcp__unity__manage_gameobject","mcp__unity__manage_asset",
+                "mcp__unity__manage_shader","mcp__unity__read_console",
+                "mcp__unity__execute_menu_item","mcp__unity__list_resources",
+                "mcp__unity__read_resource","mcp__unity__find_in_file"
+              ] } }
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
 
       # sanitize only the markdown (does not touch JUnit xml)
       - name: Sanitize markdown (all shards)
