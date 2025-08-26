@@ -202,6 +202,12 @@ jobs:
           }
           JSON
                   
+      # ---------- Ensure reports dir exists ----------
+      - name: Prepare reports
+        run: |
+          set -eux
+          mkdir -p reports
+
       # ---------- Run full NL suite once ----------
       - name: Run Claude NL suite (single pass)
         uses: anthropics/claude-code-base-action@beta
@@ -212,7 +218,6 @@ jobs:
             --mcp-config .claude/mcp.json
             --allowedTools "Bash(git:*),Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script"
             --model "claude-3-7-sonnet-20250219"
-            --timeout-minutes 45
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
 
