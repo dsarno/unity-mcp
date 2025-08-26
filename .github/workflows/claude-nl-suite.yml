@@ -133,7 +133,7 @@ jobs:
               -projectPath /workspace/TestProjects/UnityMCPTests \
               "${MANUAL_ARG[@]}" \
               "${EBL_ARGS[@]}" \
-              -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
+              -executeMethod MCPForUnity.Editor.MCPForUnityBridge.StartAutoConnect
 
       # ---------- Wait for Unity bridge (fail fast if not running/ready) ----------
       - name: Wait for Unity bridge (robust)
