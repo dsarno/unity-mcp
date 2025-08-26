@@ -554,12 +554,39 @@ namespace MCPForUnity.Editor.Tools
                             if (sp.start <= mStart + 2 && sp.end >= mStart + 1)
                             {
                                 var structEdits = new JArray();
+
+                                // Apply the edit to get a candidate string, then recompute method span on the edited text
+                                string candidate = original.Remove(sp.start, sp.end - sp.start).Insert(sp.start, sp.text ?? string.Empty);
+                                string replacementText;
+                                if (TryComputeClassSpan(candidate, name, null, out var cls2Start, out var cls2Len, out _)
+                                    && TryComputeMethodSpan(candidate, cls2Start, cls2Len, methodName, null, null, null, out var m2Start, out var m2Len, out _))
+                                {
+                                    replacementText = candidate.Substring(m2Start, m2Len);
+                                }
+                                else
+                                {
+                                    // Fallback: adjust method start by the net delta if the edit was before the method
+                                    int delta = (sp.text?.Length ?? 0) - (sp.end - sp.start);
+                                    int adjustedStart = mStart + (sp.start <= mStart ? delta : 0);
+                                    adjustedStart = Math.Max(0, Math.Min(adjustedStart, candidate.Length));
+
+                                    // If the edit was within the original method span, adjust the length by the delta within-method
+                                    int withinMethodDelta = 0;
+                                    if (sp.start >= mStart && sp.start <= mStart + mLen)
+                                    {
+                                        withinMethodDelta = delta;
+                                    }
+                                    int adjustedLen = mLen + withinMethodDelta;
+                                    adjustedLen = Math.Max(0, Math.Min(candidate.Length - adjustedStart, adjustedLen));
+                                    replacementText = candidate.Substring(adjustedStart, adjustedLen);
+                                }
+
                                 var op = new JObject
                                 {
                                     ["mode"] = "replace_method",
                                     ["className"] = name,
                                     ["methodName"] = methodName,
-                                    ["replacement"] = original.Remove(sp.start, sp.end - sp.start).Insert(sp.start, sp.text ?? string.Empty).Substring(mStart, (sp.text ?? string.Empty).Length + (sp.start - mStart) + (mLen - (sp.end - mStart)))
+                                    ["replacement"] = replacementText
                                 };
                                 structEdits.Add(op);
                                 // Reuse structured path
