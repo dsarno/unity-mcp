@@ -180,28 +180,6 @@ jobs:
             exit 1
           fi
 
-      # ---------- Make MCP config available to the beta action ----------
-      - name: Write MCP config (.claude/mcp.json)
-        run: |
-          set -eux
-          mkdir -p .claude
-          cat > .claude/mcp.json <<'JSON'
-          {
-            "mcpServers": {
-              "unity": {
-                "command": "uv",
-                "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
-                "transport": { "type": "stdio" },
-                "env": {
-                  "PYTHONUNBUFFERED": "1",
-                  "MCP_LOG_LEVEL": "debug",
-                  "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
-                }
-              }
-            }
-          }
-          JSON
-
       # ---------- Prepare reports ----------
       - name: Prepare reports
         run: |
@@ -223,6 +201,18 @@ jobs:
           settings: |
             {
               "model": "claude-3-7-sonnet-20250219",
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "transport": { "type": "stdio" },
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug",
+                    "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
+                  }
+                }
+              },
               "permissions": { "allow": [
                 "Bash(git:*)","Read","Write","LS","Glob","Grep",
                 "ListMcpResourcesTool","ReadMcpResourceTool",
@@ -252,6 +242,18 @@ jobs:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           settings: |
             { "model": "claude-3-7-sonnet-20250219",
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "transport": { "type": "stdio" },
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug",
+                    "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
+                  }
+                }
+              },
               "permissions": { "allow": [
                 "Bash(git:*)","Read","Write","LS","Glob","Grep",
                 "ListMcpResourcesTool","ReadMcpResourceTool",
@@ -280,6 +282,18 @@ jobs:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           settings: |
             { "model": "claude-3-7-sonnet-20250219",
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "transport": { "type": "stdio" },
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug",
+                    "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
+                  }
+                }
+              },
               "permissions": { "allow": [
                 "Bash(git:*)","Read","Write","LS","Glob","Grep",
                 "ListMcpResourcesTool","ReadMcpResourceTool",
@@ -308,6 +322,18 @@ jobs:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           settings: |
             { "model": "claude-3-7-sonnet-20250219",
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "transport": { "type": "stdio" },
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug",
+                    "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
+                  }
+                }
+              },
               "permissions": { "allow": [
                 "Bash(git:*)","Read","Write","LS","Glob","Grep",
                 "ListMcpResourcesTool","ReadMcpResourceTool",
@@ -336,6 +362,18 @@ jobs:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           settings: |
             { "model": "claude-3-7-sonnet-20250219",
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "transport": { "type": "stdio" },
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug",
+                    "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
+                  }
+                }
+              },
               "permissions": { "allow": [
                 "Bash(git:*)","Read","Write","LS","Glob","Grep",
                 "ListMcpResourcesTool","ReadMcpResourceTool",
@@ -364,6 +402,18 @@ jobs:
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           settings: |
             { "model": "claude-3-7-sonnet-20250219",
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "transport": { "type": "stdio" },
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug",
+                    "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
+                  }
+                }
+              },
               "permissions": { "allow": [
                 "Bash(git:*)","Read","Write","LS","Glob","Grep",
                 "ListMcpResourcesTool","ReadMcpResourceTool",
