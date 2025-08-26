@@ -203,7 +203,7 @@ jobs:
           JSON
 
       - name: Claude startup sanity (MCP discovery)
-        uses: anthropics/claude-code-base-action@e6f32c8
+        uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         with:
           prompt: |
@@ -224,7 +224,7 @@ jobs:
 
       # ---------- Shard 1: preflight & quick reads ----------
       - name: "Claude shard: edits / preflight"
-        uses: anthropics/claude-code-base-action@e6f32c8
+        uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
@@ -243,7 +243,7 @@ jobs:
 
       # ---------- Shard 2: NL core ----------
       - name: "Claude shard: edits / nl-core"
-        uses: anthropics/claude-code-base-action@e6f32c8
+        uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
@@ -262,7 +262,7 @@ jobs:
 
       # ---------- Shard 3: text-basic (T-A..D) ----------
       - name: "Claude shard: edits / text-basic"
-        uses: anthropics/claude-code-base-action@e6f32c8
+        uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
@@ -281,7 +281,7 @@ jobs:
 
       # ---------- Shard 4: text-adv (T-E..H) ----------
       - name: "Claude shard: edits / text-adv"
-        uses: anthropics/claude-code-base-action@e6f32c8
+        uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
@@ -300,7 +300,7 @@ jobs:
 
       # ---------- Shard 5: negatives (T-I) ----------
       - name: "Claude shard: edits / negatives"
-        uses: anthropics/claude-code-base-action@e6f32c8
+        uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
@@ -319,7 +319,7 @@ jobs:
 
       # ---------- Shard 6: meta (T-J) ----------
       - name: "Claude shard: edits / meta"
-        uses: anthropics/claude-code-base-action@e6f32c8
+        uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
         continue-on-error: true
         env:
