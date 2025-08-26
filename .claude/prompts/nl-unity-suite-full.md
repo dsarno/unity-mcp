@@ -1,9 +1,28 @@
 # Unity NL/T Editing Suite — Full Coverage (NL-0 … T-J)
-Version: 1.0.0 (update this when the prompt changes materially)
+Version: 1.1.0 (update this when the prompt changes materially)
 Consumed by: .github/workflows/claude-nl-suite.yml (Unity NL suite job)
 
 You are running in CI at the repository root. Use only the tools allowed by the workflow (see `allowed_tools` in .github/workflows/claude-nl-suite.yml).
 At the start of the first test, log the effective `allowed_tools` list into the `<system-out>` for easier troubleshooting.
+
+## Sharding and filtering
+- Honor a `TEST_FILTER` variable (passed via the workflow `vars` JSON) of the form `group:<name>`.
+- Supported groups: `edits`, `scenes`, `assets`, `menu`, `shader`, `validate`.
+- Default if missing or unrecognized: `group:edits`.
+- Only run tests mapped to the selected group. For other groups, emit a minimal JUnit with zero or informational testcases and a markdown note indicating no applicable tests for the group.
+
+### Variables
+- `TEST_FILTER`: selection filter (e.g., `group:edits`).
+- `JUNIT_OUT`: path for JUnit XML output. Default: `reports/claude-nl-tests.xml`.
+- `MD_OUT`: path for summary markdown. Default: `reports/claude-nl-tests.md`.
+
+### MCP connectivity preflight
+- Before running any tests in a shard, perform a quick MCP connectivity check with retries (60–90s total):
+  1. Attempt `mcp__unity__manage_editor` with `{ action: "get_state" }`.
+  2. If unsupported, attempt `mcp__unity__list_resources` with `{ project_root: "TestProjects/UnityMCPTests", under: "Assets", pattern: "*.cs", limit: 5 }`.
+  3. Treat transient "Could not connect to Unity" as retryable until the window expires.
+- On success: record an INFO testcase noting attempts and elapsed time and continue.
+- On failure: emit a single failing testcase (e.g., `NL-Preflight.MCPConnect`) with `<failure>` message and stop the shard.
 
 ## Test target
 - Primary file: `TestProjects/UnityMCPTests/Assets/Scripts/LongUnityScriptClaudeTest.cs`
@@ -12,7 +31,7 @@ At the start of the first test, log the effective `allowed_tools` list into the 
   - Hash must be the SHA-256 of the on-disk file bytes immediately before applying the edit (normalize line endings per Implementation notes).
 
 ## Output requirements
-- JUnit XML at `reports/claude-nl-tests.xml`. Create the `reports/` directory if missing.
+- JUnit XML at `JUNIT_OUT` (or `reports/claude-nl-tests.xml` if unset). Create the `reports/` directory if missing.
 - One `<testsuite name="UnityMCP.NL-T">` wrapping all `<testcase>` elements.
 - Each `<testcase>` must set:
   - `classname` ∈ {`UnityMCP.NL`, `UnityMCP.T`}
@@ -21,7 +40,7 @@ At the start of the first test, log the effective `allowed_tools` list into the 
 - Emit `<system-out>` with evidence and end with a single terminal line: `VERDICT: PASS` or `VERDICT: FAIL` (uppercase, exact match).
 - For any test that performs changes, include a compact unified diff in `<system-out>` using the standard format and cap to 300 lines. If truncated, include `...diff truncated...` before `VERDICT: ...`.
 - On failure: include `<failure>` with a concise message and an evidence window (10–20 lines) from the target file around the anchor/edited region, in addition to the diff.
-- Summary markdown at `reports/claude-nl-tests.md` with checkboxes, windowed reads, and inline diffs for changed tests.
+- Summary markdown at `MD_OUT` (or `reports/claude-nl-tests.md` if unset) with checkboxes, windowed reads, and inline diffs for changed tests.
 - XML safety: Wrap all `<system-out>`, `<system-err>`, and `<failure>` contents in CDATA blocks to avoid XML escaping issues (e.g., `&` in code). Use the following rule for embedded CDATA terminators: if `]]>` appears in content, split as `]]]]><![CDATA[>`. Example:
 
   ```xml
@@ -37,7 +56,7 @@ VERDICT: PASS
   ```
 
   JUnit pass/fail is determined by the presence of `<failure>` or `<error>`. Keep `VERDICT: ...` for human readability inside CDATA; do not rely on it for status.
-- Upload both `reports/claude-nl-tests.xml` and `reports/claude-nl-tests.md` as workflow artifacts.
+- Upload both JUnit and markdown outputs for the shard as workflow artifacts.
 - Restore workspace at end (clean tree).
 
 ## Safety & hygiene
@@ -45,6 +64,11 @@ VERDICT: PASS
   - Preferred: `git restore --staged --worktree :/` (or `git checkout -- .` on older Git) to discard all changes.
   - Avoid `git stash` in CI unless you also clear stashes, as they may complicate cleanup.
 - Never push commits from CI.
+- Do not start/stop Unity or modify licensing/activation steps; assume Unity is already running and licensed by the workflow. If a license error is detected in logs, record failure in JUnit and stop the shard.
+
+## Group mapping
+- `group:edits`: Run all NL-* and T-* tests defined below (NL-0 … NL-4, T-A … T-J).
+- `group:scenes`, `group:assets`, `group:menu`, `group:shader`, `group:validate`: No-op for this prompt version; emit a minimal report with an informational `<system-out>` indicating no applicable tests for the selected group.
 
 ## CI headless hints
 - For `mcp__unity__list_resources`/`read_resource`, specify:

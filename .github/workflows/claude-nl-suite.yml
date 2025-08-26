@@ -137,12 +137,16 @@ jobs:
           docker logs -f unity-mcp & LOGPID=$!
           deadline=$((SECONDS+420))
           while [ $SECONDS -lt $deadline ]; do
-            if docker logs unity-mcp 2>&1 | grep -qE "MCP Bridge listening|Bridge ready|Server started|Pro License: YES"; then
+            if docker logs unity-mcp 2>&1 | grep -qE "MCP Bridge listening|Bridge ready|Server started"; then
               echo "Bridge ready (logs)"; kill $LOGPID || true; exit 0
             fi
             PORT=$(python -c "import os,glob,json,sys; b=os.path.expanduser('~/.unity-mcp'); fs=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(json.load(open(fs[0]))['unity_port']) if fs else sys.exit(1)" 2>/dev/null || true)
             if [ -n "${PORT:-}" ] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$PORT && head -c 256 <&3 | tr -d '\0' | grep -q 'FRAMING=1'"; then
               echo "Bridge ready on port $PORT"; kill $LOGPID || true; exit 0
+            fi
+            # Fail fast on clear license errors
+            if docker logs unity-mcp 2>&1 | grep -qE "No valid Unity Editor license|Token not found in cache|com\.unity\.editor\.headless"; then
+              echo "Licensing error detected"; kill $LOGPID || true; docker logs unity-mcp || true; exit 1
             fi
             sleep 2
           done
@@ -151,82 +155,236 @@ jobs:
           docker logs unity-mcp || true
           exit 1
 
-      # ---------- Prepare reports ----------
-      - name: Prepare NL/T reports dir
+      # ---------- Make MCP config available to the beta action ----------
+      - name: Write MCP config (.claude/mcp.json)
         run: |
           set -eux
-          mkdir -p reports
-          : > reports/claude-nl-tests.xml
-          : > reports/claude-nl-tests.md
-
-      # ---------- Claude NL/T suite (full) ----------
-      - name: Claude NL/T suite (full)
-        uses: anthropics/claude-code-base-action@beta
-        if: steps.detect.outputs.anthropic_ok == 'true'
-        with:
-          prompt_file: .claude/prompts/nl-unity-suite-full.md
-          allowed_tools: >  # RESTRICTED like “71”
-            Bash(git:*),Read,Write,LS,Glob,Grep,
-            ListMcpResourcesTool,ReadMcpResourceTool,
-            mcp__unity__script_apply_edits,mcp__unity__apply_text_edits,
-            mcp__unity__create_script,mcp__unity__delete_script,
-            mcp__unity__validate_script,mcp__unity__manage_script,
-            mcp__unity__manage_scene,mcp__unity__manage_editor,
-            mcp__unity__manage_gameobject,mcp__unity__manage_asset,
-            mcp__unity__manage_shader,mcp__unity__read_console,
-            mcp__unity__execute_menu_item,mcp__unity__list_resources,
-            mcp__unity__read_resource,mcp__unity__find_in_file
-          mcp_config: |
-            {
-              "mcpServers": {
-                "unity": {
-                  "command": "uv",
-                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
-                  "transport": { "type": "stdio" },
-                  "env": {
-                    "PYTHONUNBUFFERED": "1",
-                    "MCP_LOG_LEVEL": "debug",
-                    "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
-                  }
+          mkdir -p .claude
+          cat > .claude/mcp.json <<'JSON'
+          {
+            "mcpServers": {
+              "unity": {
+                "command": "uv",
+                "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                "transport": { "type": "stdio" },
+                "env": {
+                  "PYTHONUNBUFFERED": "1",
+                  "MCP_LOG_LEVEL": "debug",
+                  "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
                 }
               }
             }
-          model: "claude-3-7-sonnet-20250219"
-          max_turns: "250"
-          timeout_minutes: "30"
+          }
+          JSON
+
+      # ---------- Prepare reports ----------
+      - name: Prepare reports
+        run: |
+          set -eux
+          mkdir -p reports
+
+      # ---------- Claude shards (beta-friendly: settings + claude_env only) ----------
+      - name: "Claude shard: edits"
+        uses: anthropics/claude-code-base-action@beta
+        if: steps.detect.outputs.anthropic_ok == 'true'
+        continue-on-error: true
+        env:
+          TEST_FILTER: group:edits
+          JUNIT_OUT: reports/junit-edits.xml
+          MD_OUT: reports/edits.md
+        with:
+          prompt_file: .claude/prompts/nl-unity-suite-full.md
+          settings: |
+            {
+              "model": "claude-3-7-sonnet-20250219",
+              "permissions": {
+                "allow": [
+                  "Bash(git:*)","Read","Write","LS","Glob","Grep",
+                  "ListMcpResourcesTool","ReadMcpResourceTool",
+                  "mcp__unity__script_apply_edits","mcp__unity__apply_text_edits",
+                  "mcp__unity__create_script","mcp__unity__delete_script",
+                  "mcp__unity__validate_script","mcp__unity__manage_script",
+                  "mcp__unity__manage_scene","mcp__unity__manage_editor",
+                  "mcp__unity__manage_gameobject","mcp__unity__manage_asset",
+                  "mcp__unity__manage_shader","mcp__unity__read_console",
+                  "mcp__unity__execute_menu_item","mcp__unity__list_resources",
+                  "mcp__unity__read_resource","mcp__unity__find_in_file"
+                ]
+              }
+            }
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: "Claude shard: scenes"
+        uses: anthropics/claude-code-base-action@beta
+        if: steps.detect.outputs.anthropic_ok == 'true'
+        continue-on-error: true
+        env:
+          TEST_FILTER: group:scenes
+          JUNIT_OUT: reports/junit-scenes.xml
+          MD_OUT: reports/scenes.md
+        with:
+          prompt_file: .claude/prompts/nl-unity-suite-full.md
+          settings: |
+            {
+              "model": "claude-3-7-sonnet-20250219",
+              "permissions": { "allow": [
+                "Bash(git:*)","Read","Write","LS","Glob","Grep",
+                "ListMcpResourcesTool","ReadMcpResourceTool",
+                "mcp__unity__script_apply_edits","mcp__unity__apply_text_edits",
+                "mcp__unity__create_script","mcp__unity__delete_script",
+                "mcp__unity__validate_script","mcp__unity__manage_script",
+                "mcp__unity__manage_scene","mcp__unity__manage_editor",
+                "mcp__unity__manage_gameobject","mcp__unity__manage_asset",
+                "mcp__unity__manage_shader","mcp__unity__read_console",
+                "mcp__unity__execute_menu_item","mcp__unity__list_resources",
+                "mcp__unity__read_resource","mcp__unity__find_in_file"
+              ] }
+            }
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: "Claude shard: assets"
+        uses: anthropics/claude-code-base-action@beta
+        if: steps.detect.outputs.anthropic_ok == 'true'
+        continue-on-error: true
+        env:
+          TEST_FILTER: group:assets
+          JUNIT_OUT: reports/junit-assets.xml
+          MD_OUT: reports/assets.md
+        with:
+          prompt_file: .claude/prompts/nl-unity-suite-full.md
+          settings: |
+            {
+              "model": "claude-3-7-sonnet-20250219",
+              "permissions": { "allow": [
+                "Bash(git:*)","Read","Write","LS","Glob","Grep",
+                "ListMcpResourcesTool","ReadMcpResourceTool",
+                "mcp__unity__script_apply_edits","mcp__unity__apply_text_edits",
+                "mcp__unity__create_script","mcp__unity__delete_script",
+                "mcp__unity__validate_script","mcp__unity__manage_script",
+                "mcp__unity__manage_scene","mcp__unity__manage_editor",
+                "mcp__unity__manage_gameobject","mcp__unity__manage_asset",
+                "mcp__unity__manage_shader","mcp__unity__read_console",
+                "mcp__unity__execute_menu_item","mcp__unity__list_resources",
+                "mcp__unity__read_resource","mcp__unity__find_in_file"
+              ] }
+            }
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: "Claude shard: menu"
+        uses: anthropics/claude-code-base-action@beta
+        if: steps.detect.outputs.anthropic_ok == 'true'
+        continue-on-error: true
+        env:
+          TEST_FILTER: group:menu
+          JUNIT_OUT: reports/junit-menu.xml
+          MD_OUT: reports/menu.md
+        with:
+          prompt_file: .claude/prompts/nl-unity-suite-full.md
+          settings: |
+            {
+              "model": "claude-3-7-sonnet-20250219",
+              "permissions": { "allow": [
+                "Bash(git:*)","Read","Write","LS","Glob","Grep",
+                "ListMcpResourcesTool","ReadMcpResourceTool",
+                "mcp__unity__script_apply_edits","mcp__unity__apply_text_edits",
+                "mcp__unity__create_script","mcp__unity__delete_script",
+                "mcp__unity__validate_script","mcp__unity__manage_script",
+                "mcp__unity__manage_scene","mcp__unity__manage_editor",
+                "mcp__unity__manage_gameobject","mcp__unity__manage_asset",
+                "mcp__unity__manage_shader","mcp__unity__read_console",
+                "mcp__unity__execute_menu_item","mcp__unity__list_resources",
+                "mcp__unity__read_resource","mcp__unity__find_in_file"
+              ] }
+            }
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: "Claude shard: shader"
+        uses: anthropics/claude-code-base-action@beta
+        if: steps.detect.outputs.anthropic_ok == 'true'
+        continue-on-error: true
+        env:
+          TEST_FILTER: group:shader
+          JUNIT_OUT: reports/junit-shader.xml
+          MD_OUT: reports/shader.md
+        with:
+          prompt_file: .claude/prompts/nl-unity-suite-full.md
+          settings: |
+            {
+              "model": "claude-3-7-sonnet-20250219",
+              "permissions": { "allow": [
+                "Bash(git:*)","Read","Write","LS","Glob","Grep",
+                "ListMcpResourcesTool","ReadMcpResourceTool",
+                "mcp__unity__script_apply_edits","mcp__unity__apply_text_edits",
+                "mcp__unity__create_script","mcp__unity__delete_script",
+                "mcp__unity__validate_script","mcp__unity__manage_script",
+                "mcp__unity__manage_scene","mcp__unity__manage_editor",
+                "mcp__unity__manage_gameobject","mcp__unity__manage_asset",
+                "mcp__unity__manage_shader","mcp__unity__read_console",
+                "mcp__unity__execute_menu_item","mcp__unity__list_resources",
+                "mcp__unity__read_resource","mcp__unity__find_in_file"
+              ] }
+            }
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: "Claude shard: validate"
+        uses: anthropics/claude-code-base-action@beta
+        if: steps.detect.outputs.anthropic_ok == 'true'
+        continue-on-error: true
+        env:
+          TEST_FILTER: group:validate
+          JUNIT_OUT: reports/junit-validate.xml
+          MD_OUT: reports/validate.md
+        with:
+          prompt_file: .claude/prompts/nl-unity-suite-full.md
+          settings: |
+            {
+              "model": "claude-3-7-sonnet-20250219",
+              "permissions": { "allow": [
+                "Bash(git:*)","Read","Write","LS","Glob","Grep",
+                "ListMcpResourcesTool","ReadMcpResourceTool",
+                "mcp__unity__script_apply_edits","mcp__unity__apply_text_edits",
+                "mcp__unity__create_script","mcp__unity__delete_script",
+                "mcp__unity__validate_script","mcp__unity__manage_script",
+                "mcp__unity__manage_scene","mcp__unity__manage_editor",
+                "mcp__unity__manage_gameobject","mcp__unity__manage_asset",
+                "mcp__unity__manage_shader","mcp__unity__read_console",
+                "mcp__unity__execute_menu_item","mcp__unity__list_resources",
+                "mcp__unity__read_resource","mcp__unity__find_in_file"
+              ] }
+            }
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       # sanitize only the markdown (does not touch JUnit xml)
-      - name: Sanitize NL/T markdown (UTF-8, strip NULs)
+      - name: Sanitize markdown (all shards)
         if: always()
         run: |
           set -eu
-          if [ -f reports/claude-nl-tests.md ]; then
-            python - <<'PY'
-            from pathlib import Path
-            p=Path('reports/claude-nl-tests.md')
-            b=p.read_bytes().replace(b'\x00', b'')
-            s=b.decode('utf-8','replace').replace('\r\n','\n')
-            p.write_text(s, encoding='utf-8', newline='\n')
-            PY
-          fi
+          python - <<'PY'
+          from pathlib import Path
+          rp=Path('reports')
+          rp.mkdir(parents=True, exist_ok=True)
+          for p in rp.glob('*.md'):
+              b=p.read_bytes().replace(b'\x00', b'')
+              s=b.decode('utf-8','replace').replace('\r\n','\n')
+              p.write_text(s, encoding='utf-8', newline='\n')
+          PY
 
-      - name: Publish JUnit report
+      - name: Publish JUnit reports
         if: always()
         uses: mikepenz/action-junit-report@v4
         with:
-          report_paths: 'reports/claude-nl-tests.xml'
+          report_paths: 'reports/junit-*.xml'
           require_tests: false
           annotate_notice: true
 
-      - name: Upload NL/T artifacts
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: claude-nl-suite-artifacts
           path: |
-            reports/claude-nl-tests.xml
-            reports/claude-nl-tests.md
+            reports/junit-*.xml
+            reports/*.md
 
       # ---------- Always stop Unity ----------
       - name: Stop Unity
