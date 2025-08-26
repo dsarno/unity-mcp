@@ -28,37 +28,37 @@ jobs:
           echo "$GITHUB_WORKSPACE/.venv/bin"       >> "$GITHUB_PATH"
           uv pip install -e "UnityMcpBridge/UnityMcpServer~/src"
 
+      - name: Write MCP config (.claude/mcp.json)
+        run: |
+          set -eux
+          mkdir -p .claude
+          cat > .claude/mcp.json <<'JSON'
+          {
+            "mcpServers": {
+              "unity": {
+                "command": "uv",
+                "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                "transport": { "type": "stdio" },
+                "env": {
+                  "PYTHONUNBUFFERED": "1",
+                  "MCP_LOG_LEVEL": "debug",
+                  "UNITY_MCP_PROJECT_ROOT": "."
+                }
+              }
+            }
+          }
+          JSON
+
       - name: Run QuickProbe
         uses: anthropics/claude-code-base-action@beta
         with:
           prompt_file: .claude/prompts/mcp-quickprobe.md
-          # Wildcard so sub-sessions/subagents also have access
-          allowed_tools: mcp__unity__*,ListMcpResourcesTool,ReadMcpResourceTool
-          model: claude-3-7-sonnet-20250219
-          max_turns: 6
-          timeout_minutes: 5
-          mcp_config: |
-            {
-              "mcpServers": {
-                "unity": {
-                  "command": "uv",
-                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
-                  "transport": { "type": "stdio" },
-                  "env": {
-                    "PYTHONUNBUFFERED": "1",
-                    "MCP_LOG_LEVEL": "debug",
-                    "UNITY_MCP_PROJECT_ROOT": "."
-                  }
-                }
-              }
-            }
-          settings: |
-            {
-              "permissionMode": "allow",
-              "defaultMode": "bypassPermissions",
-              "permissionStorage": "none",
-              "autoApprove": ["mcp__unity__*"]
-            }
+          claude_args: |
+            --mcp-config .claude/mcp.json
+            --allowedTools "mcp__unity__*,ListMcpResourcesTool,ReadMcpResourceTool"
+            --model "claude-3-7-sonnet-20250219"
+            --max-turns 6
+            --timeout-minutes 5
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Upload QuickProbe log
