@@ -92,6 +92,13 @@ jobs:
           set -eux
           find "${{ env.UNITY_CACHE_ROOT }}" -maxdepth 4 \( -path "*/.cache" -prune -o -type f \( -name '*.ulf' -o -name 'user.json' \) -print \) 2>/dev/null || true
 
+      # ---------- Clean any stale MCP status from previous runs ----------
+      - name: Clean old MCP status
+        run: |
+          set -eux
+          mkdir -p "$HOME/.unity-mcp"
+          rm -f "$HOME/.unity-mcp"/unity-mcp-status-*.json || true
+
       # ---------- Start headless Unity that stays up (bridge enabled) ----------
       - name: Start Unity (persistent bridge)
         if: steps.detect.outputs.unity_ok == 'true'
@@ -117,43 +124,61 @@ jobs:
           docker run -d --name unity-mcp --network host \
             -e HOME=/root \
             -e UNITY_MCP_ALLOW_BATCH=1 -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
+            -e UNITY_MCP_BIND_HOST=127.0.0.1 \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
             -v "${{ env.UNITY_CACHE_ROOT }}:/root" \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
             ${{ env.UNITY_IMAGE }} /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
+              -stackTraceLogType Full \
               -projectPath /workspace/TestProjects/UnityMCPTests \
               "${MANUAL_ARG[@]}" \
               "${EBL_ARGS[@]}" \
               -executeMethod UnityMcpBridge.Editor.UnityMcpBridge.StartAutoConnect
 
       # ---------- Wait for Unity bridge (fail fast if not running/ready) ----------
-      - name: Wait for Unity bridge
+      - name: Wait for Unity bridge (robust)
         if: steps.detect.outputs.unity_ok == 'true'
         run: |
-          set -eux
+          set -euo pipefail
           if ! docker ps --format '{{.Names}}' | grep -qx 'unity-mcp'; then
             echo "Unity container failed to start"; docker ps -a || true; exit 1
           fi
           docker logs -f unity-mcp & LOGPID=$!
-          deadline=$((SECONDS+420))
+          deadline=$((SECONDS+420)); READY=0
+
+          try_connect_host() {
+            P="$1"
+            timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$P; head -c 8 <&3 >/dev/null" && return 0 || true
+            if command -v nc >/dev/null 2>&1; then nc -6 -z ::1 "$P" && return 0 || true; fi
+            return 1
+          }
+
+          # in-container probe will try IPv4 then IPv6 via nc or /dev/tcp
+
           while [ $SECONDS -lt $deadline ]; do
             if docker logs unity-mcp 2>&1 | grep -qE "MCP Bridge listening|Bridge ready|Server started"; then
-              echo "Bridge ready (logs)"; kill $LOGPID || true; exit 0
+              READY=1; echo "Bridge ready (log markers)"; break
             fi
-            PORT=$(python -c "import os,glob,json,sys; b=os.path.expanduser('~/.unity-mcp'); fs=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(json.load(open(fs[0]))['unity_port']) if fs else sys.exit(1)" 2>/dev/null || true)
-            if [ -n "${PORT:-}" ] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$PORT && head -c 256 <&3 | tr -d '\0' | grep -q 'FRAMING=1'"; then
-              echo "Bridge ready on port $PORT"; kill $LOGPID || true; exit 0
+            PORT=$(python -c "import os,glob,json,sys,time; b=os.path.expanduser('~/.unity-mcp'); fs=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(next((json.load(open(f,'r',encoding='utf-8')).get('unity_port') for f in fs if time.time()-os.path.getmtime(f)<=300 and json.load(open(f,'r',encoding='utf-8')).get('unity_port')), '' ))" 2>/dev/null || true)
+            if [ -n "${PORT:-}" ] && { try_connect_host "$PORT" || docker exec unity-mcp bash -lc "timeout 1 bash -lc 'exec 3<>/dev/tcp/127.0.0.1/$PORT' || (command -v nc >/dev/null 2>&1 && nc -6 -z ::1 $PORT)"; }; then
+              READY=1; echo "Bridge ready on port $PORT"; break
             fi
-            # Fail fast on clear license errors
             if docker logs unity-mcp 2>&1 | grep -qE "No valid Unity Editor license|Token not found in cache|com\.unity\.editor\.headless"; then
-              echo "Licensing error detected"; kill $LOGPID || true; docker logs unity-mcp || true; exit 1
+              echo "Licensing error detected"; break
             fi
             sleep 2
           done
-          echo "Bridge not ready in time"
+
           kill $LOGPID || true
-          docker logs unity-mcp || true
-          exit 1
+
+          if [ "$READY" != "1" ]; then
+            echo "Bridge not ready; diagnostics:"
+            echo "== status files =="; ls -la "$HOME/.unity-mcp" || true
+            echo "== status contents =="; for f in "$HOME"/.unity-mcp/unity-mcp-status-*.json; do [ -f "$f" ] && { echo "--- $f"; sed -n '1,120p' "$f"; }; done
+            echo "== sockets (inside container) =="; docker exec unity-mcp bash -lc 'ss -lntp || netstat -tulpen || true'
+            echo "== tail of Unity log =="; docker logs --tail 200 unity-mcp || true
+            exit 1
+          fi
 
       # ---------- Make MCP config available to the beta action ----------
       - name: Write MCP config (.claude/mcp.json)
