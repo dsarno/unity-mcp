@@ -180,6 +180,31 @@ jobs:
             exit 1
           fi
 
+      - name: Claude startup sanity (MCP discovery)
+        uses: anthropics/claude-code-base-action@beta
+        if: steps.detect.outputs.anthropic_ok == 'true'
+        with:
+          prompt: |
+              Print the list of available tools you see. If any tool id starts with "mcp__unity__", say "UNITY-MCP: OK".
+              Otherwise say "UNITY-MCP: MISSING" and stop.
+          settings: |
+            {
+              "model": "claude-3-7-sonnet-20250219",
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": ["run","--active","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "transport": { "type": "stdio" },
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug",
+                    "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
+                  }
+                }
+              }
+            }
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+        
       # ---------- Prepare reports ----------
       - name: Prepare reports
         run: |
