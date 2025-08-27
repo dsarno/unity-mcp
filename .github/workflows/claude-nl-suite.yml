@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      JUNIT_OUT: reports/junit-nl-suite.xml
+      JUNIT_OUT: reports/junit.xml
       MD_OUT:    reports/junit-nl-suite.md
 
     steps:
@@ -206,9 +206,10 @@ jobs:
           JSON
                   
       # ---------- Ensure reports dir exists ----------
-      - name: Prepare reports
+      - name: Prepare reports 
         run: |
           set -eux
+          rm -f reports/*.xml reports/*.md || true
           mkdir -p reports
 
       # ---------- Run full NL suite once ----------
@@ -228,7 +229,7 @@ jobs:
           timeout_minutes: "30"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Normalize JUnit for consumer actions (strong)
+      - name: Normalize JUnit in-place (single file)
         if: always()
         shell: bash
         run: |
@@ -240,17 +241,9 @@ jobs:
           def localname(tag: str) -> str:
               return tag.rsplit('}', 1)[-1] if '}' in tag else tag
 
-          src = Path(os.environ.get('JUNIT_OUT', 'reports/junit-nl-suite.xml'))
-          out = Path('reports/junit-for-actions.xml')
+          src = Path(os.environ.get('JUNIT_OUT', 'reports/junit.xml'))
+          out = src
           out.parent.mkdir(parents=True, exist_ok=True)
-
-          if not src.exists():
-              # Try to use any existing XML as a source (e.g., claude-nl-tests.xml)
-              candidates = sorted(Path('reports').glob('*.xml'))
-              if candidates:
-                  src = candidates[0]
-              else:
-                  print("WARN: no XML source found for normalization")
 
           if src.exists():
               try:
@@ -263,10 +256,6 @@ jobs:
               except Exception as e:
                   print("Normalization error:", e)
                   out.write_bytes(src.read_bytes())
-
-          # Always create a second copy with a junit-* name so wildcard patterns match too
-          if out.exists():
-              Path('reports/junit-nl-suite-copy.xml').write_bytes(out.read_bytes())
           PY
 
       - name: "Debug: list report files"
@@ -319,7 +308,7 @@ jobs:
         run: |
             set -eu
             mkdir -p reports
-            if [ ! -f reports/junit-for-actions.xml ]; then
+            if [ ! -f "$JUNIT_OUT" ]; then
               printf '%s\n' \
                 '<?xml version="1.0" encoding="UTF-8"?>' \
                 '<testsuite name="UnityMCP.NL-T" tests="1" failures="1" time="0">' \
@@ -327,15 +316,15 @@ jobs:
                 '    <failure><![CDATA[No JUnit was produced by the NL suite step. See the '"'"'Run Claude NL suite (single pass)'"'"' logs.]]></failure>' \
                 '  </testcase>' \
                 '</testsuite>' \
-                > reports/junit-for-actions.xml
+                > "$JUNIT_OUT"
             fi
         
 
-      - name: Publish JUnit reports
+      - name: Publish JUnit report
         if: always()
         uses: mikepenz/action-junit-report@v5
         with:
-          report_paths: 'reports/junit-for-actions.xml'
+          report_paths: '${{ env.JUNIT_OUT }}'
           include_passed: true
           detailed_summary: true
           annotate_notice: true
@@ -343,12 +332,14 @@ jobs:
           fail_on_parse_error: true
           
         
-      - name: Upload artifacts
+      - name: Upload artifacts (lean)
         if: always()
         uses: actions/upload-artifact@v4
         with:
             name: claude-nl-suite-artifacts
-            path: reports/**
+            path: |
+              ${{ env.JUNIT_OUT }}
+              ${{ env.MD_OUT }}
               
         
 

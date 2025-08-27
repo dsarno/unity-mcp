@@ -52,6 +52,15 @@ You are running inside CI for the unity-mcp repository. Use only the tools allow
 
 ## Full NL/T Test List (imported)
 
+### Execution order (must follow; do not regex-filter)
+Run tests exactly in this order:
+NL-0, NL-1, NL-2, NL-3, NL-4,
+T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
+At suite start, emit a single line plan:
+PLAN: NL-0,NL-1,NL-2,NL-3,NL-4,T-A,T-B,T-C,T-D,T-E,T-F,T-G,T-H,T-I,T-J (len=16 inc. bootstrap)
+After each testcase, emit:
+PROGRESS: <k>/16 completed
+
 ### NL-0. Sanity Reads (windowed)
 - Tail 120 lines; read 40 lines around `Update()` signature.
 
