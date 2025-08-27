@@ -225,6 +225,7 @@ jobs:
           allowed_tools: "Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script,mcp__unity__find_in_file,Bash(git:*),Bash(mkdir:*),Bash(cat:*),Bash(grep:*),Bash(echo:*)"
           disallowed_tools: "TodoWrite,Task"
           model: "claude-3-7-sonnet-latest"
+          timeout_minutes: "30"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Normalize JUnit for consumer actions (strong)

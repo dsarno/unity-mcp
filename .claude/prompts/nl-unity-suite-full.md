@@ -14,12 +14,19 @@ You are running inside CI for the unity-mcp repository. Use only the tools allow
 - If the preferred file is missing, select a safe alternative C# script under `Assets/`.
 - If compilation is unavailable, rely on structural checks and validation tools.
 
++## Tool mapping (use these APIs)
++When the tests say **replace_range** or **regex_replace**, call:
++- `mcp__unity__apply_text_edits` for single-range inserts/replacements.
++- `mcp__unity__script_apply_edits` for regex/anchor operations.
++- `mcp__unity__validate_script` for validation (`level: "standard"`).
+
+
 ## Output Requirements (match NL suite conventions)
 - JUnit at `$JUNIT_OUT` if set, otherwise `reports/junit-nl-suite.xml`. Suite name `UnityMCP.NL`.
 - Markdown at `$MD_OUT` if set, otherwise `reports/junit-nl-suite.md`.
 - Log allowed tools once as a single line: `AllowedTools: ...`.
 - For every edit: Read → Write (with precondition hash) → Re-read; on `{status:"stale_file"}` retry once after re-read.
-- Evidence windows only (±20–40 lines); cap unified diffs to 300 lines and note truncation.
+- Evidence windows only (±20–40 lines); cap unified diffs to 100 lines and note truncation.
 - End `<system-out>` with `VERDICT: PASS` or `VERDICT: FAIL`.
 
 ### Reporting discipline (must-follow)
