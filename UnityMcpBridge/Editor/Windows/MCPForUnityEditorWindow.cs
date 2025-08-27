@@ -1203,53 +1203,47 @@ namespace MCPForUnity.Editor.Windows
 
 			string mergedJson = JsonConvert.SerializeObject(existingRoot, jsonSettings);
 			
-			// Use a more robust atomic write pattern
+			// Robust atomic write without redundant backup or race on existence
 			string tmp = configPath + ".tmp";
 			string backup = configPath + ".backup";
-			
+			bool writeDone = false;
 			try
 			{
-				// Write to temp file first
+				// Write to temp file first (in same directory for atomicity)
 				System.IO.File.WriteAllText(tmp, mergedJson, new System.Text.UTF8Encoding(false));
-				
-				// Create backup of existing file if it exists
-				if (System.IO.File.Exists(configPath))
+
+				try
 				{
-					System.IO.File.Copy(configPath, backup, true);
-				}
-				
-				// Atomic move operation (more reliable than Replace on macOS)
-				if (System.IO.File.Exists(configPath))
-				{
+					// Try atomic replace; creates 'backup' only on success
 					System.IO.File.Replace(tmp, configPath, backup);
+					writeDone = true;
 				}
-				else
+				catch (System.IO.FileNotFoundException)
 				{
+					// Destination didn't exist; fall back to atomic move
 					System.IO.File.Move(tmp, configPath);
-				}
-				
-				// Clean up backup
-				if (System.IO.File.Exists(backup))
-				{
-					System.IO.File.Delete(backup);
+					writeDone = true;
 				}
 			}
 			catch (Exception ex)
 			{
-				// Clean up temp file
-				try { if (System.IO.File.Exists(tmp)) System.IO.File.Delete(tmp); } catch { }
-				// Restore backup if it exists
-				try { 
-					if (System.IO.File.Exists(backup)) 
+				// If write did not complete, attempt restore from backup without deleting current file first
+				try
+				{
+					if (!writeDone && System.IO.File.Exists(backup))
 					{
-						if (System.IO.File.Exists(configPath))
-						{
-							System.IO.File.Delete(configPath);
-						}
-						System.IO.File.Move(backup, configPath); 
+						try { System.IO.File.Copy(backup, configPath, true); } catch { }
 					}
-				} catch { }
+				}
+				catch { }
 				throw new Exception($"Failed to write config file '{configPath}': {ex.Message}", ex);
+			}
+			finally
+			{
+				// Best-effort cleanup of temp
+				try { if (System.IO.File.Exists(tmp)) System.IO.File.Delete(tmp); } catch { }
+				// Only remove backup after a confirmed successful write
+				try { if (writeDone && System.IO.File.Exists(backup)) System.IO.File.Delete(backup); } catch { }
 			}
 			try
 			{
