@@ -222,6 +222,7 @@ jobs:
             --mcp-config .claude/mcp.json
             --allowedTools "Bash(git:*,mkdir:*,cat:*,grep:*),Write,mcp__unity__*"
             --model "claude-3-haiku-20240307"
+            --max-tokens 2048
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
 
