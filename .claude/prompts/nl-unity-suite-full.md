@@ -117,8 +117,11 @@ PROGRESS: <k>/16 completed
 
 ### Implementation notes
 - Capture pre/post windows; include pre/post hashes in logs.
-- Compute `precondition_sha256` over raw on-disk bytes (no normalization), unless the server explicitly documents and applies identical normalization on both sides.
-- If a write returns `stale_file`, re-read and retry once with the returned hash; otherwise record failure and continue.
+- Maintain a per-test in-memory working buffer `buf` (text) and `pre_sha = sha256(read_bytes(uri))` (raw bytes; no normalization) at the start of each test.
+- After a successful write, update `buf` locally by applying the same edit and recompute `pre_sha` from the on-disk bytes only if needed; prefer avoiding a re-read when positions are stable.
+- If a write returns `stale_file`, prefer retrying once without reading using a server-provided hash (`data.current_sha256` or `data.expected_sha256`). Only if neither is present, perform a single re-read and retry; otherwise record failure and continue.
+- Re-read only at well-defined points: (a) at the start of each test, (b) after a failed stale retry, or (c) when validation demands it.
+- Always revert any mutations at the end of each test, then re-read to confirm clean state before the next test.
 - Never abort the suite on a single test failure; log the failure (including `{ status: ... }`) and proceed to the next test.
 
 ### Test driver (must follow)
@@ -134,20 +137,33 @@ For each test NL-0..NL-4, then T-A..T-J:
 ### Guarded write pattern (must use for every edit)
 ```pseudo
 function guarded_write(uri, make_edit_from_text):
-  text = read(uri)                      # include ctx:{} and project_root
-  buf  = read_bytes(uri)                # raw on-disk bytes for hashing
-  sha  = sha256(buf)                    # no normalization
-  edit = make_edit_from_text(text)      # compute ranges/anchors against *this* text
-  res  = write(uri, edit, precondition_sha256=sha)
-  if res.status == "stale_file":
-      fresh       = read(uri)
-      fresh_bytes = read_bytes(uri)
-      # Prefer server-provided expected_sha256 if present; else recompute from raw bytes
-      sha2  = res.expected_sha256 or sha256(fresh_bytes)
-      edit2 = make_edit_from_text(fresh)   # recompute ranges vs fresh text
-      res2  = write(uri, edit2, precondition_sha256=sha2)
-      if res2.status != "ok":
-          record_failure_and_continue()    # do not loop forever
+  # Precondition: buf (text) and pre_sha (sha256 over raw bytes) are current for this test
+  edit = make_edit_from_text(buf)         # compute ranges/anchors against in-memory buf
+  res  = write(uri, edit, precondition_sha256=pre_sha)
+  if res.status == "ok":
+      buf     = apply_local(edit, buf)    # update buffer without re-read when possible
+      # Optionally refresh pre_sha by hashing on-disk bytes if subsequent ops require exact sync
+      # pre_sha = sha256(read_bytes(uri))
+  elif res.status == "stale_file":
+      # Fast path: retry once using server-provided hash; avoid read if hash is present
+      next_sha = (res.data.current_sha256 or res.data.expected_sha256) if hasattr(res, 'data') else None
+      if next_sha:
+          edit2 = edit_or_recomputed(edit, buf)   # often unchanged if anchors/ranges remain stable
+          res2  = write(uri, edit2, precondition_sha256=next_sha)
+          if res2.status == "ok":
+              buf = apply_local(edit2, buf)
+          else:
+              record_failure_and_continue()
+      else:
+          fresh_text  = read(uri)
+          fresh_bytes = read_bytes(uri)
+          pre_sha     = sha256(fresh_bytes)
+          edit2       = make_edit_from_text(fresh_text)
+          res2        = write(uri, edit2, precondition_sha256=pre_sha)
+          if res2.status == "ok":
+              buf = apply_local(edit2, fresh_text)
+          else:
+              record_failure_and_continue()    # do not loop forever
 ```
 Notes: Prefer `mcp__unity__script_apply_edits` for anchor/regex operations; use `mcp__unity__apply_text_edits` only for precise `replace_range` steps. Always re‑read before each subsequent test so offsets are never computed against stale snapshots.
 
