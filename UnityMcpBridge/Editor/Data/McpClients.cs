@@ -19,6 +19,11 @@ namespace MCPForUnity.Editor.Data
                     ".cursor",
                     "mcp.json"
                 ),
+                macConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".cursor",
+                    "mcp.json"
+                ),
                 linuxConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".cursor",
@@ -35,6 +40,10 @@ namespace MCPForUnity.Editor.Data
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".claude.json"
                 ),
+                macConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".claude.json"
+                ),
                 linuxConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".claude.json"
@@ -47,6 +56,12 @@ namespace MCPForUnity.Editor.Data
             {
                 name = "Windsurf",
                 windowsConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".codeium",
+                    "windsurf",
+                    "mcp_config.json"
+                ),
+                macConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".codeium",
                     "windsurf",
@@ -122,6 +137,12 @@ namespace MCPForUnity.Editor.Data
             {
                 name = "Kiro",
                 windowsConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".kiro",
+                    "settings",
+                    "mcp.json"
+                ),
+                macConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".kiro",
                     "settings",
