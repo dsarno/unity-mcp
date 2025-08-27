@@ -54,7 +54,7 @@ namespace MCPForUnity.Editor.Helpers
             // For Cursor (non-VSCode) on macOS, prefer a no-spaces symlink path to avoid arg parsing issues in some runners
             string effectiveDir = directory;
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-            bool isCursor = !isVSCode && (client == null || client.mcpType != Models.McpTypes.VSCode);
+            bool isCursor = !isVSCode && (client == null || client.mcpType != McpTypes.VSCode);
             if (isCursor && !string.IsNullOrEmpty(directory))
             {
                 // Replace canonical path segment with the symlink path if present
