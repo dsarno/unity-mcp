@@ -246,14 +246,14 @@ jobs:
             set -eu
             mkdir -p reports
             if ! ls reports/*.xml >/dev/null 2>&1; then
-              cat > reports/junit-fallback.xml <<'XML'
-              <?xml version="1.0" encoding="UTF-8"?>
-              <testsuite name="UnityMCP.NL-T" tests="1" failures="1" time="0">
-                <testcase classname="UnityMCP.NL" name="NL-Suite.Execution" time="0.0">
-                  <failure><![CDATA[No JUnit was produced by the NL suite step. See the 'Run Claude NL suite (single pass)' logs.]]></failure>
-                </testcase>
-              </testsuite>
-              XML
+              printf '%s\n' \
+                '<?xml version="1.0" encoding="UTF-8"?>' \
+                '<testsuite name="UnityMCP.NL-T" tests="1" failures="1" time="0">' \
+                '  <testcase classname="UnityMCP.NL" name="NL-Suite.Execution" time="0.0">' \
+                '    <failure><![CDATA[No JUnit was produced by the NL suite step. See the '"'"'Run Claude NL suite (single pass)'"'"' logs.]]></failure>' \
+                '  </testcase>' \
+                '</testsuite>' \
+                > reports/junit-fallback.xml
             fi
         
 
