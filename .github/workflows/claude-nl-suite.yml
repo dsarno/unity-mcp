@@ -250,16 +250,16 @@ jobs:
             echo "No JUnit found; writing fallback."
             {
               cat <<'XML'
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="UnityMCP.NL-T" tests="1" failures="1" time="0">
-  <testcase classname="UnityMCP.NL" name="NL-Suite.Execution" time="0.0">
-    <failure><![CDATA[
-Suite ended without producing reports. Likely mid-run tool failure (e.g., stale_file) or driver termination.
-See the 'Run Claude NL suite (single pass)' logs for details.
-    ]]></failure>
-  </testcase>
-</testsuite>
-XML
+              <?xml version="1.0" encoding="UTF-8"?>
+              <testsuite name="UnityMCP.NL-T" tests="1" failures="1" time="0">
+                <testcase classname="UnityMCP.NL" name="NL-Suite.Execution" time="0.0">
+                  <failure><![CDATA[
+              Suite ended without producing reports. Likely mid-run tool failure (e.g., stale_file) or driver termination.
+              See the 'Run Claude NL suite (single pass)' logs for details.
+                  ]]></failure>
+                </testcase>
+              </testsuite>
+              XML
             } > reports/junit-fallback.xml
           fi
 
