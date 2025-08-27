@@ -722,7 +722,8 @@ namespace MCPForUnity.Editor.Windows
             {
                 string na = System.IO.Path.GetFullPath(a.Trim());
                 string nb = System.IO.Path.GetFullPath(b.Trim());
-                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+                    || System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
                 {
                     return string.Equals(na, nb, StringComparison.OrdinalIgnoreCase);
                 }
@@ -1134,8 +1135,18 @@ namespace MCPForUnity.Editor.Windows
 			}
 			catch { }
 
-			// 1) Start from existing, only fill gaps
-			string uvPath = (ValidateUvBinarySafe(existingCommand) ? existingCommand : FindUvPath());
+			// 1) Start from existing, only fill gaps (prefer trusted resolver)
+			string uvPath = FindUvPath();
+			// Optionally trust existingCommand if it looks like uv/uv.exe
+			try
+			{
+				var name = System.IO.Path.GetFileName((existingCommand ?? string.Empty).Trim()).ToLowerInvariant();
+				if ((name == "uv" || name == "uv.exe") && ValidateUvBinarySafe(existingCommand))
+				{
+					uvPath = existingCommand;
+				}
+			}
+			catch { }
 			if (uvPath == null) return "UV package manager not found. Please install UV first.";
 
 			string serverSrc = ExtractDirectoryArg(existingArgs);
@@ -1214,13 +1225,24 @@ namespace MCPForUnity.Editor.Windows
 
 				try
 				{
-					// Try atomic replace; creates 'backup' only on success
+					// Try atomic replace; creates 'backup' only on success (platform-dependent)
 					System.IO.File.Replace(tmp, configPath, backup);
 					writeDone = true;
 				}
 				catch (System.IO.FileNotFoundException)
 				{
-					// Destination didn't exist; fall back to atomic move
+					// Destination didn't exist; fall back to move
+					System.IO.File.Move(tmp, configPath);
+                    writeDone = true;
+				}
+				catch (System.PlatformNotSupportedException)
+				{
+					// Fallback: rename existing to backup, then move tmp into place
+					if (System.IO.File.Exists(configPath))
+					{
+						try { if (System.IO.File.Exists(backup)) System.IO.File.Delete(backup); } catch { }
+						System.IO.File.Move(configPath, backup);
+					}
 					System.IO.File.Move(tmp, configPath);
 					writeDone = true;
 				}
@@ -2120,10 +2142,14 @@ namespace MCPForUnity.Editor.Windows
                 string unityProjectDir = Application.dataPath;
                 string projectDir = Path.GetDirectoryName(unityProjectDir);
                 
-                // Read the global Claude config file
-                string configPath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) 
-                    ? mcpClient.windowsConfigPath 
-                    : mcpClient.linuxConfigPath;
+                // Read the global Claude config file (honor macConfigPath on macOS)
+                string configPath;
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    configPath = mcpClient.windowsConfigPath;
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                    configPath = string.IsNullOrEmpty(mcpClient.macConfigPath) ? mcpClient.linuxConfigPath : mcpClient.macConfigPath;
+                else
+                    configPath = mcpClient.linuxConfigPath;
                 
                 if (debugLogsEnabled)
                 {
