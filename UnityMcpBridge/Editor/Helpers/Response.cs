@@ -35,7 +35,7 @@ namespace MCPForUnity.Editor.Helpers
         /// <summary>
         /// Creates a standardized error response object.
         /// </summary>
-        /// <param name="errorMessage">A message describing the error.</param>
+        /// <param name="errorCodeOrMessage">A message describing the error.</param>
         /// <param name="data">Optional additional data (e.g., error details) to include.</param>
         /// <returns>An object representing the error response.</returns>
         public static object Error(string errorCodeOrMessage, object data = null)
