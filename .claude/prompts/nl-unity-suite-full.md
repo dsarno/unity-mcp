@@ -1,4 +1,4 @@
-# Unity NL/T Editing Suite — Hybrid (Mini setup + Full tests)
+# Unity NL/T Editing Suite
 
 You are running inside CI for the unity-mcp repository. Use only the tools allowed by the workflow. Work autonomously; do not prompt the user. Do NOT spawn subagents.
 
@@ -109,3 +109,21 @@ You are running inside CI for the unity-mcp repository. Use only the tools allow
 - Capture pre/post windows; include pre/post hashes in logs.
 - Normalize line endings to LF when computing `precondition_sha256`.
 - If a write returns `stale_file`, re-read and retry once with the returned hash; otherwise record failure and continue.
+
+### Guarded write pattern (must use for every edit)
+```pseudo
+function guarded_write(uri, make_edit_from_text):
+  text = read(uri)                     # include ctx:{} and project_root
+  sha  = sha256(LF(text))              # LF normalize before hashing
+  edit = make_edit_from_text(text)     # compute ranges/anchors against *this* text
+  res  = write(uri, edit, precondition_sha256=sha)
+  if res.status == "stale_file":
+      fresh = read(uri)
+      # Prefer server-provided expected_sha256 if present; else recompute
+      sha2 = res.expected_sha256 or sha256(LF(fresh))
+      edit2 = make_edit_from_text(fresh)   # recompute ranges vs fresh text
+      res2  = write(uri, edit2, precondition_sha256=sha2)
+      if res2.status != "ok":
+          record_failure_and_continue()    # do not loop forever
+```
+Notes: Prefer `mcp__unity__script_apply_edits` for anchor/regex operations; use `mcp__unity__apply_text_edits` only for precise `replace_range` steps. Always re‑read before each subsequent test so offsets are never computed against stale snapshots.
