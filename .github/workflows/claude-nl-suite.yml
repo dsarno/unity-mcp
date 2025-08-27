@@ -212,12 +212,16 @@ jobs:
       - name: Run Claude NL suite (single pass)
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true'
+        env:
+          JUNIT_OUT: reports/junit-nl-suite.xml
+          MD_OUT:    reports/junit-nl-suite.md
         with:
+          use_node_cache: true
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           claude_args: |
             --mcp-config .claude/mcp.json
-            --allowedTools "Bash(git:*),Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script, mcp__unity__find_in_file, mcp__unity__*"
-            --model "claude-3-7-sonnet-20250219"
+            --allowedTools "Bash(git:*,mkdir:*,cat:*,grep:*),Write,mcp__unity__*"
+            --model "claude-3-7-haiku-20250219"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
 
