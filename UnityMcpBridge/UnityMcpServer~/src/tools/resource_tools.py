@@ -282,7 +282,7 @@ def register_resource_tools(mcp: FastMCP) -> None:
         - ignore_case: case-insensitive by default
         - max_results: cap results to avoid huge payloads
         """
-        import re
+        # re is already imported at module level
         try:
             project = _resolve_project_root(project_root)
             p = _resolve_safe_path_from_uri(uri, project)
