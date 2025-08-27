@@ -216,13 +216,38 @@ jobs:
           MD_OUT:    reports/junit-nl-suite.md
         with:
           use_node_cache: false
-          prompt_file: .claude/prompts/nl-unity-suite-full.md
+          prompt_file: .claude/prompts/nl-unity-claude-tests-mini.md
           claude_args: |
             --mcp-config .claude/mcp.json
             --allowedTools Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script,mcp__unity__find_in_file,Bash(git:*),Bash(mkdir:*),Bash(cat:*),Bash(grep:*),Bash(echo:*)
             --disallowedTools "TodoWrite,Task"
             --model "claude-3-7-sonnet-latest"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Normalize JUnit for consumer actions
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          import sys
+
+          src = Path('reports/junit-nl-suite.xml')
+          out = Path('reports/junit-for-actions.xml')
+
+          if not src.exists():
+              sys.exit(0)
+
+          tree = ET.parse(src)
+          root = tree.getroot()
+
+          if root.tag == 'testsuites' and len(root) == 1 and root[0].tag == 'testsuite':
+              new_root = root[0]
+              ET.ElementTree(new_root).write(out, encoding='utf-8', xml_declaration=True)
+          else:
+              # Already suitable; copy/rename to target
+              out.write_bytes(src.read_bytes())
+          PY
 
 
       # sanitize only the markdown (does not touch JUnit xml)
@@ -238,6 +263,23 @@ jobs:
               b=p.read_bytes().replace(b'\x00', b'')
               s=b.decode('utf-8','replace').replace('\r\n','\n')
               p.write_text(s, encoding='utf-8', newline='\n')
+          PY
+
+      - name: NL/T details → Job Summary
+        if: always()
+        run: |
+          echo "## Unity NL/T Editing Suite — Full Coverage" >> $GITHUB_STEP_SUMMARY
+          python - <<'PY' >> $GITHUB_STEP_SUMMARY
+          from pathlib import Path
+          p = Path('reports/junit-nl-suite.md') if Path('reports/junit-nl-suite.md').exists() else Path('reports/claude-nl-tests.md')
+          if p.exists():
+              text = p.read_bytes().decode('utf-8', 'replace')
+              MAX = 65000
+              print(text[:MAX])
+              if len(text) > MAX:
+                  print("\n\n_…truncated in summary; full report is in artifacts._")
+          else:
+              print("_No markdown report found._")
           PY
 
       - name: Fallback JUnit if missing
@@ -259,11 +301,13 @@ jobs:
 
       - name: Publish JUnit reports
         if: always()
-        uses: mikepenz/action-junit-report@v4
+        uses: mikepenz/action-junit-report@v5
         with:
-          report_paths: 'reports/*.xml'
-          require_tests: false
+          report_paths: 'reports/junit-for-actions.xml'
+          include_passed: true
+          detailed_summary: true
           annotate_notice: true
+          require_tests: false
           
         
       - name: Upload artifacts

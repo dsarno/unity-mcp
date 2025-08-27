@@ -26,9 +26,16 @@ You are running inside CI for the **unity-mcp** repository. Your task is to demo
 - If the preferred file isn’t present, locate a fallback C# file with simple, local methods you can edit safely.
 - If a compile command is available in this environment, you may optionally trigger it; if not, rely on structural checks and localized validation.
 
-## Output Requirements
-- `reports/claude-nl-tests.xml` — JUnit XML, suite `UnityMCP.NL`, each sub‑test a separate `<testcase>` with `<failure>` text when relevant.
-- `reports/claude-nl-summary.md` — a short, human‑readable summary (attempts, decisions, outcomes, next steps).
+## Output Requirements (match NL suite conventions)
+- JUnit XML at `$JUNIT_OUT` if set, otherwise `reports/junit-nl-suite.xml`.
+  - Single suite named `UnityMCP.NL`, one `<testcase>` per sub‑test; include `<failure>` on errors.
+- Markdown at `$MD_OUT` if set, otherwise `reports/junit-nl-suite.md`.
+
+Constraints (for fast publishing):
+- Log allowed tools once as a single line: `AllowedTools: ...`.
+- For every edit: Read → Write (with precondition hash) → Re‑read; on `{status:"stale_file"}` retry once after re‑read.
+- Keep evidence to ±20–40 lines windows; cap unified diffs to 300 lines and note truncation.
+- End `<system-out>` with `VERDICT: PASS` or `VERDICT: FAIL`.
 
 ## Guardrails
 - No destructive operations. Keep changes minimal and well‑scoped.
