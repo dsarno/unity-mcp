@@ -1221,9 +1221,12 @@ namespace MCPForUnity.Editor.Windows
 				// Atomic move operation (more reliable than Replace on macOS)
 				if (System.IO.File.Exists(configPath))
 				{
-					System.IO.File.Delete(configPath);
+					System.IO.File.Replace(tmp, configPath, backup);
 				}
-				System.IO.File.Move(tmp, configPath);
+				else
+				{
+					System.IO.File.Move(tmp, configPath);
+				}
 				
 				// Clean up backup
 				if (System.IO.File.Exists(backup))
