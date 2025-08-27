@@ -1,10 +1,8 @@
 from mcp.server.fastmcp import FastMCP, Context
 from typing import Dict, Any, List
-from unity_connection import get_unity_connection, send_command_with_retry
-from config import config
-import time
-import os
+from unity_connection import send_command_with_retry
 import base64
+import os
 
 
 def register_manage_script_tools(mcp: FastMCP):
