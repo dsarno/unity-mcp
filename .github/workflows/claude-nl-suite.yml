@@ -4,9 +4,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+  contents: read
   checks: write
 
 concurrency:
@@ -121,6 +119,7 @@ jobs:
           [ -n "${UNITY_SERIAL:-}" ]   && EBL_ARGS+=(-serial "$UNITY_SERIAL")
           [ -n "${UNITY_EMAIL:-}" ]    && EBL_ARGS+=(-username "$UNITY_EMAIL")
           [ -n "${UNITY_PASSWORD:-}" ] && EBL_ARGS+=(-password "$UNITY_PASSWORD")
+          docker rm -f unity-mcp >/dev/null 2>&1 || true
           docker run -d --name unity-mcp --network host \
             -e HOME=/root \
             -e UNITY_MCP_ALLOW_BATCH=1 -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
@@ -211,7 +210,7 @@ jobs:
       # ---------- Run full NL suite once ----------
       - name: Run Claude NL suite (single pass)
         uses: anthropics/claude-code-base-action@beta
-        if: steps.detect.outputs.anthropic_ok == 'true'
+        if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         env:
           JUNIT_OUT: reports/junit-nl-suite.xml
           MD_OUT:    reports/junit-nl-suite.md
