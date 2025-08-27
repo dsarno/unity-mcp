@@ -223,30 +223,51 @@ jobs:
           model: "claude-3-7-sonnet-latest"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Normalize JUnit for consumer actions
+      - name: Normalize JUnit for consumer actions (strong)
         if: always()
+        shell: bash
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          import sys
+
+          def localname(tag: str) -> str:
+              return tag.rsplit('}', 1)[-1] if '}' in tag else tag
 
           src = Path('reports/junit-nl-suite.xml')
           out = Path('reports/junit-for-actions.xml')
+          out.parent.mkdir(parents=True, exist_ok=True)
 
           if not src.exists():
-              sys.exit(0)
-
-          tree = ET.parse(src)
-          root = tree.getroot()
-
-          if root.tag == 'testsuites' and len(root) == 1 and root[0].tag == 'testsuite':
-              new_root = root[0]
-              ET.ElementTree(new_root).write(out, encoding='utf-8', xml_declaration=True)
+              print("WARN: junit-nl-suite.xml not found")
           else:
-              # Already suitable; copy/rename to target
-              out.write_bytes(src.read_bytes())
+              try:
+                  root = ET.parse(src).getroot()
+                  rtag = localname(root.tag)
+                  if rtag == 'testsuites' and len(root) == 1 and localname(root[0].tag) == 'testsuite':
+                      ET.ElementTree(root[0]).write(out, encoding='utf-8', xml_declaration=True)
+                  else:
+                      out.write_bytes(src.read_bytes())
+              except Exception as e:
+                  print("Normalization error:", e)
+                  out.write_bytes(src.read_bytes())
+
+          # Always create a second copy with a junit-* name so wildcard patterns match too
+          if out.exists():
+              Path('reports/junit-nl-suite-copy.xml').write_bytes(out.read_bytes())
           PY
+
+      - name: "Debug: list report files"
+        if: always()
+        shell: bash
+        run: |
+          set -eux
+          ls -la reports || true
+          shopt -s nullglob
+          for f in reports/*.xml; do
+            echo "===== $f ====="
+            head -n 40 "$f" || true
+          done
 
 
       # sanitize only the markdown (does not touch JUnit xml)
@@ -302,11 +323,14 @@ jobs:
         if: always()
         uses: mikepenz/action-junit-report@v5
         with:
-          report_paths: 'reports/junit-for-actions.xml'
+          report_paths: |
+            reports/junit-for-actions.xml
+            reports/junit-nl-suite.xml
           include_passed: true
           detailed_summary: true
           annotate_notice: true
           require_tests: false
+          fail_on_parse_error: true
           
         
       - name: Upload artifacts
