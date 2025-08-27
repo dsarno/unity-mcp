@@ -241,13 +241,35 @@ jobs:
               p.write_text(s, encoding='utf-8', newline='\n')
           PY
 
+      - name: Fallback JUnit if missing
+        if: always()
+        run: |
+          set -eu
+          mkdir -p reports
+          if ! ls reports/junit-*.xml >/dev/null 2>&1; then
+            echo "No JUnit found; writing fallback."
+            {
+              cat <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="UnityMCP.NL-T" tests="1" failures="1" time="0">
+  <testcase classname="UnityMCP.NL" name="NL-Suite.Execution" time="0.0">
+    <failure><![CDATA[
+Suite ended without producing reports. Likely mid-run tool failure (e.g., stale_file) or driver termination.
+See the 'Run Claude NL suite (single pass)' logs for details.
+    ]]></failure>
+  </testcase>
+</testsuite>
+XML
+            } > reports/junit-fallback.xml
+          fi
+
       - name: Publish JUnit reports
         if: always()
         uses: mikepenz/action-junit-report@v4
         with:
-          report_paths: |
-            reports/junit-*.xml
-            reports/claude-*.xml
+          report_paths: 'reports/junit-*.xml'
+          require_tests: false
+          annotate_notice: true
         
       - name: Upload artifacts
         if: always()
