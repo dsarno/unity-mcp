@@ -12,6 +12,6 @@ Rules (must follow exactly):
 }
 
 2) Call mcp__unity__list_resources with:
-{ "ctx": {}, "under": "ClaudeTests", "pattern": "*.cs" }
+{ "ctx": {}, "under": "TestProjects/UnityMCPTests/Assets/Scripts", "pattern": "*.cs" }
 
 Stop after step 2.
