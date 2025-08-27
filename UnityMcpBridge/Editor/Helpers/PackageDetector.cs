@@ -30,14 +30,11 @@ namespace MCPForUnity.Editor.Helpers
                         try
                         {
                             ServerInstaller.EnsureServerInstalled();
+                            EditorPrefs.SetBool(key, true);
                         }
                         catch (System.Exception ex)
                         {
                             Debug.LogWarning("MCP for Unity: Auto-detect on load failed: " + ex.Message);
-                        }
-                        finally
-                        {
-                            EditorPrefs.SetBool(key, true);
                         }
                     };
                 }
