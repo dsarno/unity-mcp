@@ -243,8 +243,14 @@ jobs:
           out.parent.mkdir(parents=True, exist_ok=True)
 
           if not src.exists():
-              print("WARN: junit-nl-suite.xml not found")
-          else:
+              # Try to use any existing XML as a source (e.g., claude-nl-tests.xml)
+              candidates = sorted(Path('reports').glob('*.xml'))
+              if candidates:
+                  src = candidates[0]
+              else:
+                  print("WARN: no XML source found for normalization")
+
+          if src.exists():
               try:
                   root = ET.parse(src).getroot()
                   rtag = localname(root.tag)
@@ -311,7 +317,7 @@ jobs:
         run: |
             set -eu
             mkdir -p reports
-            if ! ls reports/*.xml >/dev/null 2>&1; then
+            if [ ! -f reports/junit-for-actions.xml ]; then
               printf '%s\n' \
                 '<?xml version="1.0" encoding="UTF-8"?>' \
                 '<testsuite name="UnityMCP.NL-T" tests="1" failures="1" time="0">' \
@@ -319,7 +325,7 @@ jobs:
                 '    <failure><![CDATA[No JUnit was produced by the NL suite step. See the '"'"'Run Claude NL suite (single pass)'"'"' logs.]]></failure>' \
                 '  </testcase>' \
                 '</testsuite>' \
-                > reports/junit-fallback.xml
+                > reports/junit-for-actions.xml
             fi
         
 
@@ -327,10 +333,7 @@ jobs:
         if: always()
         uses: mikepenz/action-junit-report@v5
         with:
-          report_paths: |
-            reports/junit-for-actions.xml
-            ${{ env.JUNIT_OUT }}
-          group_reports: false
+          report_paths: 'reports/junit-for-actions.xml'
           include_passed: true
           detailed_summary: true
           annotate_notice: true
