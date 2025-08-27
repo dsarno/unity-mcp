@@ -65,7 +65,11 @@ namespace MCPForUnity.Editor.Helpers
                     // Normalize to full path style
                     if (directory.Contains(canonical))
                     {
-                        effectiveDir = directory.Replace(canonical, symlinkSeg);
+                        var candidate = directory.Replace(canonical, symlinkSeg).Replace('\\', '/');
+                        if (System.IO.Directory.Exists(candidate))
+                        {
+                            effectiveDir = candidate;
+                        }
                     }
                     else
                     {
@@ -76,7 +80,11 @@ namespace MCPForUnity.Editor.Helpers
                         {
                             string home = System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal) ?? string.Empty;
                             string suffix = norm.Substring(idx + "/.local/share/".Length); // UnityMCP/...
-                            effectiveDir = System.IO.Path.Combine(home, "Library", "AppSupport", suffix).Replace('\\', '/');
+                            string candidate = System.IO.Path.Combine(home, "Library", "AppSupport", suffix).Replace('\\', '/');
+                            if (System.IO.Directory.Exists(candidate))
+                            {
+                                effectiveDir = candidate;
+                            }
                         }
                     }
                 }
