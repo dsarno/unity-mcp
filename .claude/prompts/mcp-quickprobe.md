@@ -7,7 +7,7 @@ Rules (must follow exactly):
 
 1) Call mcp__unity__find_in_file with:
 {
-  "project_relative_file": "ClaudeTests/longUnityScript-claudeTest.cs",
+  "project_relative_file": "TestProjects/UnityMCPTests/Assets/Scripts/LongUnityScriptClaudeTest.cs",
   "pattern": "class\\s+LongUnityScriptClaudeTest"
 }
 
