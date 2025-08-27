@@ -100,7 +100,7 @@ namespace MCPForUnity.Editor
         {
             // Skip bridge in headless/batch environments (CI/builds) unless explicitly allowed via env
             // CI override: set UNITY_MCP_ALLOW_BATCH=1 to allow the bridge in batch mode
-            if (Application.isBatchMode && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("UNITY_MCP_ALLOW_BATCH")))
+            if (Application.isBatchMode && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("UNITY_MCP_ALLOW_BATCH")))
             {
                 return;
             }
