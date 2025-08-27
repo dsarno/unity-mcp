@@ -3,7 +3,8 @@ Version: 1.1.0 (update this when the prompt changes materially)
 Consumed by: .github/workflows/claude-nl-suite.yml (Unity NL suite job)
 
 You are running in CI at the repository root. Use only the tools allowed by the workflow (see `allowed_tools` in .github/workflows/claude-nl-suite.yml).
-At the start of the first test, log the effective `allowed_tools` list into the `<system-out>` for easier troubleshooting.
+At the start of the run, log the effective tools ONCE as a single line in `<system-out>`:
+`AllowedTools: <comma-separated tool ids>`.
 
 ## Sharding and filtering
 - Honor a `TEST_FILTER` variable (passed via the workflow `vars` JSON) of the form `group:<name>`.
@@ -29,6 +30,15 @@ At the start of the first test, log the effective `allowed_tools` list into the 
 - Prefer structured edit tools via MCP for method/class edits; use text-range ops when specified.
 - Include `precondition_sha256` for any write (text-path or structured edit). In CI/headless, pass `project_root: "TestProjects/UnityMCPTests"` when reading/writing by URI.
   - Hash must be the SHA-256 of the on-disk file bytes immediately before applying the edit (normalize line endings per Implementation notes).
+
+## Execution discipline
+- Log allowed tools once as `AllowedTools: ...` (single line) at suite start.
+- For every edit: Read → Write → Re-read. Compute `precondition_sha256` from the just-read bytes; never reuse an old hash.
+- If you get `{ status: "stale_file" }`: re-read and retry the edit ONCE. If it still fails, record failure and immediately write JUnit and MD outputs.
+- For each test: perform the edit, verify windows/diff, then revert to a clean tree before proceeding to the next test.
+- Evidence windows only (±20–40 lines). Never dump entire files.
+- Cap unified diffs to 300 lines; if truncated, include `...diff truncated...` before the `VERDICT:` line.
+- End `<system-out>` with `VERDICT: PASS` or `VERDICT: FAIL`.
 
 ## Output requirements
 - JUnit XML at `JUNIT_OUT` (or `reports/claude-nl-tests.xml` if unset). Create the `reports/` directory if missing.
