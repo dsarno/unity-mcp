@@ -13,8 +13,8 @@ You are running inside CI for the **unity-mcp** repository. Your task is to demo
    - Optionally include one idempotency/no‑op check (re‑apply an edit and confirm nothing breaks).
 4) **Validate your edits.** Re‑read the modified regions and verify the changes exist, compile‑risk is low, and surrounding structure remains intact.
 5) **Report results.** Produce both:
-   - A JUnit XML at `reports/claude-nl-tests.xml` containing a single suite named `UnityMCP.NL` with one testcase per sub‑test you executed (mark pass/fail and include helpful failure text).
-   - A summary markdown at `reports/claude-nl-summary.md` that explains what you attempted, what succeeded/failed, and any follow‑ups you would try.
+   - A JUnit XML at `reports/junit-nl-suite.xml` containing a single suite named `UnityMCP.NL` with one test case per sub‑test you executed (mark pass/fail and include helpful failure text).
+   - A summary markdown at `reports/junit-nl-suite.md` that explains what you attempted, what succeeded/failed, and any follow‑ups you would try.
 6) **Be gentle and reversible.** Prefer targeted, minimal edits; avoid wide refactors or non‑deterministic changes.
 
 ## Assumptions & Hints (non‑prescriptive)

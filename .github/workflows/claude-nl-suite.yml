@@ -178,7 +178,8 @@ jobs:
             echo "== status files =="; ls -la "$HOME/.unity-mcp" || true
             echo "== status contents =="; for f in "$HOME"/.unity-mcp/unity-mcp-status-*.json; do [ -f "$f" ] && { echo "--- $f"; sed -n '1,120p' "$f"; }; done
             echo "== sockets (inside container) =="; docker exec unity-mcp bash -lc 'ss -lntp || netstat -tulpen || true'
-            echo "== tail of Unity log =="; docker logs --tail 200 unity-mcp || true
+            echo "== tail of Unity log =="
+            docker logs --tail 200 unity-mcp | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' || true
             exit 1
           fi
 
