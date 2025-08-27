@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      JUNIT_OUT: reports/junit.xml
+      JUNIT_OUT: reports/junit-nl-suite.xml
       MD_OUT:    reports/junit-nl-suite.md
 
     steps:
@@ -216,9 +216,6 @@ jobs:
       - name: Run Claude NL suite (single pass)
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
-        env:
-          JUNIT_OUT: reports/junit-nl-suite.xml
-          MD_OUT:    reports/junit-nl-suite.md
         with:
           use_node_cache: false
           prompt_file: .claude/prompts/nl-unity-suite-full.md
@@ -241,7 +238,7 @@ jobs:
           def localname(tag: str) -> str:
               return tag.rsplit('}', 1)[-1] if '}' in tag else tag
 
-          src = Path(os.environ.get('JUNIT_OUT', 'reports/junit.xml'))
+          src = Path(os.environ.get('JUNIT_OUT', 'reports/junit-nl-suite.xml'))
           out = src
           out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -336,11 +333,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-            name: claude-nl-suite-artifacts
-            path: |
-              ${{ env.JUNIT_OUT }}
-              ${{ env.MD_OUT }}
-              
+          name: claude-nl-suite-artifacts
+          path: |
+            ${{ env.JUNIT_OUT }}
+            ${{ env.MD_OUT }}
+          retention-days: 7
         
 
       # ---------- Always stop Unity ----------

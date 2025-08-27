@@ -14,11 +14,12 @@ You are running inside CI for the unity-mcp repository. Use only the tools allow
 - If the preferred file is missing, select a safe alternative C# script under `Assets/`.
 - If compilation is unavailable, rely on structural checks and validation tools.
 
-+## Tool mapping (use these APIs)
-+When the tests say **replace_range** or **regex_replace**, call:
-+- `mcp__unity__apply_text_edits` for single-range inserts/replacements.
-+- `mcp__unity__script_apply_edits` for regex/anchor operations.
-+- `mcp__unity__validate_script` for validation (`level: "standard"`).
+## Tool mapping (use these APIs)
+When the tests say **replace_range** or **regex_replace**, call:
+- `mcp__unity__apply_text_edits` for precise text edits, including atomic multi-edit batches (multiple non-overlapping ranges applied together in one call).
+- `mcp__unity__script_apply_edits` for regex/anchor or structured method/class edits (pattern- or symbol-based changes).
+- `mcp__unity__validate_script` for validation (`level: "standard"`).
+Edits within a batch are applied atomically; ranges must be non-overlapping.
 
 
 ## Output Requirements (match NL suite conventions)
