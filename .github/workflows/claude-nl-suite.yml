@@ -216,7 +216,7 @@ jobs:
           JUNIT_OUT: reports/junit-nl-suite.xml
           MD_OUT:    reports/junit-nl-suite.md
         with:
-          use_node_cache: true
+          use_node_cache: false
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           claude_args: |
             --mcp-config .claude/mcp.json
