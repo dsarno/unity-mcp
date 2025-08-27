@@ -43,6 +43,9 @@ MCP for Unity acts as a bridge, allowing AI assistants (like Claude, Cursor) to 
   *   `manage_shader`: Performs shader CRUD operations (create, read, modify, delete).
   *   `manage_gameobject`: Manages GameObjects: create, modify, delete, find, and component operations.
   *   `execute_menu_item`: Executes a menu item via its path (e.g., "File/Save Project").
+  *   `apply_text_edits`: Precise text edits with precondition hashes and atomic multi-edit batches.
+  *   `script_apply_edits`: Structured C# method/class edits (insert/replace/delete) with safer boundaries.
+  *   `validate_script`: Fast validation (basic/standard) to catch syntax/structure issues before/after writes.
 </details>
 
 ---
