@@ -1,5 +1,5 @@
 # Unity NL/T Editing Suite — Full Coverage (NL-0 … T-J)
-Version: 1.1.0 (update this when the prompt changes materially)
+Version: 1.1.1 (update this when the prompt changes materially)
 Consumed by: .github/workflows/claude-nl-suite.yml (Unity NL suite job)
 
 You are running in CI at the repository root. Use only the tools allowed by the workflow (see `allowed_tools` in .github/workflows/claude-nl-suite.yml).
@@ -187,6 +187,10 @@ VERDICT: PASS
 ### Implementation notes
 - Always capture pre/post windows (±20–40 lines) as evidence in JUnit or system-out.
 - For any file write, include `precondition_sha256` computed over file bytes after normalizing line endings to LF (`\n`) and ensuring UTF-8 without BOM, unless the server specifies otherwise.
+- Stale write retry: If any write returns `{ success:false, status:"stale_file", actual_current_sha256 }`, immediately:
+  (a) re-read the file,
+  (b) recompute `precondition_sha256` using LF normalization,
+  (c) re-apply the same edit once using the returned `actual_current_sha256`. If it stales again, record a failing testcase with the evidence window and continue to the next test.
 - Verify the post-edit file hash in logs and include both pre- and post-hashes in `<system-out>`.
 - Restore repository to original state at end (`git status` must be clean). If not clean, mark the suite as FAIL.
 
