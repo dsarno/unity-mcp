@@ -184,7 +184,7 @@ jobs:
         run: |
           set -eux
           mkdir -p .claude
-          cat > .claude/mcp.json <<'JSON'
+          cat > .claude/mcp.json <<JSON
           {
             "mcpServers": {
               "unity": {
@@ -194,7 +194,7 @@ jobs:
                 "env": {
                   "PYTHONUNBUFFERED": "1",
                   "MCP_LOG_LEVEL": "debug",
-                  "UNITY_PROJECT_ROOT": "${{ github.workspace }}/TestProjects/UnityMCPTests"
+                  "UNITY_PROJECT_ROOT": "$GITHUB_WORKSPACE/TestProjects/UnityMCPTests"
                 }
               }
             }
