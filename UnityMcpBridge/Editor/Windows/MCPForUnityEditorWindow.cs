@@ -1206,6 +1206,7 @@ namespace MCPForUnity.Editor.Windows
 			// Robust atomic write without redundant backup or race on existence
 			string tmp = configPath + ".tmp";
 			string backup = configPath + ".backup";
+			bool writeDone = false;
 			try
 			{
 				// Write to temp file first (in same directory for atomicity)
@@ -1215,35 +1216,34 @@ namespace MCPForUnity.Editor.Windows
 				{
 					// Try atomic replace; creates 'backup' only on success
 					System.IO.File.Replace(tmp, configPath, backup);
-					// Replace succeeded; remove backup copy as we don't need to keep it
-					try { if (System.IO.File.Exists(backup)) System.IO.File.Delete(backup); } catch { }
+					writeDone = true;
 				}
 				catch (System.IO.FileNotFoundException)
 				{
 					// Destination didn't exist; fall back to atomic move
 					System.IO.File.Move(tmp, configPath);
+					writeDone = true;
 				}
 			}
 			catch (Exception ex)
 			{
-				// Attempt restore from backup if replace had succeeded before any later failure
+				// If write did not complete, attempt restore from backup without deleting current file first
 				try
 				{
-					if (System.IO.File.Exists(backup))
+					if (!writeDone && System.IO.File.Exists(backup))
 					{
-						try { if (System.IO.File.Exists(configPath)) System.IO.File.Delete(configPath); } catch { }
-						System.IO.File.Move(backup, configPath);
+						try { System.IO.File.Copy(backup, configPath, true); } catch { }
 					}
 				}
 				catch { }
-				// Ensure temp is cleaned
-				try { if (System.IO.File.Exists(tmp)) System.IO.File.Delete(tmp); } catch { }
 				throw new Exception($"Failed to write config file '{configPath}': {ex.Message}", ex);
 			}
 			finally
 			{
-				// Best-effort cleanup
+				// Best-effort cleanup of temp
 				try { if (System.IO.File.Exists(tmp)) System.IO.File.Delete(tmp); } catch { }
+				// Only remove backup after a confirmed successful write
+				try { if (writeDone && System.IO.File.Exists(backup)) System.IO.File.Delete(backup); } catch { }
 			}
 			try
 			{
