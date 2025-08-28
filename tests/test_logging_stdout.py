@@ -36,8 +36,8 @@ def test_no_print_statements_in_codebase():
         try:
             text = py_file.read_text(encoding="utf-8", errors="strict")
         except UnicodeDecodeError:
-            # Be tolerant of encoding edge cases in source tree
-            text = py_file.read_text(encoding="utf-8", errors="ignore")
+            # Be tolerant of encoding edge cases in source tree without silently dropping bytes
+            text = py_file.read_text(encoding="utf-8", errors="replace")
         try:
             tree = ast.parse(text, filename=str(py_file))
         except SyntaxError:
