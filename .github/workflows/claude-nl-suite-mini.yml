@@ -145,9 +145,8 @@ jobs:
           if ! docker ps --format '{{.Names}}' | grep -qx 'unity-mcp'; then
             echo "Unity container failed to start"; docker ps -a || true; exit 1
           fi
-          docker logs -f unity-mcp & LOGPID=$!
+          docker logs -f unity-mcp 2>&1 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' & LOGPID=$!
           deadline=$((SECONDS+420)); READY=0
-
           try_connect_host() {
             P="$1"
             timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$P; head -c 8 <&3 >/dev/null" && return 0 || true
