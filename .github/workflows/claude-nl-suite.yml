@@ -146,7 +146,7 @@ jobs:
             echo "Unity container failed to start"; docker ps -a || true; exit 1
           fi
           # Stream Unity logs with real-time redaction, capture PID
-         docker logs -f unity-mcp 2>&1 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' & LOGPID=$!
+          docker logs -f unity-mcp 2>&1 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' & LOGPID=$!
           deadline=$((SECONDS+420)); READY=0
           try_connect_host() {
             P="$1"
