@@ -1,189 +1,141 @@
-# Unity NL/T Editing Suite
+# Unity NL/T Editing Suite — CI Agent Contract
 
-You are running inside CI for the unity-mcp repository. Use only the tools allowed by the workflow. Work autonomously; do not prompt the user. Do NOT spawn subagents.
+You are running inside CI for the `unity-mcp` repo. Use only the tools allowed by the workflow. Work autonomously; do not prompt the user. Do NOT spawn subagents.
+
+**Print this once, verbatim, early in the run:**
+AllowedTools: Write,Bash(printf:*),Bash(echo:*),mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script,mcp__unity__find_in_file, mcp__read__console
+
+---
 
 ## Mission
-1) Discover capabilities (primer/capabilities if available).
-2) Choose target file: prefer `TestProjects/UnityMCPTests/Assets/Scripts/LongUnityScriptClaudeTest.cs`; otherwise a simple C# under `TestProjects/UnityMCPTests/Assets/`.
-3) Execute the full NL/T test list below using minimal, precise edits. Keep changes small and reversible.
-4) Validate each edit via re-read and windows/diffs.
-5) Report results in JUnit XML and Markdown.
+1) Pick target file (prefer):
+   - `unity://path/Assets/Scripts/LongUnityScriptClaudeTest.cs`
+2) Execute **all** NL/T tests in order (listed below) using minimal, precise edits.
+3) Validate each edit with `mcp__unity__validate_script(level:"standard")`.
+4) **Report**: write a `<testcase>` XML fragment per test to `reports/<TESTID>_results.xml`. Do **not** edit or read `$JUNIT_OUT`.
+5) Revert file changes after each test; keep workspace clean.
 
-## Assumptions & Hints
-- Include `ctx: {}` and `project_root: "TestProjects/UnityMCPTests"` for list/read/edit operations in CI.
-- If the preferred file is missing, select a safe alternative C# script under `Assets/`.
-- If compilation is unavailable, rely on structural checks and validation tools.
+---
 
-## Tool mapping (use these APIs)
-When the tests say **replace_range** or **regex_replace**, call:
-- `mcp__unity__apply_text_edits` for precise text edits, including atomic multi-edit batches (multiple non-overlapping ranges applied together in one call).
-- `mcp__unity__script_apply_edits` for regex/anchor or structured method/class edits (pattern- or symbol-based changes).
-- `mcp__unity__validate_script` for validation (`level: "standard"`).
-- Do not use `mcp__unity__create_script`; restoring is done via full-file text edits, not create.
-Edits within a batch are applied atomically; ranges must be non-overlapping.
+## Environment & Paths (CI)
+- Always pass: `project_root: "TestProjects/UnityMCPTests"` and `ctx: {}` on list/read/edit/validate.
+- **Canonical URIs only**:
+  - Primary: `unity://path/Assets/...` (never embed `project_root` into the URI)
+  - Relative (when supported): `Assets/...`
+- CI prepares:
+  - `$JUNIT_OUT=reports/junit-nl-suite.xml` (pre‑created skeleton; do not modify directly)
+  - `$MD_OUT=reports/junit-nl-suite.md` (CI synthesizes from JUnit)
 
+---
 
-## Output Requirements (match NL suite conventions)
-- JUnit at `$JUNIT_OUT` (canonical). Suite name `UnityMCP.NL-T`.
-- Markdown at `$MD_OUT` (canonical). CI synthesizes at end; you may append small fragments but do not round‑trip full files.
-- Log allowed tools once as a single line: `AllowedTools: ...`.
-- For every edit: Read → Write (with precondition hash). On `{status:"stale_file"}`, retry once using a server-provided hash (`current_sha256` or `expected_sha256`) if present; otherwise perform a single re-read and retry.
-- Evidence windows only (±20–40 lines); cap unified diffs to 100 lines and note truncation.
-- End `<system-out>` with `VERDICT: PASS` or `VERDICT: FAIL`.
+## Tool Mapping
+- **Anchors/regex/structured**: `mcp__unity__script_apply_edits`
+- **Precise ranges / atomic multi‑edit batch**: `mcp__unity__apply_text_edits` (non‑overlapping ranges)
+- **Validation**: `mcp__unity__validate_script(level:"standard")`
+- **Reporting**: `Write` small XML fragments to `reports/*_results.xml`.  
+  Bash is allowed but not required; do not use Bash for diagnostics or env probing.
 
-### Reporting discipline (must-follow)
-- CI pre-creates the report skeletons. Do NOT rewrite wrappers.
-- Do NOT create alternate report files; always emit to `$JUNIT_OUT` and `$MD_OUT`.
-- Append small fragments only (PLAN/PROGRESS; single `<testcase>` blocks) via Write or Bash(printf/echo). No full‑file round‑trips and no wrappers.
-- All human‑readable lines (PLAN, AllowedTools) must appear only inside `<system-out><![CDATA[...]]></system-out>` within a `<testcase>`.
-- Keep transient state in memory.
+> Never call: `mcp__unity__create_script`, “console/read_console”, or any tool not in AllowedTools.  
+> Never edit `using` directives or the header region.
 
-## Safety & hygiene
-- Make edits in-place, then revert after validation so the workspace is clean.
-- At suite start, capture baseline `{ text, sha256 }` for the target file. After each test, revert to baseline via a single full-file replace using the baseline bytes with `precondition_sha256` = current on-disk sha (use server-provided `current_sha256`/`expected_sha256` on `stale_file`), then re-read to confirm the revert before proceeding.
-- Never push commits from CI.
-- Do not modify Unity start/stop/licensing; assume Unity is already running per workflow.
+---
 
-## CI headless hints
-- For `mcp__unity__list_resources`/`read_resource`, specify:
-  - `project_root`: `"TestProjects/UnityMCPTests"`
-  - `ctx`: `{}`
-- Canonical URIs:
-  - `unity://path/Assets/Scripts/LongUnityScriptClaudeTest.cs`
-  - `Assets/Scripts/LongUnityScriptClaudeTest.cs`
+## Output Rules (JUnit fragments only)
+- For each test, create **one** file: `reports/<TESTID>_results.xml` containing exactly a `<testcase ...> ... </testcase>`.
+- Put human‑readable lines (PLAN/PROGRESS/evidence) **inside** `<![CDATA[ ... ]]>` of that testcase’s `<system-out>`.
+- Evidence windows only (±20–40 lines). If a unified diff is shown, cap at 100 lines and note truncation.
+- **Do not** open/patch `$JUNIT_OUT` or `$MD_OUT`. CI will merge fragments and synthesize Markdown.
 
-## Full NL/T Test List (imported)
-
-### Execution order (must follow; do not regex-filter)
-Run tests exactly in this order:
-NL-0, NL-1, NL-2, NL-3, NL-4,
-T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
-At suite start, emit a single line plan:
+**Example fragment (shape):**
+```xml
+<testcase classname="UnityMCP.NL-T" name="NL-1. Method replace/insert/delete">
+  <system-out><![CDATA[
 PLAN: NL-0,NL-1,NL-2,NL-3,NL-4,T-A,T-B,T-C,T-D,T-E,T-F,T-G,T-H,T-I,T-J (len=15)
-After each testcase, emit:
-PROGRESS: <k>/15 completed
+PROGRESS: 2/15 completed
+pre_sha=<...>
+... evidence windows ...
+VERDICT: PASS
+]]></system-out>
+</testcase>
 
-### NL-0. Sanity Reads (windowed)
-- Tail 120 lines; read 40 lines around `Update()` signature.
+### Guarded Write Pattern (must follow)
 
-### NL-1. Method replace/insert/delete
-- Replace `HasTarget` body to `return currentTarget != null;`
-- Insert `PrintSeries()` after `GetCurrentTarget` logging `"1,2,3"`.
-- Verify windows, then delete `PrintSeries()`; confirm original hash.
+- Before any mutation in a test: set `buf = read_text(uri)` and `pre_sha = sha256(read_bytes(uri))`.
+- Write using `precondition_sha256 = pre_sha`.
+- On `{status:"stale_file"}`:
+  - Retry once using server hash (`data.current_sha256` or `data.expected_sha256`).
+  - If no hash provided, do one re-read then retry once. No loops.
+- After every successful write:
+  - Immediately re-read raw bytes and set `pre_sha = sha256(read_bytes(uri))` before any further edits in the same test.
+- Keep edits inside method bodies where possible. Use anchors for end-of-class/above-method insertions.
+- Do not touch header/using regions.
 
-### NL-2. Anchor comment insertion
-- Insert `// Build marker OK` immediately above `public void Update(...)` (ignore XML docs).
+### Revert at test end
 
-### NL-3. End-of-class insertion
-- Insert three lines `// Tail test A/B/C` before final class brace; preserve indentation and trailing newline.
+- Restore exact pre-test bytes via a single full-file replace with `precondition_sha256` = current on-disk sha (or server-provided hash on stale), then re-read to confirm baseline hash.
 
-### NL-4. Compile trigger (record-only)
-- Ensure no obvious syntax issues; record INFO.
+### Execution Order (fixed)
 
-### T-A. Anchor insert (text path)
-- After `GetCurrentTarget`, insert `private int __TempHelper(int a, int b) => a + b;` via `replace_range` at insertion point; verify; then delete via `regex_replace`.
+- Run exactly in this order (15 tests total):
+  - NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J
+- At NL‑0, include the PLAN line (len=15).
+- After each testcase, include `PROGRESS: <k>/15 completed`.
 
-### T-B. Replace method body (minimal range)
-- Change only inside `HasTarget` braces via a single `replace_range`; then revert.
+### Test Specs (concise)
 
-### T-C. Header/region preservation
-- For `ApplyBlend`, modify interior lines only; keep signature/docs/regions unchanged.
+- NL‑0. Sanity reads
+  - Tail ~120 lines; read ±40 lines around `Update()`.
 
-### T-D. End-of-class insertion (anchor)
-- Find final class brace; insert helper before; then remove.
+- NL‑1. Method replace/insert/delete
+  - Replace `HasTarget` body → `return currentTarget != null;`
+  - Insert `PrintSeries()` after `GetCurrentTarget` logging "1,2,3".
+  - Verify windows, then delete `PrintSeries()`; confirm original hash.
 
-### T-E. Temporary method lifecycle
-- Insert helper (T-A), update via `apply_text_edits`, then delete via `regex_replace`.
+- NL‑2. Anchor comment
+  - Insert `// Build marker OK` immediately above `public void Update(...)` (ignore XML docs).
 
-### T-F. Multi-edit atomic batch
-- In a single `mcp__unity__apply_text_edits`/`mcp__unity__script_apply_edits` call, include two `replace_range` tweaks + one end-of-class comment insert using one `precondition_sha256` computed from the same snapshot. The server must apply all edits atomically or reject the entire batch (no partial application).
+- NL‑3. End‑of‑class insertion
+  - Insert three lines `// Tail test A/B/C` before final class brace; preserve indentation + trailing newline.
 
-### T-G. Path normalization
-- Run the same edit with both URIs; second attempt should return `{ status: "no_change" }`.
+- NL‑4. Compile trigger (record‑only)
+  - Record INFO if no obvious syntax issues.
 
-### T-H. Validation levels
-- Use `validate_script` with `level: "standard"` after edits; only allow `basic` for transient steps.
+- T‑A. Anchor insert (text path)
+  - After `GetCurrentTarget`, insert helper:
+    ```csharp
+    private int __TempHelper(int a, int b) => a + b;
+    ```
+  - Minimal insertion; verify; then delete via `regex_replace`.
 
-### T-I. Failure surfaces (expected)
-- Too large payload → `{status:"too_large"}`
-- Stale file (old hash) → `{status:"stale_file"}`
-- Overlap → rejection
-- Unbalanced braces → validation failure
-- Using-directives guard → `{status:"using_guard"}`
-- Parameter aliasing accepted; server echoes canonical keys.
-- Auto-upgrade: prefer structured edits or return clear error.
+- T‑B. Replace method body (minimal range)
+  - Change only inside `HasTarget` braces via a single `replace_range`; then revert.
 
-### T-J. Idempotency & no-op
-- Re-run identical `replace_range` → `{ status: "no_change" }` and unchanged hash.
-- Re-run delete of already-removed helper via `regex_replace` → no-op.
+- T‑C. Header/region preservation
+  - For `ApplyBlend`, modify interior only; keep signature/docs/regions unchanged.
 
-### Implementation notes
-- Capture pre/post windows; include pre/post hashes in logs.
-- Maintain a per-test in-memory working buffer `buf` (text) and `pre_sha = sha256(read_bytes(uri))` (raw bytes; no normalization) at the start of each test.
-- After a successful write, update `buf` locally by applying the same edit and recompute `pre_sha` from the on-disk bytes only if needed; prefer avoiding a re-read when positions are stable.
-- If a write returns `stale_file`, prefer retrying once without reading using a server-provided hash (`data.current_sha256` or `data.expected_sha256`). Only if neither is present, perform a single re-read and retry; otherwise record failure and continue.
-- Re-read only at well-defined points: (a) at the start of each test, (b) after a failed stale retry, (c) when validation demands it, and (d) immediately after each revert to confirm baseline.
-- Always revert any mutations at the end of each test, then re-read to confirm clean state before the next test.
-- Never abort the suite on a single test failure; log the failure (including `{ status: ... }`) and proceed to the next test.
+- T‑D. End‑of‑class insertion (anchor)
+  - Insert helper before the final class brace; then remove.
 
-Logging (print these around each write for CI clarity):
-- `pre_sha=<sha256(raw bytes)>` before write
-- on stale: `stale: expected=<...> current=<...> retry_pre_sha=<picked>`
-- after success: `post_sha=<sha256(raw bytes)>`
+- T‑E. Temporary method lifecycle
+  - Insert helper (as in T‑A), update via `apply_text_edits`, then delete via `regex_replace`.
 
-### Test driver (must follow)
-For each test NL-0..NL-4, then T-A..T-J:
-1) READ → compute `pre_sha = sha256(read_bytes(uri))`.
-2) RUN using the guarded write pattern for every mutation.
-3) VALIDATE with `mcp__unity__validate_script(level:"standard")` unless the step is read-only.
-4) RE-READ evidence windows; write JUnit + Markdown entries.
-5) REVERT: if the test mutated the file, restore the exact pre-test content via a single full-file replace using the baseline bytes; set `precondition_sha256` to the current on-disk sha (or server-provided hash on `stale_file`); always re-read and confirm the baseline hash before continuing.
-6) Append `VERDICT: PASS` or `VERDICT: FAIL` to `<system-out>` for that testcase.
-7) Continue to the next test regardless of outcome.
+- T‑F. Multi‑edit atomic batch
+  - In a single call, two small `replace_range` tweaks + one end‑of‑class comment, using one `precondition_sha256` from the same snapshot. Server must apply all or reject all.
 
-### Guarded write pattern (must use for every edit)
-Hash refresh and anchors (priority rules):
-- CRITICAL: After every successful write of a file, immediately re-read raw bytes from disk and set `pre_sha` to the on-disk hash before any further edits within the same test.
-- Prefer `mcp__unity__script_apply_edits` for anchor work (e.g., above `Update`, end-of-class) to reduce offset drift; keep changes inside methods.
-- Do not touch `using` directives or the file header.
-```pseudo
-function guarded_write(uri, make_edit_from_text):
-  # Precondition: buf (text) and pre_sha (sha256 over raw bytes) are current for this test
-  edit = make_edit_from_text(buf)         # compute ranges/anchors against in-memory buf
-  res  = write(uri, edit, precondition_sha256=pre_sha)
-  if res.status == "ok":
-      buf     = apply_local(edit, buf)    # update buffer without re-read when possible
-      # Optionally refresh pre_sha by hashing on-disk bytes if subsequent ops require exact sync
-      # pre_sha = sha256(read_bytes(uri))
-  elif res.status == "stale_file":
-      # Fast path: retry once using server-provided hash; avoid read if hash is present
-      next_sha = (res.data.current_sha256 or res.data.expected_sha256) if hasattr(res, 'data') else None
-      if next_sha:
-          edit2 = edit_or_recomputed(edit, buf)   # often unchanged if anchors/ranges remain stable
-          res2  = write(uri, edit2, precondition_sha256=next_sha)
-          if res2.status == "ok":
-              buf = apply_local(edit2, buf)
-          else:
-              record_failure_and_continue()
-      else:
-          fresh_text  = read(uri)
-          fresh_bytes = read_bytes(uri)
-          pre_sha     = sha256(fresh_bytes)
-          edit2       = make_edit_from_text(fresh_text)
-          res2        = write(uri, edit2, precondition_sha256=pre_sha)
-          if res2.status == "ok":
-              buf = apply_local(edit2, fresh_text)
-          else:
-              record_failure_and_continue()    # do not loop forever
-```
-Notes: Prefer `mcp__unity__script_apply_edits` for anchor/regex operations; use `mcp__unity__apply_text_edits` only for precise `replace_range` steps. Always re‑read before each subsequent test so offsets are never computed against stale snapshots.
+- T‑G. Path normalization
+  - Perform the same edit once with `unity://path/Assets/...` then with `Assets/...`. The second should yield `{status:"no_change"}`.
 
-Corruption handling:
-- If you detect corruption signatures (e.g., misplaced `using` directives inside class scope), skip incremental edits and perform the single baseline-byte full-file restore immediately (guarded write). Validate after restore, not before.
+- T‑H. Validation levels
+  - Use `validate_script(level:"standard")` after edits; `basic` only for transient checks.
 
-Revert guidance:
-- At test start, snapshot the exact original bytes (including any BOM). For revert, prefer a full-file replace back to that snapshot (single edit). If that’s not available, compute the minimal edit against current `buf` to restore exact content, then confirm hash matches the baseline.
+- T‑I. Failure surfaces (expected)
+  - Record INFO on `{status:"too_large"}`, `{status:"stale_file"}`, overlap rejection, validation failure (unbalanced braces), `{status:"using_guard"}`. No retries beyond the guarded pattern.
+
+- T‑J. Idempotency & no‑op
+  - Re‑run identical `replace_range` → `{status:"no_change"}` with same hash.
+  - Re‑run delete of already‑removed helper via `regex_replace` → no‑op.
 
 ### Status handling
-- Treat expected safeguard statuses as non-fatal: `using_guard`, `unsupported`, and similar should record INFO in JUnit and continue.
-- For idempotency cases (e.g., T-J), `{ status: "no_change" }` counts as PASS; for tests that require a real change, treat `{ status: "no_change" }` as SKIP/INFO and continue.
+
+- Treat safeguard statuses as non‑fatal; record within the testcase and proceed.
+- Each testcase ends its `<system-out>` with `VERDICT: PASS` or `VERDICT: FAIL`.
