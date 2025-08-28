@@ -70,21 +70,25 @@ def main(path: str) -> int:
     changed = False
     for ts in suites:
         for case in list(ts.findall("testcase")):
-            for node_name in ("failure", "error"):
-                node = case.find(node_name)
-                if node is None:
-                    continue
-                msg = (node.get("message") or "") + "\n" + (node.text or "")
+            nodes = [n for n in list(case) if n.tag in ("failure", "error")]
+            if not nodes:
+                continue
+            # If any node matches skip patterns, convert the whole case to skipped.
+            first_match_text = None
+            to_skip = False
+            for n in nodes:
+                msg = (n.get("message") or "") + "\n" + (n.text or "")
                 if should_skip(msg):
-                    # Replace with <skipped/>
-                    reason = "Marked skipped: environment/permission precondition not met"
-                    case.remove(node)
-                    skip = ET.SubElement(case, "skipped")
-                    skip.set("message", reason)
-                    skip.text = (node.text or "").strip() or reason
-                    changed = True
-                    break  # only one conversion per case
-
+                    first_match_text = (n.text or "").strip() or first_match_text
+                    to_skip = True
+            if to_skip:
+                for n in nodes:
+                    case.remove(n)
+                reason = "Marked skipped: environment/permission precondition not met"
+                skip = ET.SubElement(case, "skipped")
+                skip.set("message", reason)
+                skip.text = first_match_text or reason
+                changed = True
         # Recompute tallies per testsuite
         tests, failures, errors, skipped = summarize_counts(ts)
         ts.set("tests", str(tests))
