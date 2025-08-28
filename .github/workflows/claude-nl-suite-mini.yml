@@ -203,7 +203,7 @@ jobs:
             }
           }
           JSON
-                  
+          
       # ---------- Ensure reports dir exists ----------
       - name: Prepare reports
         run: |
@@ -340,16 +340,13 @@ jobs:
           annotate_notice: true
           require_tests: false
           fail_on_parse_error: true
-          
         
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-            name: claude-nl-suite-artifacts
-            path: reports/**
-              
-        
+          name: claude-nl-suite-artifacts
+          path: reports/**
 
       # ---------- Always stop Unity ----------
       - name: Stop Unity
