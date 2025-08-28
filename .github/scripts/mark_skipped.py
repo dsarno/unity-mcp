@@ -38,7 +38,7 @@ def should_skip(msg: str) -> bool:
             return True
     return False
 
-def summarize_counts(ts):
+def summarize_counts(ts: ET.Element):
     tests = 0
     failures = 0
     errors = 0
