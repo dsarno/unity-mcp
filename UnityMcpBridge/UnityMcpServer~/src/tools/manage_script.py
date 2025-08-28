@@ -3,21 +3,57 @@ from typing import Dict, Any, List
 from unity_connection import send_command_with_retry
 import base64
 import os
+from urllib.parse import urlparse, unquote
 
 
 def register_manage_script_tools(mcp: FastMCP):
     """Register all script management tools with the MCP server."""
 
     def _split_uri(uri: str) -> tuple[str, str]:
+        """Split an incoming URI or path into (name, directory) suitable for Unity.
+
+        Rules:
+        - unity://path/Assets/... → keep as Assets-relative (after decode/normalize)
+        - file://... → percent-decode, normalize, strip host and leading slashes,
+          then, if any 'Assets' segment exists, return path relative to that 'Assets' root.
+          Otherwise, fall back to original name/dir behavior.
+        - plain paths → decode/normalize separators; if they contain an 'Assets' segment,
+          return relative to 'Assets'.
+        """
+        raw_path: str
         if uri.startswith("unity://path/"):
-            path = uri[len("unity://path/") :]
+            raw_path = uri[len("unity://path/") :]
         elif uri.startswith("file://"):
-            path = uri[len("file://") :]
+            parsed = urlparse(uri)
+            # Use parsed.path (percent-encoded) and decode it
+            raw_path = unquote(parsed.path or "")
+            # Handle cases like file://localhost/...
+            if not raw_path and uri.startswith("file://"):
+                raw_path = uri[len("file://") :]
         else:
-            path = uri
-        path = path.replace("\\", "/")
-        name = os.path.splitext(os.path.basename(path))[0]
-        directory = os.path.dirname(path)
+            raw_path = uri
+
+        # Percent-decode any residual encodings and normalize separators
+        raw_path = unquote(raw_path).replace("\\", "/")
+        if raw_path.startswith("//"):
+            # Strip possible leading '//' from malformed file URIs
+            raw_path = raw_path.lstrip("/")
+
+        # Normalize path (collapse ../, ./)
+        norm = os.path.normpath(raw_path).replace("\\", "/")
+
+        # If an 'Assets' segment exists, compute path relative to it
+        parts = [p for p in norm.split("/") if p not in ("", ".")]
+        try:
+            idx = parts.index("Assets")
+            assets_rel = "/".join(parts[idx:])
+        except ValueError:
+            assets_rel = None
+
+        effective_path = assets_rel if assets_rel else norm
+
+        name = os.path.splitext(os.path.basename(effective_path))[0]
+        directory = os.path.dirname(effective_path)
         return name, directory
 
     @mcp.tool()
