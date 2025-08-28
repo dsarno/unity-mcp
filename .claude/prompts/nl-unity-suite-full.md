@@ -19,6 +19,7 @@ When the tests say **replace_range** or **regex_replace**, call:
 - `mcp__unity__apply_text_edits` for precise text edits, including atomic multi-edit batches (multiple non-overlapping ranges applied together in one call).
 - `mcp__unity__script_apply_edits` for regex/anchor or structured method/class edits (pattern- or symbol-based changes).
 - `mcp__unity__validate_script` for validation (`level: "standard"`).
+- Do not use `mcp__unity__create_script`; restoring is done via full-file text edits, not create.
 Edits within a batch are applied atomically; ranges must be non-overlapping.
 
 
@@ -41,7 +42,7 @@ Edits within a batch are applied atomically; ranges must be non-overlapping.
 
 ## Safety & hygiene
 - Make edits in-place, then revert after validation so the workspace is clean.
-- At suite start, capture baseline `{ text, sha256 }` for the target file. After each test, revert to baseline via a guarded write using the current on-disk sha as `precondition_sha256` (use server-provided `current_sha256` on `stale_file`), then re-read to confirm the revert before proceeding.
+- At suite start, capture baseline `{ text, sha256 }` for the target file. After each test, revert to baseline via a single full-file replace using the baseline bytes with `precondition_sha256` = current on-disk sha (use server-provided `current_sha256`/`expected_sha256` on `stale_file`), then re-read to confirm the revert before proceeding.
 - Never push commits from CI.
 - Do not modify Unity start/stop/licensing; assume Unity is already running per workflow.
 
@@ -123,7 +124,7 @@ PROGRESS: <k>/15 completed
 - Maintain a per-test in-memory working buffer `buf` (text) and `pre_sha = sha256(read_bytes(uri))` (raw bytes; no normalization) at the start of each test.
 - After a successful write, update `buf` locally by applying the same edit and recompute `pre_sha` from the on-disk bytes only if needed; prefer avoiding a re-read when positions are stable.
 - If a write returns `stale_file`, prefer retrying once without reading using a server-provided hash (`data.current_sha256` or `data.expected_sha256`). Only if neither is present, perform a single re-read and retry; otherwise record failure and continue.
-- Re-read only at well-defined points: (a) at the start of each test, (b) after a failed stale retry, or (c) when validation demands it.
+- Re-read only at well-defined points: (a) at the start of each test, (b) after a failed stale retry, (c) when validation demands it, and (d) immediately after each revert to confirm baseline.
 - Always revert any mutations at the end of each test, then re-read to confirm clean state before the next test.
 - Never abort the suite on a single test failure; log the failure (including `{ status: ... }`) and proceed to the next test.
 
@@ -138,7 +139,7 @@ For each test NL-0..NL-4, then T-A..T-J:
 2) RUN using the guarded write pattern for every mutation.
 3) VALIDATE with `mcp__unity__validate_script(level:"standard")` unless the step is read-only.
 4) RE-READ evidence windows; write JUnit + Markdown entries.
-5) REVERT: if the test mutated the file, restore the exact pre-test content via a guarded full-file replace using `pre_sha` as `precondition_sha256`; always re-read and confirm the hash matches before continuing.
+5) REVERT: if the test mutated the file, restore the exact pre-test content via a single full-file replace using the baseline bytes; set `precondition_sha256` to the current on-disk sha (or server-provided hash on `stale_file`); always re-read and confirm the baseline hash before continuing.
 6) Append `VERDICT: PASS` or `VERDICT: FAIL` to `<system-out>` for that testcase.
 7) Continue to the next test regardless of outcome.
 
@@ -174,6 +175,9 @@ function guarded_write(uri, make_edit_from_text):
               record_failure_and_continue()    # do not loop forever
 ```
 Notes: Prefer `mcp__unity__script_apply_edits` for anchor/regex operations; use `mcp__unity__apply_text_edits` only for precise `replace_range` steps. Always re‑read before each subsequent test so offsets are never computed against stale snapshots.
+
+Corruption handling:
+- If you detect corruption signatures (e.g., misplaced `using` directives inside class scope), skip incremental edits and perform the single baseline-byte full-file restore immediately (guarded write). Validate after restore, not before.
 
 Revert guidance:
 - At test start, snapshot the exact original bytes (including any BOM). For revert, prefer a full-file replace back to that snapshot (single edit). If that’s not available, compute the minimal edit against current `buf` to restore exact content, then confirm hash matches the baseline.

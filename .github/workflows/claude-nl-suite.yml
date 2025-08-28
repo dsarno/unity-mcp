@@ -458,7 +458,7 @@ jobs:
               printf '%s\n' \
                 '<?xml version="1.0" encoding="UTF-8"?>' \
                 '<testsuite name="UnityMCP.NL-T" tests="1" failures="1" time="0">' \
-                '  <testcase classname="UnityMCP.NL" name="NL-Suite.Execution" time="0.0">' \
+                '  <testcase classname="UnityMCP.NL-T" name="NL-Suite.Execution" time="0.0">' \
                 '    <failure><![CDATA[No JUnit was produced by the NL suite step. See the '"'"'Run Claude NL suite (single pass)'"'"' logs.]]></failure>' \
                 '  </testcase>' \
                 '</testsuite>' \
