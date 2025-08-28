@@ -212,6 +212,38 @@ jobs:
           rm -f reports/*.xml reports/*.md || true
           mkdir -p reports
 
+      - name: Create report skeletons
+        run: |
+          set -eu
+          cat > "$JUNIT_OUT" <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuites><testsuite name="UnityMCP.NL-T" tests="1" failures="1" errors="0" skipped="0" time="0">
+            <testcase name="NL-Suite.Bootstrap" classname="UnityMCP.NL-T">
+              <failure message="bootstrap">Bootstrap placeholder; suite will append real tests.</failure>
+            </testcase>
+          </testsuite></testsuites>
+          XML
+          cat > "$MD_OUT" <<'MD'
+          # Unity NL/T Editing Suite Test Results
+
+          ## Test Checklist
+          - [ ] NL-0
+          - [ ] NL-1
+          - [ ] NL-2
+          - [ ] NL-3
+          - [ ] NL-4
+          - [ ] T-A
+          - [ ] T-B
+          - [ ] T-C
+          - [ ] T-D
+          - [ ] T-E
+          - [ ] T-F
+          - [ ] T-G
+          - [ ] T-H
+          - [ ] T-I
+          - [ ] T-J
+          MD
+
       # ---------- Run full NL suite once ----------
       - name: Run Claude NL suite (single pass)
         uses: anthropics/claude-code-base-action@beta
@@ -220,13 +252,13 @@ jobs:
           use_node_cache: false
           prompt_file: .claude/prompts/nl-unity-suite-full.md
           mcp_config: .claude/mcp.json
-          allowed_tools: "Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script,mcp__unity__find_in_file,Bash(git:*),Bash(mkdir:*),Bash(cat:*),Bash(grep:*),Bash(echo:*)"
+          allowed_tools: "mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script,mcp__unity__find_in_file,Bash(mkdir:*),Bash(cat:*),Bash(grep:*),Bash(echo:*),Bash(printf:*)"
           disallowed_tools: "TodoWrite,Task"
           model: "claude-3-7-sonnet-latest"
           timeout_minutes: "30"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Normalize JUnit in-place (single file)
+      - name: Normalize/assemble JUnit in-place (single file)
         if: always()
         shell: bash
         run: |
@@ -244,15 +276,113 @@ jobs:
 
           if src.exists():
               try:
-                  root = ET.parse(src).getroot()
+                  tree = ET.parse(src)
+                  root = tree.getroot()
                   rtag = localname(root.tag)
-                  if rtag == 'testsuites' and len(root) == 1 and localname(root[0].tag) == 'testsuite':
-                      ET.ElementTree(root[0]).write(out, encoding='utf-8', xml_declaration=True)
+                  # Get <testsuite> node
+                  if rtag == 'testsuites':
+                      suite = root.find('./*')
                   else:
-                      out.write_bytes(src.read_bytes())
+                      suite = root
+                  # Append any testcase fragments from reports/*_results.xml
+                  fragments = sorted(Path('reports').glob('*_results.xml'))
+                  for frag in fragments:
+                      try:
+                          froot = ET.parse(frag).getroot()
+                          # Allow fragment to be either <testcase> or contain it
+                          if localname(froot.tag) == 'testcase':
+                              suite.append(froot)
+                          else:
+                              for tc in froot.findall('.//testcase'):
+                                  suite.append(tc)
+                      except Exception as fe:
+                          print(f"Skip bad fragment {frag}: {fe}")
+                  tree.write(out, encoding='utf-8', xml_declaration=True)
               except Exception as e:
                   print("Normalization error:", e)
                   out.write_bytes(src.read_bytes())
+          PY
+
+      - name: Build markdown summary from JUnit
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          import os
+
+          def localname(tag: str) -> str:
+              return tag.rsplit('}', 1)[-1] if '}' in tag else tag
+
+          src = Path(os.environ.get('JUNIT_OUT', 'reports/junit-nl-suite.xml'))
+          md_out = Path(os.environ.get('MD_OUT', 'reports/junit-nl-suite.md'))
+
+          if not src.exists():
+              md_out.write_text("# Unity NL/T Editing Suite Test Results\n\n(No JUnit found)\n", encoding='utf-8')
+          else:
+              tree = ET.parse(src)
+              root = tree.getroot()
+              if localname(root.tag) == 'testsuites':
+                  suite = next(iter(list(root)), None)
+              else:
+                  suite = root
+
+              cases = []
+              if suite is not None:
+                  cases = [tc for tc in suite.findall('.//testcase')]
+              total = len(cases)
+              failures = 0
+              for tc in cases:
+                  if tc.find('failure') is not None or tc.find('error') is not None:
+                      failures += 1
+              passed = total - failures
+
+              lines = []
+              lines.append('# Unity NL/T Editing Suite Test Results')
+              lines.append('')
+              lines.append(f'Totals: {passed} passed, {failures} failed, {total} total')
+              lines.append('')
+
+              desired_order = ['NL-0','NL-1','NL-2','NL-3','NL-4','T-A','T-B','T-C','T-D','T-E','T-F','T-G','T-H','T-I','T-J']
+              name_to_case = { (tc.get('name') or ''): tc for tc in cases }
+
+              def status_for(prefix: str):
+                  for name, tc in name_to_case.items():
+                      if name.startswith(prefix):
+                          failed = (tc.find('failure') is not None) or (tc.find('error') is not None)
+                          return not failed
+                  return None
+
+              lines.append('## Test Checklist')
+              for p in desired_order:
+                  st = status_for(p)
+                  if st is True:
+                      lines.append(f'- [x] {p}')
+                  elif st is False:
+                      lines.append(f'- [ ] {p} (fail)')
+                  else:
+                      lines.append(f'- [ ] {p} (not run)')
+              lines.append('')
+
+              # Brief failure details
+              for name, tc in name_to_case.items():
+                  fail = tc.find('failure')
+                  err = tc.find('error')
+                  node = fail if fail is not None else err
+                  if node is None:
+                      continue
+                  msg = (node.get('message') or '').strip()
+                  text = (node.text or '').strip()
+                  lines.append(f'### {name}')
+                  if msg:
+                      lines.append(f'- Message: {msg}')
+                  if text:
+                      first = text.splitlines()[0][:500]
+                      lines.append(f'- Detail: {first}')
+                  lines.append('')
+
+              md_out.write_text('\n'.join(lines), encoding='utf-8')
           PY
 
       - name: "Debug: list report files"
