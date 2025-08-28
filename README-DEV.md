@@ -97,11 +97,10 @@ We provide a CI job to run a Natural Language Editing mini-suite against the Uni
 
 
 ### MCP Connection Debugging
-- *Enable debug logs* in Unity MCP window (inside the Editor) to see shows connection status, auto-setup results, and MCP client paths. It shows
+- *Enable debug logs* in the Unity MCP window (inside the Editor) to view connection status, auto-setup results, and MCP client paths. It shows:
   - bridge startup/port, client connections, strict framing negotiation, and parsed frames
-  - auto-config path detection (Windows/macOS/Linux), uv/claude resolution, and error surfaces
-- In CI, the job tails Unity logs (redacted for serial/license/password/token) and shows socket and status JSON diagnostics if startup fails.
-
+  - auto-config path detection (Windows/macOS/Linux), uv/claude resolution, and surfaced errors
+- In CI, the job tails Unity logs (redacted for serial/license/password/token) and prints socket/status JSON diagnostics if startup fails.
 ## Workflow
 
 1. **Make changes** to your source code in this directory
