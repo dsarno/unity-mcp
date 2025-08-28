@@ -338,39 +338,84 @@ jobs:
             import xml.etree.ElementTree as ET
             from pathlib import Path
             import os
-            def localname(tag: str) -> str: return tag.rsplit('}', 1)[-1] if '}' in tag else tag
+
+            def localname(tag: str) -> str:
+                return tag.rsplit('}', 1)[-1] if '}' in tag else tag
+
             src = Path(os.environ.get('JUNIT_OUT', 'reports/junit-nl-suite.xml'))
             md_out = Path(os.environ.get('MD_OUT', 'reports/junit-nl-suite.md'))
+
             if not src.exists():
-                md_out.write_text("# Unity NL/T Editing Suite Test Results\n\n(No JUnit found)\n", encoding='utf-8'); raise SystemExit(0)
-            tree = ET.parse(src); root = tree.getroot()
+                md_out.write_text("# Unity NL/T Editing Suite Test Results\n\n(No JUnit found)\n", encoding='utf-8')
+                raise SystemExit(0)
+
+            tree = ET.parse(src)
+            root = tree.getroot()
             suite = root.find('./*') if localname(root.tag) == 'testsuites' else root
-            cases = [] if suite is None else [tc for tc in suite.findall('.//testcase')]
+            cases = [] if suite is None else list(suite.findall('.//testcase'))
+
             total = len(cases)
             failures = sum(1 for tc in cases if (tc.find('failure') is not None or tc.find('error') is not None))
             passed = total - failures
+
             desired = ['NL-0','NL-1','NL-2','NL-3','NL-4','T-A','T-B','T-C','T-D','T-E','T-F','T-G','T-H','T-I','T-J']
             name_to_case = {(tc.get('name') or ''): tc for tc in cases}
+
             def status_for(prefix: str):
                 for name, tc in name_to_case.items():
                     if name.startswith(prefix):
                         return not ((tc.find('failure') is not None) or (tc.find('error') is not None))
                 return None
+
             lines = []
-            lines += ['# Unity NL/T Editing Suite Test Results','',f'Totals: {passed} passed, {failures} failed, {total} total','', '## Test Checklist']
+            lines += [
+                '# Unity NL/T Editing Suite Test Results',
+                '',
+                f'Totals: {passed} passed, {failures} failed, {total} total',
+                '',
+                '## Test Checklist'
+            ]
             for p in desired:
                 st = status_for(p)
                 lines.append(f"- [x] {p}" if st is True else (f"- [ ] {p} (fail)" if st is False else f"- [ ] {p} (not run)"))
             lines.append('')
-            for name, tc in name_to_case.items():
-                node = tc.find('failure') or tc.find('error')
-                if node is None: continue
-                msg = (node.get('message') or '').strip()
-                text = (node.text or '').strip()
+
+            # Rich per-test system-out details
+            lines.append('## Test Details')
+
+            def order_key(n: str):
+                try:
+                    if n.startswith('NL-') and n[3].isdigit():
+                        return (0, int(n.split('.')[0].split('-')[1]))
+                except Exception:
+                    pass
+                if n.startswith('T-') and len(n) > 2 and n[2].isalpha():
+                    return (1, ord(n[2]))
+                return (2, n)
+
+            MAX_CHARS = 2000
+            for name in sorted(name_to_case.keys(), key=order_key):
+                tc = name_to_case[name]
                 lines.append(f"### {name}")
-                if msg: lines.append(f"- Message: {msg}")
-                if text: lines.append(f"- Detail: {text.splitlines()[0][:500]}")
+                so = tc.find('system-out')
+                text = '' if so is None or so.text is None else so.text.replace('\r\n','\n')
+                if text.strip():
+                    t = text.strip()
+                    if len(t) > MAX_CHARS:
+                        t = t[:MAX_CHARS] + "\n…(truncated)"
+                    lines.append('```')
+                    lines.append(t)
+                    lines.append('```')
+                else:
+                    lines.append('(no system-out)')
+                node = tc.find('failure') or tc.find('error')
+                if node is not None:
+                    msg = (node.get('message') or '').strip()
+                    body = (node.text or '').strip()
+                    if msg: lines.append(f"- Message: {msg}")
+                    if body: lines.append(f"- Detail: {body.splitlines()[0][:500]}")
                 lines.append('')
+
             md_out.write_text('\n'.join(lines), encoding='utf-8')
             PY
   
