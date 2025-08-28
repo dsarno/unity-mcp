@@ -2,7 +2,7 @@
 
 You are running inside CI for the `unity-mcp` repo. Use only the tools allowed by the workflow. Work autonomously; do not prompt the user. Do NOT spawn subagents.
 
-### Print this once, verbatim, early in the run
+**Print this once, verbatim, early in the run:**
 AllowedTools: Write,Bash(printf:*),Bash(echo:*),Bash(scripts/nlt-revert.sh:*),mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script,mcp__unity__find_in_file,mcp__unity__read_console
 
 ---
@@ -42,14 +42,6 @@ CI provides:
 > Don’t use `mcp__unity__create_script`. Avoid the header/`using` region entirely.
 
 ---
-### Structured edit ops (required usage)
-- For method insertion anchored after `GetCurrentTarget`: use `script_apply_edits` with `{"op":"anchor_insert", "afterMethodName":"GetCurrentTarget", "text": "<code>"}`
-- To delete the temporary helper (T‑A/T‑E): **do not** use `anchor_replace`. Prefer:
-  1) `script_apply_edits` with `{"op":"regex_replace", "pattern":"(?s)^\\s*private\\s+int\\s+__TempHelper\\s*\\(.*?\\)\\s*=>\\s*.*?;\\s*\\r?\\n", "replacement":""}`
-  2) If that returns `missing_field` or `bad_request`, fallback to `apply_text_edits` with a single `replace_range` computed from the method’s start/end offsets (found by scanning braces).
-- If any write returns `missing_field`, `bad_request`, or `unsupported`: **write the testcase fragment anyway** with the error in `<failure>`, mark `VERDICT: FAIL`, then **restore** and proceed to the next test.
-- Never call generic Bash like `mkdir`; the revert helper creates needed directories. Do not attempt directory creation; use only `scripts/nlt-revert.sh` for snapshot/restore.
-
 
 ## Output Rules (JUnit fragments only)
 - For each test, create **one** file: `reports/<TESTID>_results.xml` containing exactly a single `<testcase ...> ... </testcase>`.
@@ -71,7 +63,7 @@ VERDICT: PASS
 
 ```
 
-Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests or later `<system-out>` blocks).
+Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 
 
 ### Fast Restore Strategy (OS‑level)
@@ -87,19 +79,16 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests or lat
   scripts/nlt-revert.sh restore "TestProjects/UnityMCPTests/Assets/Scripts/LongUnityScriptClaudeTest.cs" "reports/_snapshots/LongUnityScriptClaudeTest.cs.baseline"
   ```
 - Then `read_resource` to confirm and (optionally) `validate_script(level:"standard")`.
-- The helper creates parent directories for the snapshot path if missing.
 - If the helper fails: fall back once to a guarded full‑file restore using the baseline bytes; then continue.
 
 ### Guarded Write Pattern (for edits, not restores)
 
-- Before any mutation:
-  - Call `mcp__unity__read_resource(uri, project_root, ctx)` and set `buf = res.text` and `pre_sha = res.sha256` (server‑computed over raw on‑disk bytes).
+- Before any mutation: `buf = read_text(uri)`; `pre_sha = sha256(read_bytes(uri))`.
 - Write with `precondition_sha256 = pre_sha`.
 - On `{status:"stale_file"}`:
-  - Retry once using a server hash (`data.current_sha256` or `data.expected_sha256`) if present.
-  - Otherwise perform one `read_resource(...)` to refresh `pre_sha` and retry. No loops.
-- After success:
-  - Prefer not to re‑read. Update `buf` locally; refresh `pre_sha = mcp__unity__read_resource(...).sha256` only when the next step requires exact on‑disk sync (validation, anchor recompute) or before leaving the test.
+  - Retry once using the server hash (`data.current_sha256` or `data.expected_sha256`).
+  - If absent, one re‑read then a final retry. No loops.
+- After success: immediately re‑read raw bytes and set `pre_sha = sha256(read_bytes(uri))` before any further edits in the same test.
 - Prefer anchors (`script_apply_edits`) for end‑of‑class / above‑method insertions. Keep edits inside method bodies. Avoid header/using.
 
 ### Execution Order (fixed)
