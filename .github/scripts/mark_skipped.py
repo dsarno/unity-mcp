@@ -105,5 +105,9 @@ def main(path: str) -> int:
     return 0
 
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else "reports/claude-nl-tests.xml"
+    target = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else os.environ.get("JUNIT_OUT", "reports/junit-nl-suite.xml")
+    )
     raise SystemExit(main(target))
