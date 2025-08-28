@@ -311,8 +311,22 @@ jobs:
                         try: suite.append(ET.fromstring(m)); added += 1
                         except Exception: pass
             if added:
+                # Drop bootstrap placeholder and recompute counts
+                removed_bootstrap = 0
+                for tc in list(suite.findall('.//testcase')):
+                    name = (tc.get('name') or '')
+                    if name == 'NL-Suite.Bootstrap':
+                        suite.remove(tc)
+                        removed_bootstrap += 1
+                testcases = suite.findall('.//testcase')
+                tests_cnt = len(testcases)
+                failures_cnt = sum(1 for tc in testcases if (tc.find('failure') is not None or tc.find('error') is not None))
+                suite.set('tests', str(tests_cnt))
+                suite.set('failures', str(failures_cnt))
+                suite.set('errors', str(0))
+                suite.set('skipped', str(0))
                 tree.write(src, encoding='utf-8', xml_declaration=True)
-                print(f"Added {added} testcase fragments")
+                print(f"Added {added} testcase fragments; removed bootstrap={removed_bootstrap}; tests={tests_cnt}; failures={failures_cnt}")
             PY
   
         # ---------- Markdown summary from JUnit ----------

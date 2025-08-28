@@ -38,6 +38,7 @@ CI provides:
 - **Validation**: `mcp__unity__validate_script(level:"standard")`
 - **Reporting**: `Write` small XML fragments to `reports/*_results.xml`
 - **Snapshot/Restore**: `Bash(scripts/nlt-revert.sh:*)`
+ - Never call generic Bash like `mkdir`; the revert helper creates needed directories. Use only `scripts/nlt-revert.sh` for snapshot/restore.
 
 > Don’t use `mcp__unity__create_script`. Avoid the header/`using` region entirely.
 
