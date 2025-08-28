@@ -24,23 +24,23 @@ Edits within a batch are applied atomically; ranges must be non-overlapping.
 
 ## Output Requirements (match NL suite conventions)
 - JUnit at `$JUNIT_OUT` if set, otherwise `reports/junit-nl-suite.xml`. Suite name `UnityMCP.NL-T`.
-- Markdown at `$MD_OUT` if set, otherwise `reports/junit-nl-suite.md`.
+- Markdown at `$MD_OUT` if set, otherwise `reports/junit-nl-suite.md` (CI synthesizes this from JUnit at the end; you do not need to write markdown mid-run).
 - Log allowed tools once as a single line: `AllowedTools: ...`.
 - For every edit: Read → Write (with precondition hash). On `{status:"stale_file"}`, retry once using a server-provided hash (`current_sha256` or `expected_sha256`) if present; otherwise perform a single re-read and retry.
 - Evidence windows only (±20–40 lines); cap unified diffs to 100 lines and note truncation.
 - End `<system-out>` with `VERDICT: PASS` or `VERDICT: FAIL`.
 
 ### Reporting discipline (must-follow)
-- At suite start, create a failing skeleton JUnit and Markdown via Write (do not read existing files into model context):
-  - JUnit: one suite `UnityMCP.NL-T`, testcase `NL-Suite.Bootstrap` failed with message `bootstrap`.
-  - Markdown: stub header and empty checklist.
-- During the run, do not round-trip full report contents through the model. For each testcase, generate only the new testcase block (XML/MD) and append via a lightweight shell/python step.
-- Batch writes to the report files (e.g., append every 3–5 tests) plus a final write at the end. Always maintain the terminal VERDICT line in each testcase.
-- At suite end (or on fatal error/time budget), assemble any remaining fragments and flush once so CI never sees an empty `reports/`.
+- CI pre-creates the report skeletons. Do NOT rewrite wrappers or `$JUNIT_OUT` during the run.
+- Do NOT create alternate report files (e.g., `reports/junit-*-updated.xml`).
+- For each testcase, produce exactly one XML fragment file under `reports/` named `nl<CASE>_results.xml` containing a single `<testcase>` with `<system-out><![CDATA[...]]></system-out>` and final `VERDICT:` line.
+- Never include `<testsuite>`/`<testsuites>` wrappers or any leading markers; the fragment must be a valid `<testcase>` element only.
+- Do not write markdown mid-run; CI will synthesize the final markdown from JUnit.
+- Avoid shell redirection for state (e.g., `> /tmp/...`). Keep transient state in memory; if persistence is required, use Write to a file under `reports/`.
 
 ## Safety & hygiene
 - Make edits in-place, then revert after validation so the workspace is clean.
-- At suite start, capture baseline `{ text, sha256 }` for the target file. After each test, revert to baseline via a guarded write using the baseline `precondition_sha256`; re-read to confirm the hash matches.
+- At suite start, capture baseline `{ text, sha256 }` for the target file. After each test, revert to baseline via a guarded write using the current on-disk sha as `precondition_sha256` (use server-provided `current_sha256` on `stale_file`). Only re-read to confirm when validation requires it or a retry failed.
 - Never push commits from CI.
 - Do not modify Unity start/stop/licensing; assume Unity is already running per workflow.
 

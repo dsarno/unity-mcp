@@ -211,6 +211,8 @@ jobs:
           set -eux
           rm -f reports/*.xml reports/*.md || true
           mkdir -p reports
+          # Remove any stray updated files from agent runs
+          rm -f reports/junit-*updated*.xml || true
 
       - name: Create report skeletons
         run: |
