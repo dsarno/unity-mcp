@@ -557,9 +557,13 @@ namespace MCPForUnity.Editor
         {
             byte[] header = await ReadExactAsync(stream, 8, timeoutMs);
             ulong payloadLen = ReadUInt64BigEndian(header);
-            if (payloadLen == 0UL || payloadLen > MaxFrameBytes)
+            if (payloadLen > MaxFrameBytes)
             {
                 throw new System.IO.IOException($"Invalid framed length: {payloadLen}");
+            }
+            if (payloadLen == 0UL)
+            {
+                return string.Empty;
             }
             if (payloadLen > int.MaxValue)
             {
