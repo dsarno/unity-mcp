@@ -1,23 +1,22 @@
+name: Claude NL/T Full Suite (Unity live)
 
-name: Claude NL/T Suite (Unity live)
-  
-  on:
+on:
     workflow_dispatch: {}
   
-  permissions:
+permissions:
     contents: read
     checks: write
   
-  concurrency:
+concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
   
-  env:
+env:
     UNITY_VERSION: 2021.3.45f1
     UNITY_IMAGE: unityci/editor:ubuntu-2021.3.45f1-linux-il2cpp-3
     UNITY_CACHE_ROOT: /home/runner/work/_temp/_github_home
   
-  jobs:
+jobs:
     nl-suite:
       if: github.event_name == 'workflow_dispatch'
       runs-on: ubuntu-latest
