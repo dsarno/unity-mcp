@@ -35,9 +35,8 @@ def register_manage_script_tools(mcp: FastMCP):
 
         # Percent-decode any residual encodings and normalize separators
         raw_path = unquote(raw_path).replace("\\", "/")
-        if raw_path.startswith("//"):
-            # Strip possible leading '//' from malformed file URIs
-            raw_path = raw_path.lstrip("/")
+        # Strip any leading slashes/host artifacts from file:// style URIs
+        raw_path = raw_path.lstrip("/")
 
         # Normalize path (collapse ../, ./)
         norm = os.path.normpath(raw_path).replace("\\", "/")

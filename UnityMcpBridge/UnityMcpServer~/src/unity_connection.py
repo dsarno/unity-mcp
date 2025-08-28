@@ -46,8 +46,6 @@ class UnityConnection:
             # Strict handshake: require FRAMING=1
             try:
                 require_framing = getattr(config, "require_framing", True)
--                self.sock.settimeout(getattr(config, "handshake_timeout", 1.0))
--                greeting = self.sock.recv(256)
                 timeout = float(getattr(config, "handshake_timeout", 1.0))
                 self.sock.settimeout(timeout)
                 buf = bytearray()

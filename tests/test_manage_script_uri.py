@@ -1,4 +1,5 @@
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,19 @@ if SRC is None:
         allow_module_level=True,
     )
 sys.path.insert(0, str(SRC))
+
+# Stub mcp.server.fastmcp to satisfy imports without full package
+mcp_pkg = types.ModuleType("mcp")
+server_pkg = types.ModuleType("mcp.server")
+fastmcp_pkg = types.ModuleType("mcp.server.fastmcp")
+class _Dummy: pass
+fastmcp_pkg.FastMCP = _Dummy
+fastmcp_pkg.Context = _Dummy
+server_pkg.fastmcp = fastmcp_pkg
+mcp_pkg.server = server_pkg
+sys.modules.setdefault("mcp", mcp_pkg)
+sys.modules.setdefault("mcp.server", server_pkg)
+sys.modules.setdefault("mcp.server.fastmcp", fastmcp_pkg)
 
 
 # Import target module after path injection

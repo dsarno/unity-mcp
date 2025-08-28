@@ -29,6 +29,10 @@ def test_no_print_statements_in_codebase():
     offenders = []
     syntax_errors = []
     for py_file in SRC.rglob("*.py"):
+        # Skip virtual envs and third-party packages if they exist under SRC
+        parts = set(py_file.parts)
+        if ".venv" in parts or "site-packages" in parts:
+            continue
         try:
             text = py_file.read_text(encoding="utf-8", errors="strict")
         except UnicodeDecodeError:
