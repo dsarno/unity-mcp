@@ -40,7 +40,7 @@ CI provides:
 - **Snapshot/Restore**: `Bash(scripts/nlt-revert.sh:*)`
   - For `script_apply_edits`: use `name` + workspace‑relative `path` only (e.g., `name="LongUnityScriptClaudeTest"`, `path="Assets/Scripts"`). Do not pass `unity://...` URIs as `path`.
   - For `apply_text_edits` / `read_resource`: use the URI form only (e.g., `uri="unity://path/Assets/Scripts/LongUnityScriptClaudeTest.cs"`). Do not concatenate `Assets/` with a `unity://...` URI.
- - Never call generic Bash like `mkdir`; the revert helper creates needed directories. Use only `scripts/nlt-revert.sh` for snapshot/restore.
+  - Never call generic Bash like `mkdir`; the revert helper creates needed directories. Use only `scripts/nlt-revert.sh` for snapshot/restore.
 
 > Don’t use `mcp__unity__create_script`. Avoid the header/`using` region entirely.
 
