@@ -126,6 +126,11 @@ PROGRESS: <k>/16 completed
 - Always revert any mutations at the end of each test, then re-read to confirm clean state before the next test.
 - Never abort the suite on a single test failure; log the failure (including `{ status: ... }`) and proceed to the next test.
 
+Logging (print these around each write for CI clarity):
+- `pre_sha=<sha256(raw bytes)>` before write
+- on stale: `stale: expected=<...> current=<...> retry_pre_sha=<picked>`
+- after success: `post_sha=<sha256(raw bytes)>`
+
 ### Test driver (must follow)
 For each test NL-0..NL-4, then T-A..T-J:
 1) READ → compute `pre_sha = sha256(read_bytes(uri))`.
@@ -168,6 +173,9 @@ function guarded_write(uri, make_edit_from_text):
               record_failure_and_continue()    # do not loop forever
 ```
 Notes: Prefer `mcp__unity__script_apply_edits` for anchor/regex operations; use `mcp__unity__apply_text_edits` only for precise `replace_range` steps. Always re‑read before each subsequent test so offsets are never computed against stale snapshots.
+
+Revert guidance:
+- At test start, snapshot the exact original bytes (including any BOM). For revert, prefer a full-file replace back to that snapshot (single edit). If that’s not available, compute the minimal edit against current `buf` to restore exact content, then confirm hash matches the baseline.
 
 ### Status handling
 - Treat expected safeguard statuses as non-fatal: `using_guard`, `unsupported`, and similar should record INFO in JUnit and continue.
