@@ -1,22 +1,23 @@
+
 name: Claude NL/T Suite (Unity live)
-
-on:
-  workflow_dispatch: {}
-
-permissions:
-  contents: read
-  checks: write
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  UNITY_VERSION: 2021.3.45f1
-  UNITY_IMAGE: unityci/editor:ubuntu-2021.3.45f1-linux-il2cpp-3
-  UNITY_CACHE_ROOT: /home/runner/work/_temp/_github_home
-
-jobs:
+  
+  on:
+    workflow_dispatch: {}
+  
+  permissions:
+    contents: read
+    checks: write
+  
+  concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+  
+  env:
+    UNITY_VERSION: 2021.3.45f1
+    UNITY_IMAGE: unityci/editor:ubuntu-2021.3.45f1-linux-il2cpp-3
+    UNITY_CACHE_ROOT: /home/runner/work/_temp/_github_home
+  
+  jobs:
     nl-suite:
       if: github.event_name == 'workflow_dispatch'
       runs-on: ubuntu-latest
@@ -199,12 +200,12 @@ jobs:
             }
             JSON
   
-        # ---------- Reports dir & skeletons ----------
-        - name: Prepare reports
+        # ---------- Reports & helper ----------
+        - name: Prepare reports and dirs
           run: |
             set -eux
             rm -f reports/*.xml reports/*.md || true
-            mkdir -p reports
+            mkdir -p reports reports/_snapshots scripts
   
         - name: Create report skeletons
           run: |
@@ -219,6 +220,42 @@ jobs:
             XML
             printf '# Unity NL/T Editing Suite Test Results\n\n' > "$MD_OUT"
   
+        - name: Write safe revert helper (scripts/nlt-revert.sh)
+          shell: bash
+          run: |
+            set -eux
+            cat > scripts/nlt-revert.sh <<'BASH'
+            #!/usr/bin/env bash
+            set -euo pipefail
+            sub="${1:-}"; target_rel="${2:-}"; snap="${3:-}"
+            WS="${GITHUB_WORKSPACE:-$PWD}"
+            ROOT="$WS/TestProjects/UnityMCPTests"
+            t_abs="$(realpath -m "$WS/$target_rel")"
+            s_abs="$(realpath -m "$WS/$snap")"
+            if [[ "$t_abs" != "$ROOT/Assets/"* ]]; then
+              echo "refuse: target outside allowed scope: $t_abs" >&2; exit 2
+            fi
+            mkdir -p "$(dirname "$s_abs")"
+            case "$sub" in
+              snapshot)
+                cp -f "$t_abs" "$s_abs"
+                sha=$(sha256sum "$s_abs" | awk '{print $1}')
+                echo "snapshot_sha=$sha"
+                ;;
+              restore)
+                if [[ ! -f "$s_abs" ]]; then echo "snapshot missing: $s_abs" >&2; exit 3; fi
+                cp -f "$s_abs" "$t_abs"
+                touch "$t_abs"
+                sha=$(sha256sum "$t_abs" | awk '{print $1}')
+                echo "restored_sha=$sha"
+                ;;
+              *)
+                echo "usage: $0 snapshot|restore <target_rel_path> <snapshot_path>" >&2; exit 1
+                ;;
+            esac
+            BASH
+            chmod +x scripts/nlt-revert.sh
+  
         # ---------- Run suite ----------
         - name: Run Claude NL suite (single pass)
           uses: anthropics/claude-code-base-action@beta
@@ -230,14 +267,15 @@ jobs:
             mcp_config: .claude/mcp.json
             allowed_tools: >-
               Write,
-              Bash(printf:*),Bash(echo:*),
+              Bash(printf:*),Bash(echo:*),Bash(scripts/nlt-revert.sh:*),
               mcp__unity__manage_editor,
               mcp__unity__list_resources,
               mcp__unity__read_resource,
               mcp__unity__apply_text_edits,
               mcp__unity__script_apply_edits,
               mcp__unity__validate_script,
-              mcp__unity__find_in_file
+              mcp__unity__find_in_file,
+              mcp__unity__read_console
             disallowed_tools: TodoWrite,Task
             model: claude-3-7-sonnet-latest
             timeout_minutes: "30"
@@ -252,49 +290,30 @@ jobs:
             from pathlib import Path
             import xml.etree.ElementTree as ET
             import re, os
-  
-            def localname(tag: str) -> str:
-                return tag.rsplit('}', 1)[-1] if '}' in tag else tag
-  
+            def localname(tag: str) -> str: return tag.rsplit('}', 1)[-1] if '}' in tag else tag
             src = Path(os.environ.get('JUNIT_OUT', 'reports/junit-nl-suite.xml'))
-            out = src
-            out.parent.mkdir(parents=True, exist_ok=True)
-            if not src.exists():
-                raise SystemExit(0)
-  
-            try:
-                tree = ET.parse(src)
-                root = tree.getroot()
-                rtag = localname(root.tag)
-                suite = root.find('./*') if rtag == 'testsuites' else root
-                if suite is None:
-                    print("No suite element in JUnit skeleton")
-                    raise SystemExit(0)
-  
-                # Append any testcase fragments from reports/*_results.xml
-                fragments = sorted(Path('reports').glob('*_results.xml'))
-                added = 0
-                for frag in fragments:
-                    try:
-                        froot = ET.parse(frag).getroot()
-                        if localname(froot.tag) == 'testcase':
-                            suite.append(froot); added += 1
-                        else:
-                            for tc in froot.findall('.//testcase'):
-                                suite.append(tc); added += 1
-                    except Exception as fe:
-                        # Regex fallback for raw strings
-                        txt = Path(frag).read_text(encoding='utf-8', errors='replace')
-                        for m in re.findall(r'<testcase[\\s\\S]*?</testcase>', txt, flags=re.DOTALL):
-                            try:
-                                tc = ET.fromstring(m); suite.append(tc); added += 1
-                            except Exception:
-                                pass
-                if added:
-                    tree.write(out, encoding='utf-8', xml_declaration=True)
-                    print(f"Added {added} testcase fragments")
-            except Exception as e:
-                print("Normalization error:", e)
+            if not src.exists(): raise SystemExit(0)
+            tree = ET.parse(src); root = tree.getroot()
+            suite = root.find('./*') if localname(root.tag) == 'testsuites' else root
+            if suite is None: raise SystemExit(0)
+            fragments = sorted(Path('reports').glob('*_results.xml'))
+            added = 0
+            for frag in fragments:
+                try:
+                    froot = ET.parse(frag).getroot()
+                    if localname(froot.tag) == 'testcase':
+                        suite.append(froot); added += 1
+                    else:
+                        for tc in froot.findall('.//testcase'):
+                            suite.append(tc); added += 1
+                except Exception:
+                    txt = Path(frag).read_text(encoding='utf-8', errors='replace')
+                    for m in re.findall(r'<testcase[\\s\\S]*?</testcase>', txt, flags=re.DOTALL):
+                        try: suite.append(ET.fromstring(m)); added += 1
+                        except Exception: pass
+            if added:
+                tree.write(src, encoding='utf-8', xml_declaration=True)
+                print(f"Added {added} testcase fragments")
             PY
   
         # ---------- Markdown summary from JUnit ----------
@@ -306,8 +325,7 @@ jobs:
             import xml.etree.ElementTree as ET
             from pathlib import Path
             import os
-            def localname(tag: str) -> str:
-                return tag.rsplit('}', 1)[-1] if '}' in tag else tag
+            def localname(tag: str) -> str: return tag.rsplit('}', 1)[-1] if '}' in tag else tag
             src = Path(os.environ.get('JUNIT_OUT', 'reports/junit-nl-suite.xml'))
             md_out = Path(os.environ.get('MD_OUT', 'reports/junit-nl-suite.md'))
             if not src.exists():
@@ -331,7 +349,6 @@ jobs:
                 st = status_for(p)
                 lines.append(f"- [x] {p}" if st is True else (f"- [ ] {p} (fail)" if st is False else f"- [ ] {p} (not run)"))
             lines.append('')
-            # brief failure details
             for name, tc in name_to_case.items():
                 node = tc.find('failure') or tc.find('error')
                 if node is None: continue
