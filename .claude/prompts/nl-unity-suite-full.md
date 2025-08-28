@@ -33,10 +33,12 @@ Edits within a batch are applied atomically; ranges must be non-overlapping.
 ### Reporting discipline (must-follow)
 - CI pre-creates the report skeletons. Do NOT rewrite wrappers or `$JUNIT_OUT` during the run.
 - Do NOT create alternate report files (e.g., `reports/junit-*-updated.xml`).
-- For each testcase, produce exactly one XML fragment file under `reports/` named `nl<CASE>_results.xml` containing a single `<testcase>` with `<system-out><![CDATA[...]]></system-out>` and final `VERDICT:` line.
-- Never include `<testsuite>`/`<testsuites>` wrappers or any leading markers; the fragment must be a valid `<testcase>` element only.
+- Prefer end-of-suite emission: buffer all `<testcase>` fragments in memory during the run, then Write once at the end to `reports/nl_final_results.xml` containing multiple `<testcase>` siblings (no wrappers). CI will assemble into `$JUNIT_OUT`.
+- If you must emit per-test files instead, use `reports/nl<CASE>_results.xml` with exactly one `<testcase>` and a `<system-out><![CDATA[...]]></system-out>` that ends with `VERDICT:`.
+- Fragments must contain only `<testcase>` (no `<testsuite>`/`<testsuites>`, no leading markers).
+- Do NOT use Bash redirection (`>`, `>>`) to write files. Use the Write tool only, and only to paths under `reports/*_results.xml`.
 - Do not write markdown mid-run; CI will synthesize the final markdown from JUnit.
-- Avoid shell redirection for state (e.g., `> /tmp/...`). Keep transient state in memory; if persistence is required, use Write to a file under `reports/`.
+- Keep transient state in memory; if persistence is required, use Write to files under `reports/`.
 
 ## Safety & hygiene
 - Make edits in-place, then revert after validation so the workspace is clean.
