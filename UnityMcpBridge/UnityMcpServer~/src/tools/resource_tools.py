@@ -50,17 +50,23 @@ def _resolve_project_root(override: str | None) -> Path:
         cur = cur.parent
     # 5) Search downwards (shallow) from repo root for first folder with Assets + ProjectSettings
     try:
+        import os as _os
         root = Path.cwd().resolve()
         max_depth = 3
-        for path in root.rglob("*"):
+        for dirpath, dirnames, _ in _os.walk(root):
+            rel = Path(dirpath).resolve()
             try:
-                rel_depth = len(path.relative_to(root).parts)
+                depth = len(rel.relative_to(root).parts)
             except Exception:
+                # Unrelated mount/permission edge; skip deeper traversal
+                dirnames[:] = []
                 continue
-            if rel_depth > max_depth:
+            if depth > max_depth:
+                # Prune deeper traversal
+                dirnames[:] = []
                 continue
-            if path.is_dir() and (path / "Assets").exists() and (path / "ProjectSettings").exists():
-                return path
+            if (rel / "Assets").exists() and (rel / "ProjectSettings").exists():
+                return rel
     except Exception:
         pass
     # 6) Fallback: CWD
