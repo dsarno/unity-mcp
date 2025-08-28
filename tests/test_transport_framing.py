@@ -87,17 +87,31 @@ def start_handshake_enforcing_server():
         ready.set()
         conn, _ = sock.accept()
         # If client sends any data before greeting, disconnect (poll briefly)
-        deadline = time.time() + 0.5
-        while time.time() < deadline:
-            r, _, _ = select.select([conn], [], [], 0.05)
-            if r:
+        try:
+            conn.setblocking(False)
+            deadline = time.time() + 0.15  # short, reduces race with legitimate clients
+            while time.time() < deadline:
+                r, _, _ = select.select([conn], [], [], 0.01)
+                if r:
+                    try:
+                        peek = conn.recv(1, socket.MSG_PEEK)
+                    except BlockingIOError:
+                        peek = b""
+                    except Exception:
+                        peek = b"\x00"
+                    if peek:
+                        conn.close()
+                        sock.close()
+                        return
+            # No pre-handshake data observed; send greeting
+            conn.setblocking(True)
+            conn.sendall(b"MCP/0.1 FRAMING=1\n")
+            time.sleep(0.1)
+        finally:
+            try:
                 conn.close()
+            finally:
                 sock.close()
-                return
-        conn.sendall(b"MCP/0.1 FRAMING=1\n")
-        time.sleep(0.1)
-        conn.close()
-        sock.close()
 
     threading.Thread(target=_run, daemon=True).start()
     ready.wait()
