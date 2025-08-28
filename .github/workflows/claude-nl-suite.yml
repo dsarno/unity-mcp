@@ -337,7 +337,7 @@ jobs:
             python3 - <<'PY'
             import xml.etree.ElementTree as ET
             from pathlib import Path
-            import os
+            import os, html
 
             def localname(tag: str) -> str:
                 return tag.rsplit('}', 1)[-1] if '}' in tag else tag
@@ -396,16 +396,24 @@ jobs:
             MAX_CHARS = 2000
             for name in sorted(name_to_case.keys(), key=order_key):
                 tc = name_to_case[name]
-                lines.append(f"### {name}")
+                status_badge = "PASS" if (tc.find('failure') is None and tc.find('error') is None) else "FAIL"
+                lines.append(f"### {name} — {status_badge}")
                 so = tc.find('system-out')
                 text = '' if so is None or so.text is None else so.text.replace('\r\n','\n')
+                # Unescape XML entities so code reads naturally (e.g., => instead of =&gt;)
+                if text:
+                    text = html.unescape(text)
                 if text.strip():
                     t = text.strip()
                     if len(t) > MAX_CHARS:
                         t = t[:MAX_CHARS] + "\n…(truncated)"
-                    lines.append('```')
+                    # Use a safer fence if content contains triple backticks
+                    fence = '```'
+                    if '```' in t:
+                        fence = '````'
+                    lines.append(fence)
                     lines.append(t)
-                    lines.append('```')
+                    lines.append(fence)
                 else:
                     lines.append('(no system-out)')
                 node = tc.find('failure') or tc.find('error')
