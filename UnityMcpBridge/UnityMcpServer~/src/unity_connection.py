@@ -46,9 +46,24 @@ class UnityConnection:
             # Strict handshake: require FRAMING=1
             try:
                 require_framing = getattr(config, "require_framing", True)
-                self.sock.settimeout(getattr(config, "handshake_timeout", 1.0))
-                greeting = self.sock.recv(256)
-                text = greeting.decode('ascii', errors='ignore') if greeting else ''
+-                self.sock.settimeout(getattr(config, "handshake_timeout", 1.0))
+-                greeting = self.sock.recv(256)
+                timeout = float(getattr(config, "handshake_timeout", 1.0))
+                self.sock.settimeout(timeout)
+                buf = bytearray()
+                end = time.time() + timeout
+                while time.time() < end and len(buf) < 512:
+                    try:
+                        chunk = self.sock.recv(256)
+                        if not chunk:
+                            break
+                        buf.extend(chunk)
+                        if b"\n" in buf:
+                            break
+                    except socket.timeout:
+                        break
+                text = bytes(buf).decode('ascii', errors='ignore').strip()
+
                 if 'FRAMING=1' in text:
                     self.use_framing = True
                     logger.debug('Unity MCP handshake received: FRAMING=1 (strict)')
