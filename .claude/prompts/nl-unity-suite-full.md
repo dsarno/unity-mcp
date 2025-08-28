@@ -24,22 +24,19 @@ Edits within a batch are applied atomically; ranges must be non-overlapping.
 
 
 ## Output Requirements (match NL suite conventions)
-- JUnit at `$JUNIT_OUT` if set, otherwise `reports/junit-nl-suite.xml`. Suite name `UnityMCP.NL-T`.
-- Markdown at `$MD_OUT` if set, otherwise `reports/junit-nl-suite.md` (CI synthesizes this from JUnit at the end; you do not need to write markdown mid-run).
+- JUnit at `$JUNIT_OUT` (canonical). Suite name `UnityMCP.NL-T`.
+- Markdown at `$MD_OUT` (canonical). CI synthesizes at end; you may append small fragments but do not round‑trip full files.
 - Log allowed tools once as a single line: `AllowedTools: ...`.
 - For every edit: Read → Write (with precondition hash). On `{status:"stale_file"}`, retry once using a server-provided hash (`current_sha256` or `expected_sha256`) if present; otherwise perform a single re-read and retry.
 - Evidence windows only (±20–40 lines); cap unified diffs to 100 lines and note truncation.
 - End `<system-out>` with `VERDICT: PASS` or `VERDICT: FAIL`.
 
 ### Reporting discipline (must-follow)
-- CI pre-creates the report skeletons. Do NOT rewrite wrappers or `$JUNIT_OUT` during the run.
-- Do NOT create alternate report files (e.g., `reports/junit-*-updated.xml`).
-- Preferred (fastest): buffer all results and perform a single end-of-suite Write to `reports/nl_final_results.xml` as a valid XML document with a single root element `<cases>` containing only `<testcase>` children (no `<testsuite>`/`<testsuites>`). All human-readable lines (e.g., PLAN, AllowedTools) must appear only inside `<system-out><![CDATA[...]]></system-out>` within a `<testcase>`, never as raw text outside XML.
-- Alternative: per-test files `reports/nl<CASE>_results.xml`, each a valid XML document whose root is a single `<testcase>` with `<system-out><![CDATA[...]]></system-out>` ending in `VERDICT:`.
-- Do NOT use Bash redirection (`>`, `>>`) to write files. Use the Write tool only, and only to paths under `reports/*_results.xml`.
-- Do not use Bash at all. Emit all report fragments via the Write tool only.
-- Do not write markdown mid-run; CI will synthesize the final markdown from JUnit.
-- Keep transient state in memory; if persistence is required, use Write to files under `reports/`.
+- CI pre-creates the report skeletons. Do NOT rewrite wrappers.
+- Do NOT create alternate report files; always emit to `$JUNIT_OUT` and `$MD_OUT`.
+- Append small fragments only (PLAN/PROGRESS; single `<testcase>` blocks) via Write or Bash(printf/echo). No full‑file round‑trips and no wrappers.
+- All human‑readable lines (PLAN, AllowedTools) must appear only inside `<system-out><![CDATA[...]]></system-out>` within a `<testcase>`.
+- Keep transient state in memory.
 
 ## Safety & hygiene
 - Make edits in-place, then revert after validation so the workspace is clean.
@@ -146,7 +143,7 @@ For each test NL-0..NL-4, then T-A..T-J:
 
 ### Guarded write pattern (must use for every edit)
 Hash refresh and anchors (priority rules):
-- CRITICAL: After every successful write, immediately re-read raw bytes from disk and set `pre_sha` to the on-disk hash before any further edits within the same test.
+- CRITICAL: After every successful write of a file, immediately re-read raw bytes from disk and set `pre_sha` to the on-disk hash before any further edits within the same test.
 - Prefer `mcp__unity__script_apply_edits` for anchor work (e.g., above `Update`, end-of-class) to reduce offset drift; keep changes inside methods.
 - Do not touch `using` directives or the file header.
 ```pseudo
