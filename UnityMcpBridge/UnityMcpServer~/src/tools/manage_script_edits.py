@@ -659,19 +659,39 @@ def register_manage_script_edits_tools(mcp: FastMCP):
         options.setdefault("validate", "standard")
         options.setdefault("refresh", "immediate")
 
-        params: Dict[str, Any] = {
-            "action": "update",
+        import hashlib
+        # Compute the SHA of the current file contents for the precondition
+        old_lines = contents.splitlines(keepends=True)
+        end_line = len(old_lines) + 1  # 1-based exclusive end
+        sha = hashlib.sha256(contents.encode("utf-8")).hexdigest()
+
+        # Apply a whole-file text edit rather than the deprecated 'update' action
+        params = {
+            "action": "apply_text_edits",
             "name": name,
             "path": path,
             "namespace": namespace,
             "scriptType": script_type,
-            "encodedContents": base64.b64encode(new_contents.encode("utf-8")).decode("ascii"),
-            "contentsEncoded": True,
+            "edits": [
+                {
+                    "startLine": 1,
+                    "startCol": 1,
+                    "endLine": end_line,
+                    "endCol": 1,
+                    "newText": new_contents,
+                }
+            ],
+            "precondition_sha256": sha,
+            "options": options or {"validate": "standard", "refresh": "immediate"},
         }
-        if options is not None:
-            params["options"] = options
+
         write_resp = send_command_with_retry("manage_script", params)
-        return _with_norm(write_resp if isinstance(write_resp, dict) else {"success": False, "message": str(write_resp)}, normalized_for_echo, routing="text")
+        return _with_norm(
+            write_resp if isinstance(write_resp, dict) 
+                      else {"success": False, "message": str(write_resp)},
+            normalized_for_echo,
+            routing="text",
+        )
 
 
 
