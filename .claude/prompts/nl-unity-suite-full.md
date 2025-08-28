@@ -41,7 +41,7 @@ Edits within a batch are applied atomically; ranges must be non-overlapping.
 
 ## Safety & hygiene
 - Make edits in-place, then revert after validation so the workspace is clean.
-- At suite start, capture baseline `{ text, sha256 }` for the target file. After each test, revert to baseline via a guarded write using the current on-disk sha as `precondition_sha256` (use server-provided `current_sha256` on `stale_file`). Only re-read to confirm when validation requires it or a retry failed.
+- At suite start, capture baseline `{ text, sha256 }` for the target file. After each test, revert to baseline via a guarded write using the current on-disk sha as `precondition_sha256` (use server-provided `current_sha256` on `stale_file`), then re-read to confirm the revert before proceeding.
 - Never push commits from CI.
 - Do not modify Unity start/stop/licensing; assume Unity is already running per workflow.
 
@@ -60,9 +60,9 @@ Run tests exactly in this order:
 NL-0, NL-1, NL-2, NL-3, NL-4,
 T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
 At suite start, emit a single line plan:
-PLAN: NL-0,NL-1,NL-2,NL-3,NL-4,T-A,T-B,T-C,T-D,T-E,T-F,T-G,T-H,T-I,T-J (len=16 inc. bootstrap)
+PLAN: NL-0,NL-1,NL-2,NL-3,NL-4,T-A,T-B,T-C,T-D,T-E,T-F,T-G,T-H,T-I,T-J (len=15)
 After each testcase, emit:
-PROGRESS: <k>/16 completed
+PROGRESS: <k>/15 completed
 
 ### NL-0. Sanity Reads (windowed)
 - Tail 120 lines; read 40 lines around `Update()` signature.
@@ -138,7 +138,7 @@ For each test NL-0..NL-4, then T-A..T-J:
 2) RUN using the guarded write pattern for every mutation.
 3) VALIDATE with `mcp__unity__validate_script(level:"standard")` unless the step is read-only.
 4) RE-READ evidence windows; write JUnit + Markdown entries.
-5) REVERT: if the test mutated the file, restore the exact pre-test content via a guarded full-file replace using `pre_sha` as `precondition_sha256`; re-read and confirm the hash matches.
+5) REVERT: if the test mutated the file, restore the exact pre-test content via a guarded full-file replace using `pre_sha` as `precondition_sha256`; always re-read and confirm the hash matches before continuing.
 6) Append `VERDICT: PASS` or `VERDICT: FAIL` to `<system-out>` for that testcase.
 7) Continue to the next test regardless of outcome.
 
