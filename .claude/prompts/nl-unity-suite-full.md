@@ -37,6 +37,7 @@ Edits within a batch are applied atomically; ranges must be non-overlapping.
 - Preferred (fastest): buffer all results and perform a single end-of-suite Write to `reports/nl_final_results.xml` as a valid XML document with a single root element `<cases>` containing only `<testcase>` children (no `<testsuite>`/`<testsuites>`). All human-readable lines (e.g., PLAN, AllowedTools) must appear only inside `<system-out><![CDATA[...]]></system-out>` within a `<testcase>`, never as raw text outside XML.
 - Alternative: per-test files `reports/nl<CASE>_results.xml`, each a valid XML document whose root is a single `<testcase>` with `<system-out><![CDATA[...]]></system-out>` ending in `VERDICT:`.
 - Do NOT use Bash redirection (`>`, `>>`) to write files. Use the Write tool only, and only to paths under `reports/*_results.xml`.
+- Do not use Bash at all. Emit all report fragments via the Write tool only.
 - Do not write markdown mid-run; CI will synthesize the final markdown from JUnit.
 - Keep transient state in memory; if persistence is required, use Write to files under `reports/`.
 
@@ -144,6 +145,10 @@ For each test NL-0..NL-4, then T-A..T-J:
 7) Continue to the next test regardless of outcome.
 
 ### Guarded write pattern (must use for every edit)
+Hash refresh and anchors (priority rules):
+- CRITICAL: After every successful write, immediately re-read raw bytes from disk and set `pre_sha` to the on-disk hash before any further edits within the same test.
+- Prefer `mcp__unity__script_apply_edits` for anchor work (e.g., above `Update`, end-of-class) to reduce offset drift; keep changes inside methods.
+- Do not touch `using` directives or the file header.
 ```pseudo
 function guarded_write(uri, make_edit_from_text):
   # Precondition: buf (text) and pre_sha (sha256 over raw bytes) are current for this test
