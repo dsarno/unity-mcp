@@ -364,6 +364,35 @@ jobs:
                 st = status_for(p)
                 lines.append(f"- [x] {p}" if st is True else (f"- [ ] {p} (fail)" if st is False else f"- [ ] {p} (not run)"))
             lines.append('')
+            # Rich per-test details (pull from <system-out>)
+            lines.append('## Test Details')
+            # Sort by canonical order where possible
+            def order_key(n: str):
+                try:
+                    if n.startswith('NL-') and n[3].isdigit():
+                        return (0, int(n.split('.')[0].split('-')[1]))
+                except Exception:
+                    pass
+                if n.startswith('T-') and len(n)>2 and n[2].isalpha():
+                    return (1, ord(n[2]))
+                return (2, n)
+            for name in sorted(name_to_case.keys(), key=order_key):
+                tc = name_to_case[name]
+                so = tc.find('system-out')
+                text = '' if so is None or so.text is None else so.text
+                text = text.replace('\r\n','\n')
+                # Trim overly long outputs
+                MAX_CHARS = 2000
+                if len(text) > MAX_CHARS:
+                    text = text[:MAX_CHARS] + "\n…(truncated)"
+                lines.append(f"### {name}")
+                if text.strip():
+                    lines.append('```')
+                    lines.append(text.strip())
+                    lines.append('```')
+                else:
+                    lines.append('(no system-out)')
+                lines.append('')
             for name, tc in name_to_case.items():
                 node = tc.find('failure') or tc.find('error')
                 if node is None: continue
