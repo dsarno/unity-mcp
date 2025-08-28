@@ -250,6 +250,7 @@ jobs:
       - name: Run Claude NL suite (single pass)
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
+        continue-on-error: true
         with:
           use_node_cache: false
           prompt_file: .claude/prompts/nl-unity-suite-full.md
@@ -288,17 +289,33 @@ jobs:
                       suite = root
                   # Append any testcase fragments from reports/*_results.xml
                   fragments = sorted(Path('reports').glob('*_results.xml'))
+                  import re
                   for frag in fragments:
                       try:
                           froot = ET.parse(frag).getroot()
-                          # Allow fragment to be either <testcase> or contain it
-                          if localname(froot.tag) == 'testcase':
+                          tag = localname(froot.tag)
+                          if tag == 'testcase':
                               suite.append(froot)
                           else:
                               for tc in froot.findall('.//testcase'):
                                   suite.append(tc)
                       except Exception as fe:
-                          print(f"Skip bad fragment {frag}: {fe}")
+                          print(f"Parse error for fragment {frag}: {fe}; attempting regex extraction of <testcase> blocks")
+                          try:
+                              txt = Path(frag).read_text(encoding='utf-8', errors='replace')
+                              matches = re.findall(r'<testcase[\s\S]*?</testcase>', txt, flags=re.DOTALL)
+                              extracted = 0
+                              for m in matches:
+                                  try:
+                                      tc = ET.fromstring(m)
+                                      suite.append(tc)
+                                      extracted += 1
+                                  except Exception as _:
+                                      pass
+                              if extracted == 0:
+                                  print(f"No valid <testcase> blocks found in {frag}")
+                          except Exception as fe2:
+                              print(f"Failed regex fallback for {frag}: {fe2}")
                   tree.write(out, encoding='utf-8', xml_declaration=True)
               except Exception as e:
                   print("Normalization error:", e)
