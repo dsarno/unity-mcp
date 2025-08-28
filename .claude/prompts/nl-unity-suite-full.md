@@ -26,7 +26,7 @@ Edits within a batch are applied atomically; ranges must be non-overlapping.
 - JUnit at `$JUNIT_OUT` if set, otherwise `reports/junit-nl-suite.xml`. Suite name `UnityMCP.NL-T`.
 - Markdown at `$MD_OUT` if set, otherwise `reports/junit-nl-suite.md`.
 - Log allowed tools once as a single line: `AllowedTools: ...`.
-- For every edit: Read → Write (with precondition hash) → Re-read; on `{status:"stale_file"}` retry once after re-read.
+- For every edit: Read → Write (with precondition hash). On `{status:"stale_file"}`, retry once using a server-provided hash (`current_sha256` or `expected_sha256`) if present; otherwise perform a single re-read and retry.
 - Evidence windows only (±20–40 lines); cap unified diffs to 100 lines and note truncation.
 - End `<system-out>` with `VERDICT: PASS` or `VERDICT: FAIL`.
 
