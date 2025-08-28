@@ -42,6 +42,14 @@ CI provides:
 > Don’t use `mcp__unity__create_script`. Avoid the header/`using` region entirely.
 
 ---
+### Structured edit ops (required usage)
+- For method insertion anchored after `GetCurrentTarget`: use `script_apply_edits` with `{"op":"anchor_insert", "afterMethodName":"GetCurrentTarget", "text": "<code>"}`
+- To delete the temporary helper (T‑A/T‑E): **do not** use `anchor_replace`. Prefer:
+  1) `script_apply_edits` with `{"op":"regex_replace", "pattern":"(?s)^\\s*private\\s+int\\s+__TempHelper\\s*\\(.*?\\)\\s*=>\\s*.*?;\\s*\\r?\\n", "replacement":""}`
+  2) If that returns `missing_field` or `bad_request`, fallback to `apply_text_edits` with a single `replace_range` computed from the method’s start/end offsets (found by scanning braces).
+- If any write returns `missing_field`, `bad_request`, or `unsupported`: **write the testcase fragment anyway** with the error in `<failure>`, mark `VERDICT: FAIL`, then **restore** and proceed to the next test.
+- Never call generic Bash like `mkdir`; the revert helper creates needed directories. Do not attempt directory creation; use only `scripts/nlt-revert.sh` for snapshot/restore.
+
 
 ## Output Rules (JUnit fragments only)
 - For each test, create **one** file: `reports/<TESTID>_results.xml` containing exactly a single `<testcase ...> ... </testcase>`.
@@ -63,7 +71,7 @@ VERDICT: PASS
 
 ```
 
-Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
+Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests or later `<system-out>` blocks).
 
 
 ### Fast Restore Strategy (OS‑level)
