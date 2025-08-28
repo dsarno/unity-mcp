@@ -31,11 +31,12 @@ Edits within a batch are applied atomically; ranges must be non-overlapping.
 - End `<system-out>` with `VERDICT: PASS` or `VERDICT: FAIL`.
 
 ### Reporting discipline (must-follow)
-- At suite start, create a failing skeleton JUnit and Markdown via Write:
+- At suite start, create a failing skeleton JUnit and Markdown via Write (do not read existing files into model context):
   - JUnit: one suite `UnityMCP.NL-T`, testcase `NL-Suite.Bootstrap` failed with message `bootstrap`.
   - Markdown: stub header and empty checklist.
-- After each test, update both files: append/replace testcases with evidence windows and diffs; maintain terminal VERDICT line.
-- On fatal error/time budget, flush current progress so CI never sees an empty reports/.
+- During the run, do not round-trip full report contents through the model. For each testcase, generate only the new testcase block (XML/MD) and append via a lightweight shell/python step.
+- Batch writes to the report files (e.g., append every 3–5 tests) plus a final write at the end. Always maintain the terminal VERDICT line in each testcase.
+- At suite end (or on fatal error/time budget), assemble any remaining fragments and flush once so CI never sees an empty `reports/`.
 
 ## Safety & hygiene
 - Make edits in-place, then revert after validation so the workspace is clean.
