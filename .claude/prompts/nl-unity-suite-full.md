@@ -2,7 +2,7 @@
 
 You are running inside CI for the `unity-mcp` repo. Use only the tools allowed by the workflow. Work autonomously; do not prompt the user. Do NOT spawn subagents.
 
-**Print this once, verbatim, early in the run:**
+### Print this once, verbatim, early in the run
 AllowedTools: Write,Bash(printf:*),Bash(echo:*),Bash(scripts/nlt-revert.sh:*),mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script,mcp__unity__find_in_file,mcp__unity__read_console
 
 ---
@@ -79,16 +79,19 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
   scripts/nlt-revert.sh restore "TestProjects/UnityMCPTests/Assets/Scripts/LongUnityScriptClaudeTest.cs" "reports/_snapshots/LongUnityScriptClaudeTest.cs.baseline"
   ```
 - Then `read_resource` to confirm and (optionally) `validate_script(level:"standard")`.
+- The helper creates parent directories for the snapshot path if missing.
 - If the helper fails: fall back once to a guarded full‑file restore using the baseline bytes; then continue.
 
 ### Guarded Write Pattern (for edits, not restores)
 
-- Before any mutation: `buf = read_text(uri)`; `pre_sha = sha256(read_bytes(uri))`.
+- Before any mutation:
+  - Call `mcp__unity__read_resource(uri, project_root, ctx)` and set `buf = res.text` and `pre_sha = res.sha256` (server‑computed over raw on‑disk bytes).
 - Write with `precondition_sha256 = pre_sha`.
 - On `{status:"stale_file"}`:
-  - Retry once using the server hash (`data.current_sha256` or `data.expected_sha256`).
-  - If absent, one re‑read then a final retry. No loops.
-- After success: immediately re‑read raw bytes and set `pre_sha = sha256(read_bytes(uri))` before any further edits in the same test.
+  - Retry once using a server hash (`data.current_sha256` or `data.expected_sha256`) if present.
+  - Otherwise perform one `read_resource(...)` to refresh `pre_sha` and retry. No loops.
+- After success:
+  - Prefer not to re‑read. Update `buf` locally; refresh `pre_sha = mcp__unity__read_resource(...).sha256` only when the next step requires exact on‑disk sync (validation, anchor recompute) or before leaving the test.
 - Prefer anchors (`script_apply_edits`) for end‑of‑class / above‑method insertions. Keep edits inside method bodies. Avoid header/using.
 
 ### Execution Order (fixed)
