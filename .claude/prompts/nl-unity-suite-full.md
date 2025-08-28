@@ -61,6 +61,10 @@ VERDICT: PASS
 ]]></system-out>
 </testcase>
 
+```
+
+Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
+
 
 ### Fast Restore Strategy (OS‑level)
 
