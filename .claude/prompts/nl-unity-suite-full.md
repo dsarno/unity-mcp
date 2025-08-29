@@ -170,7 +170,7 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - T‑F. Atomic batch — One `mcp__unity__script_apply_edits` call containing:
   - two `replace_range` ops (small interior edits), and
   - one `anchor_insert` immediately before the final class brace,
-  all‑or‑nothing; restore.
+  all‑or‑nothing; restore. Compute all ranges from the same fresh read and sort ranges descending by start index.
 - T‑G. Path normalization — Make the same edit with `unity://path/Assets/...` then `Assets/...`. Without refreshing `precondition_sha256`, the second attempt returns `{stale_file}`; retry with the server-provided hash to confirm both forms resolve to the same file.
 - T‑H. Validation — `standard` after edits; `basic` only for transient checks.
 - T‑I. Failure surfaces (expected) — safe‑first order
