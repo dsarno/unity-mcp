@@ -275,6 +275,19 @@ def register_manage_script_edits_tools(mcp: FastMCP):
             if "newText" in e and "text" not in e:
                 e["text"] = e.pop("newText")
 
+            # CI compatibility (T‑A/T‑E):
+            # Accept method-anchored anchor_insert and upgrade to insert_method
+            # Example incoming shape:
+            #   {"op":"anchor_insert","afterMethodName":"GetCurrentTarget","text":"..."}
+            if (
+                e.get("op") == "anchor_insert"
+                and not e.get("anchor")
+                and (e.get("afterMethodName") or e.get("beforeMethodName"))
+            ):
+                e["op"] = "insert_method"
+                if "replacement" not in e:
+                    e["replacement"] = e.get("text", "")
+
             # LSP-like range edit -> replace_range
             if "range" in e and isinstance(e["range"], dict):
                 rng = e.pop("range")
