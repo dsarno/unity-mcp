@@ -220,7 +220,12 @@ namespace MCPForUnity.Editor.Tools
                     bool ok = ValidateScriptSyntax(fileText, chosen, out string[] diagsRaw);
                     var diags = (diagsRaw ?? Array.Empty<string>()).Select(s =>
                     {
-                        var m = Regex.Match(s, @"^(ERROR|WARNING|INFO): (.*?)(?: \(Line (\d+)\))?$");
+                        var m = Regex.Match(
+                            s,
+                            @"^(ERROR|WARNING|INFO): (.*?)(?: \(Line (\d+)\))?$",
+                            RegexOptions.CultureInvariant | RegexOptions.Multiline,
+                            TimeSpan.FromMilliseconds(250)
+                        );
                         string severity = m.Success ? m.Groups[1].Value.ToLowerInvariant() : "info";
                         string message = m.Success ? m.Groups[2].Value : s;
                         int lineNum = m.Success && int.TryParse(m.Groups[3].Value, out var l) ? l : 0;
@@ -456,12 +461,16 @@ namespace MCPForUnity.Editor.Tools
         {
             if (!File.Exists(fullPath))
                 return Response.Error($"Script not found at '{relativePath}'.");
-            // Refuse edits if the target is a symlink
+            // Refuse edits if the target or any ancestor is a symlink
             try
             {
-                var attrs = File.GetAttributes(fullPath);
-                if ((attrs & FileAttributes.ReparsePoint) != 0)
-                    return Response.Error("Refusing to edit a symlinked script path.");
+                var di = new DirectoryInfo(Path.GetDirectoryName(fullPath) ?? "");
+                while (di != null && !string.Equals(di.FullName.Replace('\\','/'), Application.dataPath.Replace('\\','/'), StringComparison.OrdinalIgnoreCase))
+                {
+                    if (di.Exists && (di.Attributes & FileAttributes.ReparsePoint) != 0)
+                        return Response.Error("Refusing to edit a symlinked script path.");
+                    di = di.Parent;
+                }
             }
             catch
             {
@@ -1185,7 +1194,7 @@ namespace MCPForUnity.Editor.Tools
                         }
 
                         default:
-                            return Response.Error($"Unknown edit mode: '{mode}'. Allowed: replace_class, delete_class, replace_method, delete_method, insert_method, anchor_insert.");
+                            return Response.Error($"Unknown edit mode: '{mode}'. Allowed: replace_class, delete_class, replace_method, delete_method, insert_method, anchor_insert, anchor_delete, anchor_replace.");
                     }
                 }
 

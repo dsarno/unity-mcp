@@ -34,9 +34,12 @@ CI provides:
 
 ## Tool Mapping
 - **Anchors/regex/structured**: `mcp__unity__script_apply_edits`
+  - Allowed ops: `anchor_insert`, `replace_range`, `regex_replace` (no overlapping ranges within a single call)
 - **Precise ranges / atomic batch**: `mcp__unity__apply_text_edits` (non‑overlapping ranges)
 - **Validation**: `mcp__unity__validate_script(level:"standard")`
 - **Reporting**: `Write` small XML fragments to `reports/*_results.xml`
+- **Editor state/flush**: `mcp__unity__manage_editor` (use sparingly; no project mutations)
+- **Console readback**: `mcp__unity__read_console` (INFO capture only; do not assert in place of `validate_script`)
 - **Snapshot/Restore**: `Bash(scripts/nlt-revert.sh:*)`
   - For `script_apply_edits`: use `name` + workspace‑relative `path` only (e.g., `name="LongUnityScriptClaudeTest"`, `path="Assets/Scripts"`). Do not pass `unity://...` URIs as `path`.
   - For `apply_text_edits` / `read_resource`: use the URI form only (e.g., `uri="unity://path/Assets/Scripts/LongUnityScriptClaudeTest.cs"`). Do not concatenate `Assets/` with a `unity://...` URI.
@@ -164,7 +167,10 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - T‑C. Header/region preservation — Edit interior of `ApplyBlend`; preserve signature/docs/regions; restore.
 - T‑D. End‑of‑class (anchor) — Insert helper before final brace; remove; restore.
 - T‑E. Lifecycle — Insert → update → delete via regex; restore.
-- T‑F. Atomic batch — One call: two small `replace_range` + one end‑of‑class comment; all‑or‑nothing; restore.
+- T‑F. Atomic batch — One `mcp__unity__script_apply_edits` call containing:
+  - two `replace_range` ops (small interior edits), and
+  - one `anchor_insert` immediately before the final class brace,
+  all‑or‑nothing; restore.
 - T‑G. Path normalization — Make the same edit with `unity://path/Assets/...` then `Assets/...`. Without refreshing `precondition_sha256`, the second attempt returns `{stale_file}`; retry with the server-provided hash to confirm both forms resolve to the same file.
 - T‑H. Validation — `standard` after edits; `basic` only for transient checks.
 - T‑I. Failure surfaces (expected) — safe‑first order
