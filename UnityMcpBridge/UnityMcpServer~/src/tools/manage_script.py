@@ -268,3 +268,27 @@ def register_manage_script_tools(mcp: FastMCP):
                 "success": False,
                 "message": f"Python error managing script: {str(e)}",
             }
+
+    @mcp.tool(description=(
+        "Get manage_script capabilities (supported ops, limits, and guards).\n\n"
+        "Returns:\n- ops: list of supported structured ops\n- text_ops: list of supported text ops\n- max_edit_payload_bytes: server edit payload cap\n- guards: header/using guard enabled flag\n"
+    ))
+    def manage_script_capabilities(ctx: Context) -> Dict[str, Any]:
+        try:
+            # Keep in sync with server/Editor ManageScript implementation
+            ops = [
+                "replace_class","delete_class","replace_method","delete_method",
+                "insert_method","anchor_insert","anchor_delete","anchor_replace"
+            ]
+            text_ops = ["replace_range","regex_replace","prepend","append"]
+            # Match ManageScript.MaxEditPayloadBytes if exposed; hardcode a sensible default fallback
+            max_edit_payload_bytes = 256 * 1024
+            guards = {"using_guard": True}
+            return {"success": True, "data": {
+                "ops": ops,
+                "text_ops": text_ops,
+                "max_edit_payload_bytes": max_edit_payload_bytes,
+                "guards": guards,
+            }}
+        except Exception as e:
+            return {"success": False, "error": f"capabilities error: {e}"}

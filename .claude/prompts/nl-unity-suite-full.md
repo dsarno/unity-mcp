@@ -167,10 +167,12 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - T‑C. Header/region preservation — Edit interior of `ApplyBlend`; preserve signature/docs/regions; restore.
 - T‑D. End‑of‑class (anchor) — Insert helper before final brace; remove; restore.
 - T‑E. Lifecycle — Insert → update → delete via regex; restore.
-- T‑F. Atomic batch — One `mcp__unity__script_apply_edits` call containing:
-  - two `replace_range` ops (small interior edits), and
-  - one `anchor_insert` immediately before the final class brace,
-  all‑or‑nothing; restore. Compute all ranges from the same fresh read and sort ranges descending by start index.
+- T‑F. Atomic batch — One `mcp__unity__apply_text_edits` call (text ranges only)
+  - Compute all three edits from the **same fresh read**:
+    1) Two small interior `replace_range` tweaks.
+    2) One **end‑of‑class insertion**: find the **index of the final `}`** for the class; create a zero‑width range `[idx, idx)` and set `replacement` to the 3‑line comment block.
+  - Send all three ranges in **one call**, sorted **descending by start index** to avoid offset drift.
+  - Expect all‑or‑nothing semantics; on `{status:"overlap"}` or `{status:"bad_request"}`, write the testcase fragment with `<failure>…</failure>`, **restore**, and continue.
 - T‑G. Path normalization — Make the same edit with `unity://path/Assets/...` then `Assets/...`. Without refreshing `precondition_sha256`, the second attempt returns `{stale_file}`; retry with the server-provided hash to confirm both forms resolve to the same file.
 - T‑H. Validation — `standard` after edits; `basic` only for transient checks.
 - T‑I. Failure surfaces (expected) — safe‑first order
