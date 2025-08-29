@@ -616,7 +616,10 @@ namespace MCPForUnity.Editor.Tools
             for (int i = 1; i < spans.Count; i++)
             {
                 if (spans[i].end > spans[i - 1].start)
-                    return Response.Error("overlap", new { status = "overlap" });
+                {
+                    var conflict = new[] { new { startA = spans[i].start, endA = spans[i].end, startB = spans[i - 1].start, endB = spans[i - 1].end } };
+                    return Response.Error("overlap", new { status = "overlap", conflicts = conflict, hint = "Sort ranges descending by start and compute from the same snapshot." });
+                }
             }
 
             string working = original;
@@ -1201,7 +1204,18 @@ namespace MCPForUnity.Editor.Tools
                 if (!applySequentially)
                 {
                     if (HasOverlaps(replacements))
+                    {
+                        var ordered = replacements.OrderByDescending(r => r.start).ToList();
+                        for (int i = 1; i < ordered.Count; i++)
+                        {
+                            if (ordered[i].start + ordered[i].length > ordered[i - 1].start)
+                            {
+                                var conflict = new[] { new { startA = ordered[i].start, endA = ordered[i].start + ordered[i].length, startB = ordered[i - 1].start, endB = ordered[i - 1].start + ordered[i - 1].length } };
+                                return Response.Error("overlap", new { status = "overlap", conflicts = conflict, hint = "Apply in descending order against the same precondition snapshot." });
+                            }
+                        }
                         return Response.Error("overlap", new { status = "overlap" });
+                    }
 
                     foreach (var r in replacements.OrderByDescending(r => r.start))
                         working = working.Remove(r.start, r.length).Insert(r.start, r.text);
