@@ -254,7 +254,18 @@ jobs:
             esac
             BASH
             chmod +x scripts/nlt-revert.sh
+
+        # ---------- Snapshot baseline (pre-agent) ----------
+        - name: Snapshot baseline (pre-agent)
+          if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
+          shell: bash
+          run: |
+            set -euo pipefail
+            TARGET="TestProjects/UnityMCPTests/Assets/Scripts/LongUnityScriptClaudeTest.cs"
+            SNAP="reports/_snapshots/LongUnityScriptClaudeTest.cs.baseline"
+            scripts/nlt-revert.sh snapshot "$TARGET" "$SNAP"
   
+              
         # ---------- Run suite ----------
         - name: Run Claude NL suite (single pass)
           uses: anthropics/claude-code-base-action@beta
