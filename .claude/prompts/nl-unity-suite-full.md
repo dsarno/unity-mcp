@@ -51,6 +51,9 @@ CI provides:
 - Put human‑readable lines (PLAN/PROGRESS/evidence) **inside** `<system-out><![CDATA[ ... ]]></system-out>`.
 - Evidence windows only (±20–40 lines). If showing a unified diff, cap at 100 lines and note truncation.
 - **Never** open/patch `$JUNIT_OUT` or `$MD_OUT`; CI merges fragments and synthesizes Markdown.
+  - Write destinations must match: `^reports/[A-Za-z0-9._-]+_results\.xml$`
+  - Snapshot files must live under `reports/_snapshots/`
+  - Reject absolute paths and any path containing `..`
 
 **Example fragment**
 ```xml
