@@ -355,6 +355,8 @@ jobs:
 
             src = Path(os.environ.get('JUNIT_OUT', 'reports/junit-nl-suite.xml'))
             md_out = Path(os.environ.get('MD_OUT', 'reports/junit-nl-suite.md'))
+            # Ensure destination directory exists even if earlier prep steps were skipped
+            md_out.parent.mkdir(parents=True, exist_ok=True)
 
             if not src.exists():
                 md_out.write_text("# Unity NL/T Editing Suite Test Results\n\n(No JUnit found)\n", encoding='utf-8')
