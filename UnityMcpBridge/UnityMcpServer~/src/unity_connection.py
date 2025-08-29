@@ -23,6 +23,9 @@ logger = logging.getLogger("mcp-for-unity-server")
 # Module-level lock to guard global connection initialization
 _connection_lock = threading.Lock()
 
+# Maximum allowed framed payload size (64 MiB)
+FRAMED_MAX = 64 * 1024 * 1024
+
 @dataclass
 class UnityConnection:
     """Manages the socket connection to the Unity Editor."""
@@ -36,62 +39,67 @@ class UnityConnection:
         if self.port is None:
             self.port = PortDiscovery.discover_unity_port()
         self._io_lock = threading.Lock()
+        self._conn_lock = threading.Lock()
 
     def connect(self) -> bool:
         """Establish a connection to the Unity Editor."""
         if self.sock:
             return True
-        try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.connect((self.host, self.port))
-            # Disable Nagle's algorithm to reduce small RPC latency
-            with contextlib.suppress(Exception):
-                self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            logger.debug(f"Connected to Unity at {self.host}:{self.port}")
-
-            # Strict handshake: require FRAMING=1
+        with self._conn_lock:
+            if self.sock:
+                return True
             try:
-                require_framing = getattr(config, "require_framing", True)
-                timeout = float(getattr(config, "handshake_timeout", 1.0))
-                self.sock.settimeout(timeout)
-                buf = bytearray()
-                deadline = time.monotonic() + timeout
-                while time.monotonic() < deadline and len(buf) < 512:
-                    try:
-                        chunk = self.sock.recv(256)
-                        if not chunk:
-                            break
-                        buf.extend(chunk)
-                        if b"\n" in buf:
-                            break
-                    except socket.timeout:
-                        break
-                text = bytes(buf).decode('ascii', errors='ignore').strip()
+                # Bounded connect to avoid indefinite blocking
+                connect_timeout = float(getattr(config, "connect_timeout", getattr(config, "connection_timeout", 1.0)))
+                self.sock = socket.create_connection((self.host, self.port), connect_timeout)
+                # Disable Nagle's algorithm to reduce small RPC latency
+                with contextlib.suppress(Exception):
+                    self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                logger.debug(f"Connected to Unity at {self.host}:{self.port}")
 
-                if 'FRAMING=1' in text:
-                    self.use_framing = True
-                    logger.debug('Unity MCP handshake received: FRAMING=1 (strict)')
-                else:
-                    if require_framing:
-                        # Best-effort plain-text advisory for legacy peers
-                        with contextlib.suppress(Exception):
-                            self.sock.sendall(b'Unity MCP requires FRAMING=1\n')
-                        raise ConnectionError(f'Unity MCP requires FRAMING=1, got: {text!r}')
+                # Strict handshake: require FRAMING=1
+                try:
+                    require_framing = getattr(config, "require_framing", True)
+                    timeout = float(getattr(config, "handshake_timeout", 1.0))
+                    self.sock.settimeout(timeout)
+                    buf = bytearray()
+                    deadline = time.monotonic() + timeout
+                    while time.monotonic() < deadline and len(buf) < 512:
+                        try:
+                            chunk = self.sock.recv(256)
+                            if not chunk:
+                                break
+                            buf.extend(chunk)
+                            if b"\n" in buf:
+                                break
+                        except socket.timeout:
+                            break
+                    text = bytes(buf).decode('ascii', errors='ignore').strip()
+
+                    if 'FRAMING=1' in text:
+                        self.use_framing = True
+                        logger.debug('Unity MCP handshake received: FRAMING=1 (strict)')
                     else:
-                        self.use_framing = False
-                        logger.warning('Unity MCP handshake missing FRAMING=1; proceeding in legacy mode by configuration')
-            finally:
-                self.sock.settimeout(config.connection_timeout)
-            return True
-        except Exception as e:
-            logger.error(f"Failed to connect to Unity: {str(e)}")
-            try:
-                if self.sock:
-                    self.sock.close()
-            except Exception:
-                pass
-            self.sock = None
-            return False
+                        if require_framing:
+                            # Best-effort plain-text advisory for legacy peers
+                            with contextlib.suppress(Exception):
+                                self.sock.sendall(b'Unity MCP requires FRAMING=1\n')
+                            raise ConnectionError(f'Unity MCP requires FRAMING=1, got: {text!r}')
+                        else:
+                            self.use_framing = False
+                            logger.warning('Unity MCP handshake missing FRAMING=1; proceeding in legacy mode by configuration')
+                finally:
+                    self.sock.settimeout(config.connection_timeout)
+                return True
+            except Exception as e:
+                logger.error(f"Failed to connect to Unity: {str(e)}")
+                try:
+                    if self.sock:
+                        self.sock.close()
+                except Exception:
+                    pass
+                self.sock = None
+                return False
 
     def disconnect(self):
         """Close the connection to the Unity Editor."""
@@ -119,11 +127,11 @@ class UnityConnection:
                 header = self._read_exact(sock, 8)
                 payload_len = struct.unpack('>Q', header)[0]
                 if payload_len == 0:
-                    raise Exception("Invalid framed length: 0")
-                if payload_len > (64 * 1024 * 1024):
-                    raise Exception(f"Invalid framed length: {payload_len}")
+                    raise ValueError("Invalid framed length: 0")
+                if payload_len > FRAMED_MAX:
+                    raise ValueError(f"Invalid framed length: {payload_len}")
                 payload = self._read_exact(sock, payload_len)
-                logger.info(f"Received framed response ({len(payload)} bytes)")
+                logger.debug(f"Received framed response ({len(payload)} bytes)")
                 return payload
             except socket.timeout as e:
                 logger.warning("Socket timeout during framed receive")
