@@ -77,19 +77,25 @@ namespace MCPForUnity.Editor.Tools
                 return false;
             }
 
-            // Best-effort symlink guard: if directory is a reparse point/symlink, reject
+            // Best-effort symlink guard: if the directory OR ANY ANCESTOR (up to Assets/) is a reparse point/symlink, reject
             try
             {
                 var di = new DirectoryInfo(full);
-                if (di.Exists)
+                while (di != null)
                 {
-                    var attrs = di.Attributes;
-                    if ((attrs & FileAttributes.ReparsePoint) != 0)
+                    if (di.Exists && (di.Attributes & FileAttributes.ReparsePoint) != 0)
                     {
                         fullPathDir = null;
                         relPathSafe = null;
                         return false;
                     }
+                    var atAssets = string.Equals(
+                        di.FullName.Replace('\\','/'),
+                        assets,
+                        StringComparison.OrdinalIgnoreCase
+                    );
+                    if (atAssets) break;
+                    di = di.Parent;
                 }
             }
             catch { /* best effort; proceed */ }
@@ -713,7 +719,8 @@ namespace MCPForUnity.Editor.Tools
                     {
                         uri = $"unity://path/{relativePath}",
                         path = relativePath,
-                        editsApplied = spans.Count
+                        editsApplied = spans.Count,
+                        sha256 = newSha
                     }
                 );
             }
