@@ -67,11 +67,13 @@ def _apply_edits_locally(original_text: str, edits: List[Dict[str, Any]]) -> str
         elif op == "regex_replace":
             pattern = edit.get("pattern", "")
             repl = edit.get("replacement", "")
+            # Translate $n backrefs (our input) to Python \g<n>
+            repl_py = re.sub(r"\$(\d+)", r"\\g<\1>", repl)
             count = int(edit.get("count", 0))  # 0 = replace all
             flags = re.MULTILINE
             if edit.get("ignore_case"):
                 flags |= re.IGNORECASE
-            text = re.sub(pattern, repl, text, count=count, flags=flags)
+            text = re.sub(pattern, repl_py, text, count=count, flags=flags)
         else:
             allowed = "anchor_insert, prepend, append, replace_range, regex_replace"
             raise RuntimeError(f"unknown edit op: {op}; allowed: {allowed}. Use 'op' (aliases accepted: type/mode/operation).")
@@ -492,10 +494,14 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         m = _re.search(pattern, current_text, _re.MULTILINE)
                         if not m:
                             continue
+                        # Expand $1, $2... in replacement using this match
+                        def _expand_dollars(rep: str) -> str:
+                            return _re.sub(r"\$(\d+)", lambda g: m.group(int(g.group(1))) or "", rep)
+                        repl = _expand_dollars(text_field)
                         sl, sc = line_col_from_index(m.start())
                         el, ec = line_col_from_index(m.end())
-                        at_edits.append({"startLine": sl, "startCol": sc, "endLine": el, "endCol": ec, "newText": text_field})
-                        current_text = current_text[:m.start()] + text_field + current_text[m.end():]
+                        at_edits.append({"startLine": sl, "startCol": sc, "endLine": el, "endCol": ec, "newText": repl})
+                        current_text = current_text[:m.start()] + repl + current_text[m.end():]
                     elif opx in ("prepend","append"):
                         if opx == "prepend":
                             sl, sc = 1, 1
