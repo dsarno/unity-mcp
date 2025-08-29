@@ -54,6 +54,8 @@ CI provides:
   - Write destinations must match: `^reports/[A-Za-z0-9._-]+_results\.xml$`
   - Snapshot files must live under `reports/_snapshots/`
   - Reject absolute paths and any path containing `..`
+  - Reject control characters and line breaks in filenames; enforce UTF‑8
+  - Cap basename length to ≤64 chars; cap any path segment to ≤100 and total path length to ≤255
 
 **Example fragment**
 ```xml
@@ -96,6 +98,11 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
   - If absent, one re-read then a final retry. No loops.
 - After success: immediately re-read via `res2 = mcp__unity__read_resource(uri)` and set `pre_sha = sha256(res2.bytes)` before any further edits in the same test.
 - Prefer anchors (`script_apply_edits`) for end-of-class / above-method insertions. Keep edits inside method bodies. Avoid header/using.
+ 
+**On non‑JSON/transport errors (timeout, EOF, connection closed):**
+- Write `reports/<TESTID>_results.xml` with a `<testcase>` that includes a `<failure>` or `<error>` node capturing the error text.
+- Run the OS restore via `scripts/nlt-revert.sh restore …`.
+- Continue to the next test (do not abort).
 ### Execution Order (fixed)
 
 - Run exactly: NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J (15 total).
@@ -118,7 +125,11 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - T‑F. Atomic batch — One call: two small `replace_range` + one end‑of‑class comment; all‑or‑nothing; restore.
 - T‑G. Path normalization — Make the same edit with `unity://path/Assets/...` then `Assets/...`. Without refreshing `precondition_sha256`, the second attempt returns `{stale_file}`; retry with the server-provided hash to confirm both forms resolve to the same file.
 - T‑H. Validation — `standard` after edits; `basic` only for transient checks.
-- T‑I. Failure surfaces — Record INFO on `{too_large}`, `{stale_file}`, overlap rejection, validation failure, `{using_guard}`.
+- T‑I. Failure surfaces (expected) — safe‑first order
+  - 1) Overlap: call `apply_text_edits` with two overlapping ranges on the same file; expect `{status:"overlap"}`.
+  - 2) Stale file: re‑use a deliberately old `precondition_sha256` on a small no‑op tweak; expect `{status:"stale_file"}` (then restore hash).
+  - 3) Using guard (optional, only within T‑I): you may touch the header (e.g., insert a newline above the first `using`) to elicit `{status:"using_guard"}`; restore immediately.
+  - 4) Too large (optional, last): if needed, send a payload just over the limit (small bounded overage). If a transport error/timeout occurs instead of JSON, still write the testcase fragment with an `<error>` and proceed.
 - T‑J. Idempotency — Repeat `replace_range` and then repeat delete; observe and record behavior. Regex/range operations are not strictly idempotent (no special status is emitted).
 
 ### Status & Reporting

@@ -52,8 +52,8 @@ class UnityConnection:
                 timeout = float(getattr(config, "handshake_timeout", 1.0))
                 self.sock.settimeout(timeout)
                 buf = bytearray()
-                end = time.time() + timeout
-                while time.time() < end and len(buf) < 512:
+                deadline = time.monotonic() + timeout
+                while time.monotonic() < deadline and len(buf) < 512:
                     try:
                         chunk = self.sock.recv(256)
                         if not chunk:
@@ -70,11 +70,9 @@ class UnityConnection:
                     logger.debug('Unity MCP handshake received: FRAMING=1 (strict)')
                 else:
                     if require_framing:
-                        # Best-effort advisory; peer may ignore if not framed-capable
+                        # Best-effort plain-text advisory for legacy peers
                         with contextlib.suppress(Exception):
-                            msg = b'Unity MCP requires FRAMING=1'
-                            header = struct.pack('>Q', len(msg))
-                            self.sock.sendall(header + msg)
+                            self.sock.sendall(b'Unity MCP requires FRAMING=1\n')
                         raise ConnectionError(f'Unity MCP requires FRAMING=1, got: {text!r}')
                     else:
                         self.use_framing = False
