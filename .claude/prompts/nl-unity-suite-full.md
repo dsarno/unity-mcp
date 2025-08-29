@@ -52,9 +52,8 @@ CI provides:
 1) Prefer `script_apply_edits` with a regex capture on the final closing brace:
 ```json
 {"op":"regex_replace",
- "pattern":"(?s)(\\n\\s*\\})\\s*$",
+ "pattern":"(?s)(\\r?\\n\\s*\\})\\s*$",
  "replacement":"\\n    // Tail test A\\n    // Tail test B\\n    // Tail test C\\1"}
-```
 
 2) If the server returns `unsupported` (op not available) or `missing_field` (op‑specific), FALL BACK to
    `apply_text_edits`:
