@@ -654,7 +654,7 @@ namespace MCPForUnity.Editor.Tools
             // Atomic write and schedule refresh
             try
             {
-                var enc = System.Text.Encoding.UTF8;
+                var enc = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
                 var tmp = fullPath + ".tmp";
                 File.WriteAllText(tmp, working, enc);
                 string backup = fullPath + ".bak";
@@ -1223,7 +1223,7 @@ namespace MCPForUnity.Editor.Tools
                     Debug.LogWarning($"Script validation warnings for {name}:\n" + string.Join("\n", errors));
 
                 // Atomic write with backup; schedule refresh
-                var enc = System.Text.Encoding.UTF8;
+                var enc = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
                 var tmp = fullPath + ".tmp";
                 File.WriteAllText(tmp, working, enc);
                 string backup = fullPath + ".bak";
