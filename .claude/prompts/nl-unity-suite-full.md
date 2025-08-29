@@ -161,10 +161,10 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - T‑G. Path normalization — Make the same edit with `unity://path/Assets/...` then `Assets/...`. Without refreshing `precondition_sha256`, the second attempt returns `{stale_file}`; retry with the server-provided hash to confirm both forms resolve to the same file.
 - T‑H. Validation — `standard` after edits; `basic` only for transient checks.
 - T‑I. Failure surfaces (expected) — safe‑first order
-  - 1) Overlap: call `apply_text_edits` with two overlapping ranges on the same file; expect `{status:"overlap"}`.
+  - 1) Overlap (deterministic): use `apply_text_edits` with two character ranges from the SAME fresh snapshot of the file. Within `HasTarget` body, e.g., pick r1=[start+2,start+10) and r2=[start+8,start+14). Send both in ONE call; expect `{status:"overlap"}`. Do not use regex/anchors for this probe.
   - 2) Stale file: re‑use a deliberately old `precondition_sha256` on a small no‑op tweak; expect `{status:"stale_file"}` (then restore hash).
   - 3) Using guard (optional, only within T‑I): you may touch the header (e.g., insert a newline above the first `using`) to elicit `{status:"using_guard"}`; restore immediately.
-  - 4) Too large (optional, last): if needed, send a payload just over the limit (small bounded overage). If a transport error/timeout occurs instead of JSON, still write the testcase fragment with an `<error>` and proceed.
+  - 4) Too large (optional, last): only run if an env hint is present (e.g., `RUN_TOO_LARGE=1`). Keep overage small (+16–32 KB). If a transport error/timeout occurs instead of JSON, still write the testcase fragment with an `<error>` and proceed.
 - T‑J. Idempotency — Repeat `replace_range` and then repeat delete; observe and record behavior. Regex/range operations are not strictly idempotent (no special status is emitted).
 
 ### Status & Reporting
