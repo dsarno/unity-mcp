@@ -157,7 +157,7 @@ jobs:
               if docker logs unity-mcp 2>&1 | grep -qE "MCP Bridge listening|Bridge ready|Server started"; then
                 READY=1; echo "Bridge ready (log markers)"; break
               fi
-              PORT=$(python -c "import os,glob,json,sys,time; b=os.path.expanduser('~/.unity-mcp'); fs=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(next((json.load(open(f,'r',encoding='utf-8')).get('unity_port') for f in fs if time.time()-os.path.getmtime(f)<=300 and json.load(open(f,'r',encoding='utf-8')).get('unity_port')), '' ))" 2>/dev/null || true)
+              PORT=$(python3 -c "import os,glob,json,sys,time; b=os.path.expanduser('~/.unity-mcp'); fs=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(next((json.load(open(f,'r',encoding='utf-8')).get('unity_port') for f in fs if time.time()-os.path.getmtime(f)<=300 and json.load(open(f,'r',encoding='utf-8')).get('unity_port')), '' ))" 2>/dev/null || true)
               if [ -n "${PORT:-}" ] && { try_connect_host "$PORT" || docker exec unity-mcp bash -lc "timeout 1 bash -lc 'exec 3<>/dev/tcp/127.0.0.1/$PORT' || (command -v nc >/dev/null 2>&1 && nc -6 -z ::1 $PORT)"; }; then
                 READY=1; echo "Bridge ready on port $PORT"; break
               fi
@@ -466,7 +466,7 @@ jobs:
           if: always()
           run: |
             set -eu
-            python - <<'PY'
+            python3 - <<'PY'
             from pathlib import Path
             rp=Path('reports'); rp.mkdir(parents=True, exist_ok=True)
             for p in rp.glob('*.md'):
@@ -479,7 +479,7 @@ jobs:
           if: always()
           run: |
             echo "## Unity NL/T Editing Suite — Summary" >> $GITHUB_STEP_SUMMARY
-            python - <<'PY' >> $GITHUB_STEP_SUMMARY
+            python3 - <<'PY' >> $GITHUB_STEP_SUMMARY
             from pathlib import Path
             p = Path('reports/junit-nl-suite.md')
             if p.exists():
