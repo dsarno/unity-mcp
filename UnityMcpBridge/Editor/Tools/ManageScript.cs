@@ -1125,6 +1125,21 @@ namespace MCPForUnity.Editor.Tools
                                 if (!m.Success) return Response.Error($"anchor_insert: anchor not found: {anchor}");
                                 int insAt = position == "after" ? m.Index + m.Length : m.Index;
                                 string norm = NormalizeNewlines(text);
+                                if (!norm.EndsWith("\n"))
+                                {
+                                    norm += "\n";
+                                }
+
+                                // Duplicate guard: if identical snippet already exists within this class, skip insert
+                                if (TryComputeClassSpan(working, name, null, out var clsStartDG, out var clsLenDG, out _))
+                                {
+                                    string classSlice = working.Substring(clsStartDG, Math.Min(clsLenDG, working.Length - clsStartDG));
+                                    if (classSlice.IndexOf(norm, StringComparison.Ordinal) >= 0)
+                                    {
+                                        // Do not insert duplicate; treat as no-op
+                                        break;
+                                    }
+                                }
                                 if (applySequentially)
                                 {
                                     working = working.Insert(insAt, norm);

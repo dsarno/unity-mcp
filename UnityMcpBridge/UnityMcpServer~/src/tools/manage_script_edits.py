@@ -469,15 +469,21 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     text_field = e.get("text") or e.get("insert") or e.get("content") or e.get("replacement") or ""
                     if opx == "anchor_insert":
                         anchor = e.get("anchor") or ""
-                        position = (e.get("position") or "before").lower()
+                        position = (e.get("position") or "after").lower()
                         flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
                         m = _re.search(anchor, current_text, flags)
                         if not m:
                             return _with_norm({"success": False, "code": "anchor_not_found", "message": f"anchor not found: {anchor}"}, normalized_for_echo, routing="mixed/text-first")
                         idx = m.start() if position == "before" else m.end()
+                        # Normalize insertion to avoid jammed methods
+                        text_field_norm = text_field
+                        if not text_field_norm.startswith("\n"):
+                            text_field_norm = "\n" + text_field_norm
+                        if not text_field_norm.endswith("\n"):
+                            text_field_norm = text_field_norm + "\n"
                         sl, sc = line_col_from_index(idx)
-                        at_edits.append({"startLine": sl, "startCol": sc, "endLine": sl, "endCol": sc, "newText": text_field})
-                        current_text = current_text[:idx] + text_field + current_text[idx:]
+                        at_edits.append({"startLine": sl, "startCol": sc, "endLine": sl, "endCol": sc, "newText": text_field_norm})
+                        current_text = current_text[:idx] + text_field_norm + current_text[idx:]
                     elif opx == "replace_range":
                         if all(k in e for k in ("startLine","startCol","endLine","endCol")):
                             at_edits.append({
@@ -578,11 +584,16 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     text_field = e.get("text") or e.get("insert") or e.get("content") or ""
                     if op == "anchor_insert":
                         anchor = e.get("anchor") or ""
-                        position = (e.get("position") or "before").lower()
+                        position = (e.get("position") or "after").lower()
                         m = _re.search(anchor, current_text, _re.MULTILINE)
                         if not m:
                             return _with_norm({"success": False, "code": "anchor_not_found", "message": f"anchor not found: {anchor}"}, normalized_for_echo, routing="text")
                         idx = m.start() if position == "before" else m.end()
+                        # Normalize insertion newlines
+                        if text_field and not text_field.startswith("\n"):
+                            text_field = "\n" + text_field
+                        if text_field and not text_field.endswith("\n"):
+                            text_field = text_field + "\n"
                         sl, sc = line_col_from_index(idx)
                         at_edits.append({
                             "startLine": sl,
