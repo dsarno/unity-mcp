@@ -1253,7 +1253,29 @@ namespace MCPForUnity.Editor.Tools
                 string refreshMode = options?["refresh"]?.ToString()?.ToLowerInvariant();
                 bool immediate = refreshMode == "immediate" || refreshMode == "sync";
 
-                // Compute and return the new file SHA for precondition chaining
+                // Persist changes atomically (no BOM), then compute/return new file SHA
+                var enc = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+                var tmp = fullPath + ".tmp";
+                File.WriteAllText(tmp, working, enc);
+                var backup = fullPath + ".bak";
+                try
+                {
+                    File.Replace(tmp, fullPath, backup);
+                    try { if (File.Exists(backup)) File.Delete(backup); } catch { }
+                }
+                catch (PlatformNotSupportedException)
+                {
+                    File.Copy(tmp, fullPath, true);
+                    try { File.Delete(tmp); } catch { }
+                    try { if (File.Exists(backup)) File.Delete(backup); } catch { }
+                }
+                catch (IOException)
+                {
+                    File.Copy(tmp, fullPath, true);
+                    try { File.Delete(tmp); } catch { }
+                    try { if (File.Exists(backup)) File.Delete(backup); } catch { }
+                }
+
                 var newSha = ComputeSha256(working);
                 var ok = Response.Success(
                     $"Applied {appliedCount} structured edit(s) to '{relativePath}'.",
@@ -1286,7 +1308,6 @@ namespace MCPForUnity.Editor.Tools
                     ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
                 }
                 return ok;
-            }
             catch (Exception ex)
             {
                 return Response.Error($"Edit failed: {ex.Message}");
