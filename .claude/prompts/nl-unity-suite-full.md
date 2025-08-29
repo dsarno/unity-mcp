@@ -93,6 +93,7 @@ CI provides:
   - Reject absolute paths and any path containing `..`
   - Reject control characters and line breaks in filenames; enforce UTF‑8
   - Cap basename length to ≤64 chars; cap any path segment to ≤100 and total path length to ≤255
+  - Bash(printf|echo) must write to stdout only. Do not use shell redirection, here‑docs, or `tee` to create/modify files. The only allowed FS mutation is via `scripts/nlt-revert.sh`.
 
 **Example fragment**
 ```xml
