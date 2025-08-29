@@ -384,8 +384,8 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     )
 
         # Decide routing: structured vs text vs mixed
-        STRUCT = {"replace_class","delete_class","replace_method","delete_method","insert_method","anchor_delete","anchor_replace"}
-        TEXT = {"prepend","append","replace_range","regex_replace","anchor_insert"}
+        STRUCT = {"replace_class","delete_class","replace_method","delete_method","insert_method","anchor_delete","anchor_replace","anchor_insert"}
+        TEXT = {"prepend","append","replace_range","regex_replace"}
         ops_set = { (e.get("op") or "").lower() for e in edits or [] }
         all_struct = ops_set.issubset(STRUCT)
         all_text = ops_set.issubset(TEXT)
@@ -434,7 +434,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
         # If we have a mixed batch (TEXT + STRUCT), apply text first with precondition, then structured
         if mixed:
             text_edits = [e for e in edits or [] if (e.get("op") or "").lower() in TEXT]
-            struct_edits = [e for e in edits or [] if (e.get("op") or "").lower() in STRUCT and (e.get("op") or "").lower() not in {"anchor_insert"}]
+            struct_edits = [e for e in edits or [] if (e.get("op") or "").lower() in STRUCT]
             try:
                 current_text = contents
                 def line_col_from_index(idx: int) -> Tuple[int, int]:
@@ -625,14 +625,17 @@ def register_manage_script_edits_tools(mcp: FastMCP):
             except Exception as e:
                 return _with_norm({"success": False, "code": "conversion_failed", "message": f"Edit conversion failed: {e}"}, normalized_for_echo, routing="text")
 
-        # For regex_replace on large files, support preview/confirm
-        if "regex_replace" in text_ops and not (options or {}).get("confirm"):
+        # For regex_replace, honor preview consistently: if preview=true, always return diff without writing.
+        # If confirm=false (default) and preview not requested, return diff and instruct confirm=true to apply.
+        if "regex_replace" in text_ops and (preview or not (options or {}).get("confirm")):
             try:
                 preview_text = _apply_edits_locally(contents, edits)
                 import difflib
                 diff = list(difflib.unified_diff(contents.splitlines(), preview_text.splitlines(), fromfile="before", tofile="after", n=2))
                 if len(diff) > 800:
                     diff = diff[:800] + ["... (diff truncated) ..."]
+                if preview:
+                    return {"success": True, "message": "Preview only (no write)", "data": {"diff": "\n".join(diff), "normalizedEdits": normalized_for_echo}}
                 return _with_norm({"success": False, "message": "Preview diff; set options.confirm=true to apply.", "data": {"diff": "\n".join(diff)}}, normalized_for_echo, routing="text")
             except Exception as e:
                 return _with_norm({"success": False, "code": "preview_failed", "message": f"Preview failed: {e}"}, normalized_for_echo, routing="text")

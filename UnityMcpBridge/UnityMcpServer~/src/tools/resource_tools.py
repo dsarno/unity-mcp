@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Dict, Any, List
 import re
 from pathlib import Path
+from urllib.parse import urlparse, unquote
 import fnmatch
 import hashlib
 import os
@@ -78,11 +79,24 @@ def _resolve_safe_path_from_uri(uri: str, project: Path) -> Path | None:
     if uri.startswith("unity://path/"):
         raw = uri[len("unity://path/"):]
     elif uri.startswith("file://"):
-        raw = uri[len("file://"):]
+        parsed = urlparse(uri)
+        raw = unquote(parsed.path or "")
+        # On Windows, urlparse('file:///C:/x') -> path='/C:/x'. Strip the leading slash for drive letters.
+        try:
+            import os as _os
+            if _os.name == "nt" and raw.startswith("/") and re.match(r"^/[A-Za-z]:/", raw):
+                raw = raw[1:]
+            # UNC paths: file://server/share -> netloc='server', path='/share'. Treat as \\\\server/share
+            if _os.name == "nt" and parsed.netloc:
+                raw = f"//{parsed.netloc}{raw}"
+        except Exception:
+            pass
     elif uri.startswith("Assets/"):
         raw = uri
     if raw is None:
         return None
+    # Normalize separators early
+    raw = raw.replace("\\", "/")
     p = (project / raw).resolve()
     try:
         p.relative_to(project)

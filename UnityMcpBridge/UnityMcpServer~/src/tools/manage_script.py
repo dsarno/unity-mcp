@@ -151,9 +151,54 @@ def register_manage_script_tools(mcp: FastMCP):
             Dictionary with results ('success', 'message', 'data').
         """
         try:
-            # Deprecate full-file update path entirely
+            # Graceful migration for legacy 'update': route to apply_text_edits (whole-file replace)
             if action == 'update':
-                return {"success": False, "message": "Deprecated: use apply_text_edits or resources/read + small edits."}
+                try:
+                    # 1) Read current contents to compute end range and precondition
+                    read_resp = send_command_with_retry("manage_script", {
+                        "action": "read",
+                        "name": name,
+                        "path": path,
+                    })
+                    if not (isinstance(read_resp, dict) and read_resp.get("success")):
+                        return {"success": False, "code": "deprecated_update", "message": "Use apply_text_edits; automatic migration failed to read current file."}
+                    data = read_resp.get("data", {})
+                    current = data.get("contents")
+                    if not current and data.get("contentsEncoded"):
+                        import base64 as _b64
+                        current = _b64.b64decode(data.get("encodedContents", "").encode("utf-8")).decode("utf-8", "replace")
+                    if current is None:
+                        return {"success": False, "code": "deprecated_update", "message": "Use apply_text_edits; current file read returned no contents."}
+
+                    # 2) Compute whole-file range (1-based, end exclusive) and SHA
+                    import hashlib as _hashlib
+                    old_lines = current.splitlines(keepends=True)
+                    end_line = len(old_lines) + 1
+                    sha = _hashlib.sha256(current.encode("utf-8")).hexdigest()
+
+                    # 3) Apply single whole-file text edit with provided 'contents'
+                    edits = [{
+                        "startLine": 1,
+                        "startCol": 1,
+                        "endLine": end_line,
+                        "endCol": 1,
+                        "newText": contents or "",
+                    }]
+                    route_params = {
+                        "action": "apply_text_edits",
+                        "name": name,
+                        "path": path,
+                        "edits": edits,
+                        "precondition_sha256": sha,
+                        "options": {"refresh": "immediate", "validate": "standard"},
+                    }
+                    routed = send_command_with_retry("manage_script", route_params)
+                    if isinstance(routed, dict):
+                        routed.setdefault("message", "Routed legacy update to apply_text_edits")
+                        return routed
+                    return {"success": False, "message": str(routed)}
+                except Exception as e:
+                    return {"success": False, "code": "deprecated_update", "message": f"Use apply_text_edits; migration error: {e}"}
 
             # Prepare parameters for Unity
             params = {

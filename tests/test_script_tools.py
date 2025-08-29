@@ -3,6 +3,7 @@ import pathlib
 import importlib.util
 import types
 import pytest
+import asyncio
 
 # add server src to path and load modules without triggering package imports
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -119,5 +120,4 @@ def test_manage_asset_prefab_modify_request(monkeypatch):
         assert captured["params"]["properties"] == {"hp": 100}
         assert resp["success"] is True
 
-    import asyncio
     asyncio.run(run())
