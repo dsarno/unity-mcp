@@ -563,7 +563,7 @@ namespace MCPForUnity.Editor
             }
             if (payloadLen == 0UL)
             {
-                return string.Empty;
+                throw new System.IO.IOException("Zero-length frame is not allowed");
             }
             if (payloadLen > int.MaxValue)
             {

@@ -35,19 +35,17 @@ def register_manage_script_tools(mcp: FastMCP):
 
         # Percent-decode any residual encodings and normalize separators
         raw_path = unquote(raw_path).replace("\\", "/")
-        # Strip any leading slashes/host artifacts from file:// style URIs
-        raw_path = raw_path.lstrip("/")
+        # Strip leading slash only for Windows drive-letter forms like "/C:/..."
+        if os.name == "nt" and len(raw_path) >= 3 and raw_path[0] == "/" and raw_path[2] == ":":
+            raw_path = raw_path[1:]
 
         # Normalize path (collapse ../, ./)
         norm = os.path.normpath(raw_path).replace("\\", "/")
 
-        # If an 'Assets' segment exists, compute path relative to it
+        # If an 'Assets' segment exists, compute path relative to it (case-insensitive)
         parts = [p for p in norm.split("/") if p not in ("", ".")]
-        try:
-            idx = parts.index("Assets")
-            assets_rel = "/".join(parts[idx:])
-        except ValueError:
-            assets_rel = None
+        idx = next((i for i, seg in enumerate(parts) if seg.lower() == "assets"), None)
+        assets_rel = "/".join(parts[idx:]) if idx is not None else None
 
         effective_path = assets_rel if assets_rel else norm
 

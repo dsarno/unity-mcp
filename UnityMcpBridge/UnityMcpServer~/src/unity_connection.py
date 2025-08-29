@@ -41,6 +41,9 @@ class UnityConnection:
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((self.host, self.port))
+            # Disable Nagle's algorithm to reduce small RPC latency
+            with contextlib.suppress(Exception):
+                self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             logger.debug(f"Connected to Unity at {self.host}:{self.port}")
 
             # Strict handshake: require FRAMING=1

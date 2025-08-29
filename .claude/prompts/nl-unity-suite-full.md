@@ -113,10 +113,10 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - T‑D. End‑of‑class (anchor) — Insert helper before final brace; remove; restore.
 - T‑E. Lifecycle — Insert → update → delete via regex; restore.
 - T‑F. Atomic batch — One call: two small `replace_range` + one end‑of‑class comment; all‑or‑nothing; restore.
-- T‑G. Path normalization — Same edit with `unity://path/Assets/...` then `Assets/...`; second returns `{status:"no_change"}`.
+- T‑G. Path normalization — Make the same edit with `unity://path/Assets/...` then `Assets/...`. Without refreshing `precondition_sha256`, the second attempt returns `{stale_file}`; retry with the server-provided hash to confirm both forms resolve to the same file.
 - T‑H. Validation — `standard` after edits; `basic` only for transient checks.
 - T‑I. Failure surfaces — Record INFO on `{too_large}`, `{stale_file}`, overlap rejection, validation failure, `{using_guard}`.
-- T‑J. Idempotency — Repeat `replace_range` → `{status:"no_change"}`; repeat delete → no‑op.
+- T‑J. Idempotency — Repeat `replace_range` and then repeat delete; observe and record behavior. Regex/range operations are not strictly idempotent (no special status is emitted).
 
 ### Status & Reporting
 
