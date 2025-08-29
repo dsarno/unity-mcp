@@ -165,25 +165,46 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - NL‑3. End‑of‑class — Insert `// Tail test A/B/C` (3 lines) before final brace; restore.
 - NL‑4. Compile trigger — Record INFO only.
 
-- T‑A. Anchor insert (text path) — Insert helper after `GetCurrentTarget`; verify; delete via `regex_replace`; restore.
-- T‑B. Replace body — Single `replace_range` inside `HasTarget`; restore.
-- T‑C. Header/region preservation — Edit interior of `ApplyBlend`; preserve signature/docs/regions; restore.
-- T‑D. End‑of‑class (anchor) — Insert helper before final brace; remove; restore.
-- T‑E. Lifecycle — Insert → update → delete via regex; restore.
-- T‑F. Atomic batch — One `mcp__unity__apply_text_edits` call (text ranges only)
+### T‑A. Anchor insert (text path) — Insert helper after `GetCurrentTarget`; verify; delete via `regex_replace`; restore.
+### T‑B. Replace body — Single `replace_range` inside `HasTarget`; restore.
+### T‑C. Header/region preservation — Edit interior of `ApplyBlend`; preserve signature/docs/regions; restore.
+### T‑D. End‑of‑class (anchor) — Insert helper before final brace; remove; restore.
+### T‑E. Lifecycle — Insert → update → delete via regex; restore.
+### T‑F. Atomic batch — One `mcp__unity__apply_text_edits` call (text ranges only)
   - Compute all three edits from the **same fresh read**:
     1) Two small interior `replace_range` tweaks.
     2) One **end‑of‑class insertion**: find the **index of the final `}`** for the class; create a zero‑width range `[idx, idx)` and set `replacement` to the 3‑line comment block.
   - Send all three ranges in **one call**, sorted **descending by start index** to avoid offset drift.
   - Expect all‑or‑nothing semantics; on `{status:"overlap"}` or `{status:"bad_request"}`, write the testcase fragment with `<failure>…</failure>`, **restore**, and continue.
 - T‑G. Path normalization — Make the same edit with `unity://path/Assets/...` then `Assets/...`. Without refreshing `precondition_sha256`, the second attempt returns `{stale_file}`; retry with the server-provided hash to confirm both forms resolve to the same file.
-- T‑H. Validation — `standard` after edits; `basic` only for transient checks.
-- T‑I. Failure surfaces (expected) — safe‑first order
-  - 1) Overlap (deterministic): use `apply_text_edits` with two character ranges from the SAME fresh snapshot of the file. Within `HasTarget` body, e.g., pick r1=[start+2,start+10) and r2=[start+8,start+14). Send both in ONE call; expect `{status:"overlap"}`. Do not use regex/anchors for this probe.
-  - 2) Stale file: re‑use a deliberately old `precondition_sha256` on a small no‑op tweak; expect `{status:"stale_file"}` (then restore hash).
-  - 3) Using guard (optional, only within T‑I): you may touch the header (e.g., insert a newline above the first `using`) to elicit `{status:"using_guard"}`; restore immediately.
-  - 4) Too large (optional, last): only run if an env hint is present (e.g., `RUN_TOO_LARGE=1`). Keep overage small (+16–32 KB). If a transport error/timeout occurs instead of JSON, still write the testcase fragment with an `<error>` and proceed.
-- T‑J. Idempotency — Repeat `replace_range` and then repeat delete; observe and record behavior. Regex/range operations are not strictly idempotent (no special status is emitted).
+
+### T-H. Validation (standard)
+- Restore baseline (helper call above).
+- Perform a harmless interior tweak (or none), then MUST call:
+  mcp__unity__validate_script(level:"standard")
+- Write the validator output to system-out; VERDICT: PASS if standard is clean, else include <failure> with the validator message and continue.
+
+### T-I. Failure surfaces (expected)
+- Restore baseline.
+- (1) OVERLAP:
+  * Fresh read of file; compute two interior ranges that overlap inside HasTarget.
+  * Single mcp__unity__apply_text_edits call with both ranges.
+  * Expect {status:"overlap"} → record as PASS; else FAIL. Restore.
+- (2) STALE_FILE:
+  * Fresh read → pre_sha.
+  * Make a tiny legit edit with pre_sha; success.
+  * Attempt another edit reusing the OLD pre_sha.
+  * Expect {status:"stale_file"} → record as PASS; else FAIL. Re-read to refresh, restore.
+- (3) USING_GUARD (optional):
+  * Attempt a 1-line insert above the first 'using'.
+  * Expect {status:"using_guard"} → record as PASS; else note 'not emitted'. Restore.
+
+### T-J. Idempotency
+- Restore baseline.
+- Repeat a replace_range twice (second call may be noop). Validate standard after each.
+- Insert or ensure a tiny comment, then delete it twice (second delete may be noop).
+- Restore and PASS unless an error/structural break occurred.
+
 
 ### Status & Reporting
 

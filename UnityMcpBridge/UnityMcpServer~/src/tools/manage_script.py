@@ -25,11 +25,13 @@ def register_manage_script_tools(mcp: FastMCP):
             raw_path = uri[len("unity://path/") :]
         elif uri.startswith("file://"):
             parsed = urlparse(uri)
-            # Use parsed.path (percent-encoded) and decode it
-            raw_path = unquote(parsed.path or "")
-            # Handle cases like file://localhost/...
-            if not raw_path and uri.startswith("file://"):
-                raw_path = uri[len("file://") :]
+            host = (parsed.netloc or "").strip()
+            p = parsed.path or ""
+            # UNC: file://server/share/... -> //server/share/...
+            if host and host.lower() != "localhost":
+                p = f"//{host}{p}"
+            # Use percent-decoded path, preserving leading slashes
+            raw_path = unquote(p)
         else:
             raw_path = uri
 
@@ -48,10 +50,7 @@ def register_manage_script_tools(mcp: FastMCP):
         assets_rel = "/".join(parts[idx:]) if idx is not None else None
 
         effective_path = assets_rel if assets_rel else norm
-        # On POSIX absolute paths outside Assets, drop the leading '/'
-        # so callers get a clean relative-like directory (e.g., '/tmp' -> 'tmp').
-        if effective_path.startswith("/"):
-            effective_path = effective_path[1:]
+        # Keep POSIX absolute paths as-is; allow guards to enforce Assets/ scope later.
 
         name = os.path.splitext(os.path.basename(effective_path))[0]
         directory = os.path.dirname(effective_path)
