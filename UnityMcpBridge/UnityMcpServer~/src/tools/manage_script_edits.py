@@ -636,11 +636,16 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     "precondition_sha256": sha,
                     "options": {
                         "refresh": "immediate",
-                        "validate": (options or {}).get("validate", "standard")
+                        "validate": (options or {}).get("validate", "standard"),
+                        "applyMode": "sequential"
                     }
                 }
                 resp = send_command_with_retry("manage_script", params)
-                return _with_norm(resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}, normalized_for_echo, routing="text")
+                return _with_norm(
+                    resp if isinstance(resp, dict) else {"success": False, "message": str(resp)},
+                    normalized_for_echo,
+                    routing="text"
+                )
             except Exception as e:
                 return _with_norm({"success": False, "code": "conversion_failed", "message": f"Edit conversion failed: {e}"}, normalized_for_echo, routing="text")
 
