@@ -1309,6 +1309,7 @@ namespace MCPForUnity.Editor.Tools
                     ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
                 }
                 return ok;
+            }
             catch (Exception ex)
             {
                 return Response.Error($"Edit failed: {ex.Message}");
