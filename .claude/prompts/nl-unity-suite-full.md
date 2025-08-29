@@ -42,6 +42,37 @@ CI provides:
   - For `apply_text_edits` / `read_resource`: use the URI form only (e.g., `uri="unity://path/Assets/Scripts/LongUnityScriptClaudeTest.cs"`). Do not concatenate `Assets/` with a `unity://...` URI.
   - Never call generic Bash like `mkdir`; the revert helper creates needed directories. Use only `scripts/nlt-revert.sh` for snapshot/restore.
 
+### Structured edit ops (required usage)
+
+# Insert a helper RIGHT BEFORE the final class brace (NL‑3, T‑D)
+1) Prefer `script_apply_edits` with a regex capture on the final closing brace:
+```json
+{"op":"regex_replace",
+ "pattern":"(?s)(\\n\\s*\\})\\s*$",
+ "replacement":"\\n    // Tail test A\\n    // Tail test B\\n    // Tail test C\\1"}
+```
+
+2) If the server returns `missing_field` / `unsupported` / `bad_request`, FALL BACK to
+   `apply_text_edits`:
+   - Find the last `}` in the file (class closing brace) by scanning from end.
+   - Insert the three comment lines immediately before that index with one non‑overlapping range.
+
+# Insert after GetCurrentTarget (T‑A/T‑E)
+- Use `script_apply_edits` with:
+```json
+{"op":"anchor_insert","afterMethodName":"GetCurrentTarget","text":"private int __TempHelper(int a,int b)=>a+b;\\n"}
+```
+
+# Delete the temporary helper (T‑A/T‑E)
+- Do NOT use `anchor_replace`.
+- Use `script_apply_edits` with:
+```json
+{"op":"regex_replace",
+ "pattern":"(?s)^\\s*private\\s+int\\s+__TempHelper\\s*\\(.*?\\)\\s*=>\\s*.*?;\\s*\\r?\\n",
+ "replacement":""}
+```
+- If rejected, fall back to `apply_text_edits` with a single `replace_range` spanning the method.
+
 > Don’t use `mcp__unity__create_script`. Avoid the header/`using` region entirely.
 
 ---
@@ -103,6 +134,10 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - Write `reports/<TESTID>_results.xml` with a `<testcase>` that includes a `<failure>` or `<error>` node capturing the error text.
 - Run the OS restore via `scripts/nlt-revert.sh restore …`.
 - Continue to the next test (do not abort).
+
+**If any write returns `missing_field`, `bad_request`, or `unsupported`:**
+- Write `reports/<TESTID>_results.xml` with a `<testcase>` that includes a `<failure>` node capturing the server error, include evidence, and end with `VERDICT: FAIL`.
+- Run `scripts/nlt-revert.sh restore ...` and continue to the next test.
 ### Execution Order (fixed)
 
 - Run exactly: NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J (15 total).
