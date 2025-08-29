@@ -127,7 +127,8 @@ class UnityConnection:
                 header = self._read_exact(sock, 8)
                 payload_len = struct.unpack('>Q', header)[0]
                 if payload_len == 0:
-                    raise ValueError("Invalid framed length: 0")
+                    logger.debug("Received framed response (0 bytes)")
+                    return b""
                 if payload_len > FRAMED_MAX:
                     raise ValueError(f"Invalid framed length: {payload_len}")
                 payload = self._read_exact(sock, payload_len)
