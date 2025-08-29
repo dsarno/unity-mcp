@@ -115,10 +115,24 @@ def register_resource_tools(mcp: FastMCP) -> None:
                 base.relative_to(project)
             except ValueError:
                 return {"success": False, "error": "Base path must be under project root"}
+            # Enforce listing only under Assets
+            try:
+                base.relative_to(project / "Assets")
+            except ValueError:
+                return {"success": False, "error": "Listing is restricted to Assets/"}
 
             matches: List[str] = []
             for p in base.rglob("*"):
                 if not p.is_file():
+                    continue
+                # Resolve symlinks and ensure the real path stays under project/Assets
+                try:
+                    rp = p.resolve()
+                    rp.relative_to(project / "Assets")
+                except Exception:
+                    continue
+                # Enforce .cs extension regardless of provided pattern
+                if p.suffix.lower() != ".cs":
                     continue
                 if pattern and not fnmatch.fnmatch(p.name, pattern):
                     continue
