@@ -152,8 +152,8 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 ### Execution Order (fixed)
 
 - Run exactly: NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J (15 total).
-- Always run: Bash(scripts/nlt-revert.sh:restore "<target>" "reports/_snapshots/LongUnityScriptClaudeTest.cs.baseline") BEFORE starting each test (NL-0..NL-4 and each T-*). Do not proceed if restore fails.
-- NL‑0 must include the PLAN line (len=15).
+- Before NL-1..T-J: Bash(scripts/nlt-revert.sh:restore "<target>" "reports/_snapshots/LongUnityScriptClaudeTest.cs.baseline") IF the baseline exists; skip for NL-0.
+- NL-0 must include the PLAN line (len=15).
 - After each testcase, include `PROGRESS: <k>/15 completed`.
 
 
