@@ -711,11 +711,9 @@ namespace MCPForUnity.Editor.Tools
                     $"Applied {spans.Count} text edit(s) to '{relativePath}'.",
                     new
                     {
-                        applied = spans.Count,
-                        unchanged = 0,
-                        sha256 = newSha,
                         uri = $"unity://path/{relativePath}",
-                        scheduledRefresh = !immediate
+                        path = relativePath,
+                        editsApplied = spans.Count
                     }
                 );
             }
@@ -1272,7 +1270,7 @@ namespace MCPForUnity.Editor.Tools
 
                 var ok = Response.Success(
                     $"Applied {appliedCount} structured edit(s) to '{relativePath}'.",
-                    new { path = relativePath, editsApplied = appliedCount, scheduledRefresh = !immediate }
+                    new { path = relativePath, uri = $"unity://path/{relativePath}", editsApplied = appliedCount, scheduledRefresh = !immediate }
                 );
 
                 if (immediate)
