@@ -88,7 +88,8 @@ CI provides:
 
 ## Output Rules (JUnit fragments only)
 - For each test, create **one** file: `reports/<TESTID>_results.xml` containing exactly a single `<testcase ...> ... </testcase>`.
-- Put human‑readable lines (PLAN/PROGRESS/evidence) **inside** `<system-out><![CDATA[ ... ]]></system-out>`.
+ Put human-readable lines (PLAN/PROGRESS/evidence) **inside** `<system-out><![CDATA[ ... ]]></system-out>`.
+   - If content contains `]]>`, split CDATA: replace `]]>` with `]]]]><![CDATA[>`.
 - Evidence windows only (±20–40 lines). If showing a unified diff, cap at 100 lines and note truncation.
 - **Never** open/patch `$JUNIT_OUT` or `$MD_OUT`; CI merges fragments and synthesizes Markdown.
   - Write destinations must match: `^reports/[A-Za-z0-9._-]+_results\.xml$`
