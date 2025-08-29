@@ -68,7 +68,7 @@ CI provides:
 - Use `script_apply_edits` with:
 ```json
 {"op":"regex_replace",
- "pattern":"(?s)^\\s*private\\s+int\\s+__TempHelper\\s*\\(.*?\\)\\s*=>\\s*.*?;\\s*\\r?\\n",
+ "pattern":"(?ms)^\\s*private\\s+int\\s+__TempHelper\\s*\\(.*?\\)\\s*=>\\s*.*?;\\s*\\r?\\n",
  "replacement":""}
 ```
 - If rejected, fall back to `apply_text_edits` with a single `replace_range` spanning the method.
