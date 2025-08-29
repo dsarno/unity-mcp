@@ -294,8 +294,7 @@ namespace MCPForUnity.Editor.Tools
             bool isValid = ValidateScriptSyntax(contents, validationLevel, out string[] validationErrors);
             if (!isValid)
             {
-                string errorMessage = "Script validation failed:\n" + string.Join("\n", validationErrors);
-                return Response.Error(errorMessage);
+                return Response.Error("validation_failed", new { status = "validation_failed", diagnostics = validationErrors ?? Array.Empty<string>() });
             }
             else if (validationErrors != null && validationErrors.Length > 0)
             {
@@ -393,8 +392,7 @@ namespace MCPForUnity.Editor.Tools
             bool isValid = ValidateScriptSyntax(contents, validationLevel, out string[] validationErrors);
             if (!isValid)
             {
-                string errorMessage = "Script validation failed:\n" + string.Join("\n", validationErrors);
-                return Response.Error(errorMessage);
+                return Response.Error("validation_failed", new { status = "validation_failed", diagnostics = validationErrors ?? Array.Empty<string>() });
             }
             else if (validationErrors != null && validationErrors.Length > 0)
             {
@@ -1241,7 +1239,7 @@ namespace MCPForUnity.Editor.Tools
                 }
                 catch { /* ignore option parsing issues */ }
                 if (!ValidateScriptSyntax(working, level, out var errors))
-                    return Response.Error("Script validation failed:\n" + string.Join("\n", errors ?? Array.Empty<string>()));
+                    return Response.Error("validation_failed", new { status = "validation_failed", diagnostics = errors ?? Array.Empty<string>() });
                 else if (errors != null && errors.Length > 0)
                     Debug.LogWarning($"Script validation warnings for {name}:\n" + string.Join("\n", errors));
 
