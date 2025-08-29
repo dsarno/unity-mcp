@@ -55,7 +55,16 @@ def register_manage_script_tools(mcp: FastMCP):
         directory = os.path.dirname(effective_path)
         return name, directory
 
-    @mcp.tool()
+    @mcp.tool(description=(
+        "Apply small text edits to a C# script identified by URI.\n\n"
+        "Args:\n"
+        "- uri: unity://path/Assets/... or file://... or Assets/...\n"
+        "- edits: list of {startLine,startCol,endLine,endCol,newText}\n"
+        "- precondition_sha256: optional SHA of current file (whole-file)\n\n"
+        "Notes:\n"
+        "- Path is computed from the URI; it must resolve under Assets/.\n"
+        "- This tool is for precise ranges; for method/class ops use script_apply_edits.\n"
+    ))
     def apply_text_edits(
         ctx: Context,
         uri: str,
@@ -75,7 +84,11 @@ def register_manage_script_tools(mcp: FastMCP):
         resp = send_command_with_retry("manage_script", params)
         return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
 
-    @mcp.tool()
+    @mcp.tool(description=(
+        "Create a new C# script at the given project path.\n\n"
+        "Args: path (e.g., 'Assets/Scripts/My.cs'), contents (string), script_type, namespace.\n"
+        "Rules: path must be under Assets/. Contents will be Base64-encoded over transport.\n"
+    ))
     def create_script(
         ctx: Context,
         path: str,
@@ -100,7 +113,11 @@ def register_manage_script_tools(mcp: FastMCP):
         resp = send_command_with_retry("manage_script", params)
         return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
 
-    @mcp.tool()
+    @mcp.tool(description=(
+        "Delete a C# script by URI or Assets-relative path.\n\n"
+        "Args: uri (unity://path/... or file://... or Assets/...).\n"
+        "Rules: Target must resolve under Assets/.\n"
+    ))
     def delete_script(ctx: Context, uri: str) -> Dict[str, Any]:
         """Delete a C# script by URI."""
         name, directory = _split_uri(uri)
@@ -108,7 +125,12 @@ def register_manage_script_tools(mcp: FastMCP):
         resp = send_command_with_retry("manage_script", params)
         return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
 
-    @mcp.tool()
+    @mcp.tool(description=(
+        "Validate a C# script and return diagnostics.\n\n"
+        "Args: uri, level=('basic'|'standard').\n"
+        "- basic: quick syntax checks.\n"
+        "- standard: deeper checks (performance hints, common pitfalls).\n"
+    ))
     def validate_script(
         ctx: Context, uri: str, level: str = "basic"
     ) -> Dict[str, Any]:
@@ -123,7 +145,12 @@ def register_manage_script_tools(mcp: FastMCP):
         resp = send_command_with_retry("manage_script", params)
         return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
 
-    @mcp.tool()
+    @mcp.tool(description=(
+        "Compatibility router for legacy script operations.\n\n"
+        "Actions: create|read|delete (update is routed to apply_text_edits with precondition).\n"
+        "Args: name (no .cs), path (Assets/...), contents (for create), script_type, namespace.\n"
+        "Notes: prefer apply_text_edits (ranges) or script_apply_edits (structured) for edits.\n"
+    ))
     def manage_script(
         ctx: Context,
         action: str,

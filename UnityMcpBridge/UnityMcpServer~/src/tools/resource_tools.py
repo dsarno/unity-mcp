@@ -108,7 +108,12 @@ def _resolve_safe_path_from_uri(uri: str, project: Path) -> Path | None:
 def register_resource_tools(mcp: FastMCP) -> None:
     """Registers list_resources and read_resource wrapper tools."""
 
-    @mcp.tool()
+    @mcp.tool(description=(
+        "List project URIs (unity://path/...) under a folder (default: Assets).\n\n"
+        "Args: pattern (glob, default *.cs), under (folder under project root), limit, project_root.\n"
+        "Security: restricted to Assets/ subtree; symlinks are resolved and must remain under Assets/.\n"
+        "Notes: Only .cs files are returned by default; always appends unity://spec/script-edits.\n"
+    ))
     async def list_resources(
         ctx: Context | None = None,
         pattern: str | None = "*.cs",
@@ -163,7 +168,12 @@ def register_resource_tools(mcp: FastMCP) -> None:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    @mcp.tool()
+    @mcp.tool(description=(
+        "Read a resource by unity://path/... URI with optional slicing.\n\n"
+        "Args: uri, start_line/line_count or head_bytes, tail_lines (optional), project_root, request (NL hints).\n"
+        "Security: uri must resolve under Assets/.\n"
+        "Examples: head_bytes=1024; start_line=100,line_count=40; tail_lines=120.\n"
+    ))
     async def read_resource(
         uri: str,
         ctx: Context | None = None,

@@ -26,7 +26,7 @@ from tools.resource_tools import register_resource_tools  # type: ignore
 class DummyMCP:
     def __init__(self):
         self._tools = {}
-    def tool(self):
+    def tool(self, *args, **kwargs):  # accept kwargs like description
         def deco(fn):
             self._tools[fn.__name__] = fn
             return fn

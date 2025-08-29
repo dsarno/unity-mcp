@@ -43,7 +43,7 @@ class DummyMCP:
     def __init__(self):
         self.tools = {}
 
-    def tool(self):
+    def tool(self, *args, **kwargs):  # ignore decorator kwargs like description
         def _decorator(fn):
             self.tools[fn.__name__] = fn
             return fn

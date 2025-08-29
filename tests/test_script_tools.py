@@ -40,7 +40,7 @@ class DummyMCP:
     def __init__(self):
         self.tools = {}
 
-    def tool(self):
+    def tool(self, *args, **kwargs):  # accept decorator kwargs like description
         def decorator(func):
             self.tools[func.__name__] = func
             return func
