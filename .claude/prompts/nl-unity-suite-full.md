@@ -44,6 +44,7 @@ CI provides:
   - For `script_apply_edits`: use `name` + workspace‑relative `path` only (e.g., `name="LongUnityScriptClaudeTest"`, `path="Assets/Scripts"`). Do not pass `unity://...` URIs as `path`.
   - For `apply_text_edits` / `read_resource`: use the URI form only (e.g., `uri="unity://path/Assets/Scripts/LongUnityScriptClaudeTest.cs"`). Do not concatenate `Assets/` with a `unity://...` URI.
   - Never call generic Bash like `mkdir`; the revert helper creates needed directories. Use only `scripts/nlt-revert.sh` for snapshot/restore.
+  - If you believe a directory is missing, you are mistaken: the workflow pre-creates it and the snapshot helper creates it if needed. Do not attempt any Bash other than scripts/nlt-revert.sh:*.
 
 ### Structured edit ops (required usage)
 

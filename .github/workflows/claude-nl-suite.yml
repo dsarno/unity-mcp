@@ -266,7 +266,7 @@ jobs:
             mcp_config: .claude/mcp.json
             allowed_tools: >-
               Write,
-              Bash(printf:*),Bash(echo:*),Bash(scripts/nlt-revert.sh:*),
+              Bash(scripts/nlt-revert.sh:*),
               mcp__unity__manage_editor,
               mcp__unity__list_resources,
               mcp__unity__read_resource,
