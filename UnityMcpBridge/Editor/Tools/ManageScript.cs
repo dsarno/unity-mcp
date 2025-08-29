@@ -147,7 +147,7 @@ namespace MCPForUnity.Editor.Tools
                 return Response.Error("Name parameter is required.");
             }
             // Basic name validation (alphanumeric, underscores, cannot start with number)
-            if (!Regex.IsMatch(name, @"^[a-zA-Z_][a-zA-Z0-9_]*$"))
+            if (!Regex.IsMatch(name, @"^[a-zA-Z_][a-zA-Z0-9_]*$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2)))
             {
                 return Response.Error(
                     $"Invalid script name: '{name}'. Use only letters, numbers, underscores, and don't start with a number."
@@ -531,7 +531,8 @@ namespace MCPForUnity.Editor.Tools
             var mUsing = System.Text.RegularExpressions.Regex.Match(
                 original,
                 @"(?m)^\s*using\s+(?:static\s+)?(?:[A-Za-z_]\w*\s*=\s*)?[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*;",
-                System.Text.RegularExpressions.RegexOptions.CultureInvariant
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+                TimeSpan.FromSeconds(2)
             );
             if (mUsing.Success)
             {
@@ -1119,7 +1120,7 @@ namespace MCPForUnity.Editor.Tools
 
                             try
                             {
-                                var rx = new Regex(anchor, RegexOptions.Multiline);
+                                var rx = new Regex(anchor, RegexOptions.Multiline, TimeSpan.FromSeconds(2));
                                 var m = rx.Match(working);
                                 if (!m.Success) return Response.Error($"anchor_insert: anchor not found: {anchor}");
                                 int insAt = position == "after" ? m.Index + m.Length : m.Index;
@@ -1147,7 +1148,7 @@ namespace MCPForUnity.Editor.Tools
                             if (string.IsNullOrWhiteSpace(anchor)) return Response.Error("anchor_delete requires 'anchor' (regex).");
                             try
                             {
-                                var rx = new Regex(anchor, RegexOptions.Multiline);
+                                var rx = new Regex(anchor, RegexOptions.Multiline, TimeSpan.FromSeconds(2));
                                 var m = rx.Match(working);
                                 if (!m.Success) return Response.Error($"anchor_delete: anchor not found: {anchor}");
                                 int delAt = m.Index;
@@ -1176,7 +1177,7 @@ namespace MCPForUnity.Editor.Tools
                             if (string.IsNullOrWhiteSpace(anchor)) return Response.Error("anchor_replace requires 'anchor' (regex).");
                             try
                             {
-                                var rx = new Regex(anchor, RegexOptions.Multiline);
+                                var rx = new Regex(anchor, RegexOptions.Multiline, TimeSpan.FromSeconds(2));
                                 var m = rx.Match(working);
                                 if (!m.Success) return Response.Error($"anchor_replace: anchor not found: {anchor}");
                                 int at = m.Index;
@@ -1486,7 +1487,7 @@ namespace MCPForUnity.Editor.Tools
                 rtPattern + @"[\t ]+" + namePattern + @"\s*(?:<[^>]+>)?\s*\(" + paramsPattern + @"\)";
 
             string slice = source.Substring(searchStart, searchEnd - searchStart);
-            var headerMatch = Regex.Match(slice, pattern, RegexOptions.Multiline);
+            var headerMatch = Regex.Match(slice, pattern, RegexOptions.Multiline, TimeSpan.FromSeconds(2));
             if (!headerMatch.Success)
             {
                 why = $"method '{methodName}' header not found in class"; return false;
@@ -2294,7 +2295,7 @@ namespace MCPForUnity.Editor.Tools
             }
 
             // Check for magic numbers
-            var magicNumberPattern = new Regex(@"\b\d+\.?\d*f?\b(?!\s*[;})\]])");
+            var magicNumberPattern = new Regex(@"\b\d+\.?\d*f?\b(?!\s*[;})\]])", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
             var matches = magicNumberPattern.Matches(contents);
             if (matches.Count > 5)
             {
@@ -2302,7 +2303,7 @@ namespace MCPForUnity.Editor.Tools
             }
 
             // Check for long methods (simple line count check)
-            var methodPattern = new Regex(@"(public|private|protected|internal)?\s*(static)?\s*\w+\s+\w+\s*\([^)]*\)\s*{");
+            var methodPattern = new Regex(@"(public|private|protected|internal)?\s*(static)?\s*\w+\s+\w+\s*\([^)]*\)\s*{", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
             var methodMatches = methodPattern.Matches(contents);
             foreach (Match match in methodMatches)
             {
