@@ -104,7 +104,7 @@ class UnityConnection:
         while len(data) < count:
             chunk = sock.recv(count - len(data))
             if not chunk:
-                raise Exception("Connection closed before reading expected bytes")
+                raise ConnectionError("Connection closed before reading expected bytes")
             data.extend(chunk)
         return bytes(data)
 
