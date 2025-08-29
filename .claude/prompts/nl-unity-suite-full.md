@@ -86,13 +86,13 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 
 ### Guarded Write Pattern (for edits, not restores)
 
-- Before any mutation: `buf = read_text(uri)`; `pre_sha = sha256(read_bytes(uri))`.
-- Write with `precondition_sha256 = pre_sha`.
+- Before any mutation: `res = mcp__unity__read_resource(uri)`; `pre_sha = sha256(res.bytes)`.
+- Write with `precondition_sha256 = pre_sha` on `apply_text_edits`/`script_apply_edits`.
 - On `{status:"stale_file"}`:
-  - Retry once using the server hash (`data.current_sha256` or `data.expected_sha256`).
-  - If absent, one re‑read then a final retry. No loops.
-- After success: immediately re‑read raw bytes and set `pre_sha = sha256(read_bytes(uri))` before any further edits in the same test.
-- Prefer anchors (`script_apply_edits`) for end‑of‑class / above‑method insertions. Keep edits inside method bodies. Avoid header/using.
+  - Retry once using the server-provided hash (e.g., `data.current_sha256` or `data.expected_sha256`, per API schema).
+  - If absent, one re-read then a final retry. No loops.
+- After success: immediately re-read raw bytes and set `pre_sha = sha256(read_bytes(uri))` before any further edits in the same test.
+- Prefer anchors (`script_apply_edits`) for end-of-class / above-method insertions. Keep edits inside method bodies. Avoid header/using.
 
 ### Execution Order (fixed)
 
