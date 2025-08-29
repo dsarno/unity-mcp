@@ -52,7 +52,7 @@ CI provides:
  "replacement":"\\n    // Tail test A\\n    // Tail test B\\n    // Tail test C\\1"}
 ```
 
-2) If the server returns `missing_field` / `unsupported` / `bad_request`, FALL BACK to
+2) If the server returns `unsupported` (op not available) or `missing_field` (op‑specific), FALL BACK to
    `apply_text_edits`:
    - Find the last `}` in the file (class closing brace) by scanning from end.
    - Insert the three comment lines immediately before that index with one non‑overlapping range.
@@ -135,7 +135,7 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - Run the OS restore via `scripts/nlt-revert.sh restore …`.
 - Continue to the next test (do not abort).
 
-**If any write returns `missing_field`, `bad_request`, or `unsupported`:**
+**If any write returns `bad_request`, or `unsupported` after a fallback attempt:**
 - Write `reports/<TESTID>_results.xml` with a `<testcase>` that includes a `<failure>` node capturing the server error, include evidence, and end with `VERDICT: FAIL`.
 - Run `scripts/nlt-revert.sh restore ...` and continue to the next test.
 ### Execution Order (fixed)
