@@ -73,6 +73,12 @@ CI provides:
 ```
 - If rejected, fall back to `apply_text_edits` with a single `replace_range` spanning the method.
 
+# T‑B (replace method body)
+- Use `mcp__unity__apply_text_edits` with a single `replace_range` strictly inside the `HasTarget` braces.
+- Compute start/end from a fresh `read_resource` at test start. Do not edit signature or header.
+- On `{status:"stale_file"}` retry once with the server‑provided hash; if absent, re‑read once and retry.
+- On `missing_field` or `bad_request`, write the testcase with `<failure>…</failure>`, restore, and continue to next test.
+
 > Don’t use `mcp__unity__create_script`. Avoid the header/`using` region entirely.
 
 ---
