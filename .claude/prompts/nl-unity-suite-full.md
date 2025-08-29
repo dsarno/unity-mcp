@@ -91,9 +91,8 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - On `{status:"stale_file"}`:
   - Retry once using the server-provided hash (e.g., `data.current_sha256` or `data.expected_sha256`, per API schema).
   - If absent, one re-read then a final retry. No loops.
-- After success: immediately re-read raw bytes and set `pre_sha = sha256(read_bytes(uri))` before any further edits in the same test.
+- After success: immediately re-read via `res2 = mcp__unity__read_resource(uri)` and set `pre_sha = sha256(res2.bytes)` before any further edits in the same test.
 - Prefer anchors (`script_apply_edits`) for end-of-class / above-method insertions. Keep edits inside method bodies. Avoid header/using.
-
 ### Execution Order (fixed)
 
 - Run exactly: NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J (15 total).
