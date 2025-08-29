@@ -38,7 +38,7 @@ def _apply_edits_locally(original_text: str, edits: List[Dict[str, Any]]) -> str
             anchor = edit.get("anchor", "")
             position = (edit.get("position") or "before").lower()
             insert_text = edit.get("text", "")
-            flags = re.MULTILINE
+            flags = re.MULTILINE | (re.IGNORECASE if edit.get("ignore_case") else 0)
             m = re.search(anchor, text, flags)
             if not m:
                 if edit.get("allow_noop", True):
@@ -464,7 +464,8 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     if opx == "anchor_insert":
                         anchor = e.get("anchor") or ""
                         position = (e.get("position") or "before").lower()
-                        m = _re.search(anchor, current_text, _re.MULTILINE)
+                        flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
+                        m = _re.search(anchor, current_text, flags)
                         if not m:
                             return _with_norm({"success": False, "code": "anchor_not_found", "message": f"anchor not found: {anchor}"}, normalized_for_echo, routing="mixed/text-first")
                         idx = m.start() if position == "before" else m.end()
@@ -598,7 +599,8 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     elif op == "regex_replace":
                         pattern = e.get("pattern") or ""
                         repl = text_field
-                        m = _re.search(pattern, current_text, _re.MULTILINE)
+                        flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
+                        m = _re.search(pattern, current_text, flags)
                         if not m:
                             continue
                         sl, sc = line_col_from_index(m.start())
