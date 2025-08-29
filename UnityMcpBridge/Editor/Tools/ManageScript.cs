@@ -607,7 +607,7 @@ namespace MCPForUnity.Editor.Tools
             for (int i = 1; i < spans.Count; i++)
             {
                 if (spans[i].end > spans[i - 1].start)
-                    return Response.Error("Edits overlap; split into separate calls or adjust ranges.");
+                    return Response.Error("overlap", new { status = "overlap" });
             }
 
             string working = original;
@@ -1192,7 +1192,7 @@ namespace MCPForUnity.Editor.Tools
                 if (!applySequentially)
                 {
                     if (HasOverlaps(replacements))
-                        return Response.Error("Edits overlap; split into separate calls or adjust targets.");
+                        return Response.Error("overlap", new { status = "overlap" });
 
                     foreach (var r in replacements.OrderByDescending(r => r.start))
                         working = working.Remove(r.start, r.length).Insert(r.start, r.text);
