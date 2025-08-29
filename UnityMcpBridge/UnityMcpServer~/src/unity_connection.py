@@ -20,6 +20,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("mcp-for-unity-server")
 
+# Module-level lock to guard global connection initialization
+_connection_lock = threading.Lock()
+
 @dataclass
 class UnityConnection:
     """Manages the socket connection to the Unity Editor."""
@@ -250,22 +253,19 @@ class UnityConnection:
                     else:
                         self.sock.sendall(payload)
 
-                    # During retry bursts use a short receive timeout
+                    # During retry bursts use a short receive timeout and ensure restoration
+                    restore_timeout = None
                     if attempt > 0 and last_short_timeout is None:
-                        last_short_timeout = self.sock.gettimeout()
+                        restore_timeout = self.sock.gettimeout()
                         self.sock.settimeout(1.0)
-                    response_data = self.receive_full_response(self.sock)
-                    with contextlib.suppress(Exception):
-                        logger.debug(
-                            "recv %d bytes; mode=%s; head=%s",
-                            len(response_data),
-                            mode,
-                            (response_data[:32]).decode('utf-8', 'ignore'),
-                        )
-                    # restore steady-state timeout if changed
-                    if last_short_timeout is not None:
-                        self.sock.settimeout(last_short_timeout)
-                        last_short_timeout = None
+                    try:
+                        response_data = self.receive_full_response(self.sock)
+                        with contextlib.suppress(Exception):
+                            logger.debug("recv %d bytes; mode=%s", len(response_data), mode)
+                    finally:
+                        if restore_timeout is not None:
+                            self.sock.settimeout(restore_timeout)
+                            last_short_timeout = None
 
                 # Parse
                 if command_type == 'ping':
@@ -339,13 +339,17 @@ def get_unity_connection() -> UnityConnection:
     if _unity_connection is not None:
         return _unity_connection
 
-    logger.info("Creating new Unity connection")
-    _unity_connection = UnityConnection()
-    if not _unity_connection.connect():
-        _unity_connection = None
-        raise ConnectionError("Could not connect to Unity. Ensure the Unity Editor and MCP Bridge are running.")
-    logger.info("Connected to Unity on startup")
-    return _unity_connection
+    # Double-checked locking to avoid concurrent socket creation
+    with _connection_lock:
+        if _unity_connection is not None:
+            return _unity_connection
+        logger.info("Creating new Unity connection")
+        _unity_connection = UnityConnection()
+        if not _unity_connection.connect():
+            _unity_connection = None
+            raise ConnectionError("Could not connect to Unity. Ensure the Unity Editor and MCP Bridge are running.")
+        logger.info("Connected to Unity on startup")
+        return _unity_connection
 
 
 # -----------------------------
