@@ -101,6 +101,16 @@ def register_manage_script_tools(mcp: FastMCP):
         """Create a new C# script at the given path."""
         name = os.path.splitext(os.path.basename(path))[0]
         directory = os.path.dirname(path)
+        # Local validation to avoid round-trips on obviously bad input
+        norm_path = os.path.normpath((path or "").replace("\\", "/")).replace("\\", "/")
+        if not directory or directory.split("/")[0].lower() != "assets":
+            return {"success": False, "code": "path_outside_assets", "message": f"path must be under 'Assets/'; got '{path}'."}
+        if ".." in norm_path.split("/") or norm_path.startswith("/"):
+            return {"success": False, "code": "bad_path", "message": "path must not contain traversal or be absolute."}
+        if not name:
+            return {"success": False, "code": "bad_path", "message": "path must include a script file name."}
+        if not norm_path.lower().endswith(".cs"):
+            return {"success": False, "code": "bad_extension", "message": "script file must end with .cs."}
         params: Dict[str, Any] = {
             "action": "create",
             "name": name,
@@ -123,6 +133,8 @@ def register_manage_script_tools(mcp: FastMCP):
     def delete_script(ctx: Context, uri: str) -> Dict[str, Any]:
         """Delete a C# script by URI."""
         name, directory = _split_uri(uri)
+        if not directory or directory.split("/")[0].lower() != "assets":
+            return {"success": False, "code": "path_outside_assets", "message": "URI must resolve under 'Assets/'."}
         params = {"action": "delete", "name": name, "path": directory}
         resp = send_command_with_retry("manage_script", params)
         return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
@@ -138,6 +150,10 @@ def register_manage_script_tools(mcp: FastMCP):
     ) -> Dict[str, Any]:
         """Validate a C# script and return diagnostics."""
         name, directory = _split_uri(uri)
+        if not directory or directory.split("/")[0].lower() != "assets":
+            return {"success": False, "code": "path_outside_assets", "message": "URI must resolve under 'Assets/'."}
+        if level not in ("basic", "standard"):
+            return {"success": False, "code": "bad_level", "message": "level must be 'basic' or 'standard'."}
         params = {
             "action": "validate",
             "name": name,
@@ -158,9 +174,9 @@ def register_manage_script_tools(mcp: FastMCP):
         action: str,
         name: str,
         path: str,
-        contents: str,
-        script_type: str,
-        namespace: str,
+        contents: str = "",
+        script_type: str | None = None,
+        namespace: str | None = None,
     ) -> Dict[str, Any]:
         """Compatibility router for legacy script operations.
 
@@ -194,8 +210,7 @@ def register_manage_script_tools(mcp: FastMCP):
                     data = read_resp.get("data", {})
                     current = data.get("contents")
                     if not current and data.get("contentsEncoded"):
-                        import base64 as _b64
-                        current = _b64.b64decode(data.get("encodedContents", "").encode("utf-8")).decode("utf-8", "replace")
+                        current = base64.b64decode(data.get("encodedContents", "").encode("utf-8")).decode("utf-8", "replace")
                     if current is None:
                         return {"success": False, "code": "deprecated_update", "message": "Use apply_text_edits; current file read returned no contents."}
 
@@ -221,6 +236,14 @@ def register_manage_script_tools(mcp: FastMCP):
                         "precondition_sha256": sha,
                         "options": {"refresh": "immediate", "validate": "standard"},
                     }
+                    # Preflight size vs. default cap (256 KiB) to avoid opaque server errors
+                    try:
+                        import json as _json
+                        payload_bytes = len(_json.dumps({"edits": edits}, ensure_ascii=False).encode("utf-8"))
+                        if payload_bytes > 256 * 1024:
+                            return {"success": False, "code": "payload_too_large", "message": f"Edit payload {payload_bytes} bytes exceeds 256 KiB cap; try structured ops or chunking."}
+                    except Exception:
+                        pass
                     routed = send_command_with_retry("manage_script", route_params)
                     if isinstance(routed, dict):
                         routed.setdefault("message", "Routed legacy update to apply_text_edits")
