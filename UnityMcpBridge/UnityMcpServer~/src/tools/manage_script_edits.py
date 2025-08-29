@@ -48,18 +48,22 @@ def _apply_edits_locally(original_text: str, edits: List[Dict[str, Any]]) -> str
             text = text[:idx] + insert_text + text[idx:]
         elif op == "replace_range":
             start_line = int(edit.get("startLine", 1))
-            end_line = int(edit.get("endLine", start_line))
+            start_col  = int(edit.get("startCol", 1))
+            end_line   = int(edit.get("endLine", start_line))
+            end_col    = int(edit.get("endCol", 1))
             replacement = edit.get("text", "")
             lines = text.splitlines(keepends=True)
-            max_end = len(lines) + 1
-            if start_line < 1 or end_line < start_line or end_line > max_end:
+            max_line = len(lines) + 1  # 1-based, exclusive end
+            if (start_line < 1 or end_line < start_line or end_line > max_line
+                    or start_col < 1 or end_col < 1):
                 raise RuntimeError("replace_range out of bounds")
-            a = start_line - 1
-            b = min(end_line, len(lines))
-            rep = replacement
-            if rep and not rep.endswith("\n"):
-                rep += "\n"
-            text = "".join(lines[:a]) + rep + "".join(lines[b:])
+            def index_of(line: int, col: int) -> int:
+                if line <= len(lines):
+                    return sum(len(l) for l in lines[: line - 1]) + (col - 1)
+                return sum(len(l) for l in lines)
+            a = index_of(start_line, start_col)
+            b = index_of(end_line, end_col)
+            text = text[:a] + replacement + text[b:]
         elif op == "regex_replace":
             pattern = edit.get("pattern", "")
             repl = edit.get("replacement", "")
