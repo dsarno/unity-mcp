@@ -255,7 +255,10 @@ def register_resource_tools(mcp: FastMCP) -> None:
             p = _resolve_safe_path_from_uri(uri, project)
             if not p or not p.exists() or not p.is_file():
                 return {"success": False, "error": f"Resource not found: {uri}"}
-
+            try:
+                p.relative_to(project / "Assets")
+            except ValueError:
+                return {"success": False, "error": "Read restricted to Assets/"}
             # Natural-language convenience: request like "last 120 lines", "first 200 lines",
             # "show 40 lines around MethodName", etc.
             if request:
