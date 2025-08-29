@@ -129,7 +129,7 @@ class UnityConnection:
                 raise
 
         chunks = []
-        sock.settimeout(config.connection_timeout)  # Use timeout from config
+        # Respect the socket's currently configured timeout
         try:
             while True:
                 chunk = sock.recv(buffer_size)
