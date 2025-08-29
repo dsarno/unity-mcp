@@ -50,7 +50,10 @@ def register_manage_script_tools(mcp: FastMCP):
         assets_rel = "/".join(parts[idx:]) if idx is not None else None
 
         effective_path = assets_rel if assets_rel else norm
-        # Keep POSIX absolute paths as-is; allow guards to enforce Assets/ scope later.
+        # For POSIX absolute paths outside Assets, drop the leading '/'
+        # to return a clean relative-like directory (e.g., '/tmp' -> 'tmp').
+        if effective_path.startswith("/"):
+            effective_path = effective_path[1:]
 
         name = os.path.splitext(os.path.basename(effective_path))[0]
         directory = os.path.dirname(effective_path)
