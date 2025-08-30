@@ -260,6 +260,25 @@ def register_manage_script_tools(mcp: FastMCP):
                 opts["applyMode"] = "atomic"
         except Exception:
             pass
+        # Support optional debug preview for span-by-span simulation without write
+        if opts.get("debug_preview"):
+            try:
+                import difflib
+                # Apply locally to preview final result
+                lines = []
+                # Build an indexable original from a read if we normalized from read; otherwise skip
+                prev = ""
+                # We cannot guarantee file contents here without a read; return normalized spans only
+                return {
+                    "success": True,
+                    "message": "Preview only (no write)",
+                    "data": {
+                        "normalizedEdits": normalized_edits,
+                        "preview": True
+                    }
+                }
+            except Exception as e:
+                return {"success": False, "code": "preview_failed", "message": f"debug_preview failed: {e}", "data": {"normalizedEdits": normalized_edits}}
 
         params = {
             "action": "apply_text_edits",

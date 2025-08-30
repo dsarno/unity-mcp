@@ -520,7 +520,11 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         anchor = e.get("anchor") or ""
                         position = (e.get("position") or "after").lower()
                         flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
-                        m = _re.search(anchor, base_text, flags)
+                        try:
+                            regex_obj = _re.compile(anchor, flags)
+                        except Exception as ex:
+                            return _with_norm(_err("bad_regex", f"Invalid anchor regex: {ex}", normalized=normalized_for_echo, routing="mixed/text-first", extra={"hint": "Escape parentheses/braces or use a simpler anchor."}), normalized_for_echo, routing="mixed/text-first")
+                        m = regex_obj.search(base_text)
                         if not m:
                             return _with_norm({"success": False, "code": "anchor_not_found", "message": f"anchor not found: {anchor}"}, normalized_for_echo, routing="mixed/text-first")
                         idx = m.start() if position == "before" else m.end()
@@ -546,7 +550,11 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                             return _with_norm(_err("missing_field", "replace_range requires startLine/startCol/endLine/endCol", normalized=normalized_for_echo, routing="mixed/text-first"), normalized_for_echo, routing="mixed/text-first")
                     elif opx == "regex_replace":
                         pattern = e.get("pattern") or ""
-                        m = _re.search(pattern, base_text, _re.MULTILINE)
+                        try:
+                            regex_obj = _re.compile(pattern, _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0))
+                        except Exception as ex:
+                            return _with_norm(_err("bad_regex", f"Invalid regex pattern: {ex}", normalized=normalized_for_echo, routing="mixed/text-first", extra={"hint": "Escape special chars or prefer structured delete for methods."}), normalized_for_echo, routing="mixed/text-first")
+                        m = regex_obj.search(base_text)
                         if not m:
                             continue
                         # Expand $1, $2... in replacement using this match
@@ -634,7 +642,12 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     if op == "anchor_insert":
                         anchor = e.get("anchor") or ""
                         position = (e.get("position") or "after").lower()
-                        m = _re.search(anchor, base_text, _re.MULTILINE)
+                        # Early regex compile with helpful errors
+                        try:
+                            regex_obj = _re.compile(anchor, _re.MULTILINE)
+                        except Exception as ex:
+                            return _with_norm(_err("bad_regex", f"Invalid anchor regex: {ex}", normalized=normalized_for_echo, routing="text", extra={"hint": "Escape parentheses/braces or use a simpler anchor."}), normalized_for_echo, routing="text")
+                        m = regex_obj.search(base_text)
                         if not m:
                             return _with_norm({"success": False, "code": "anchor_not_found", "message": f"anchor not found: {anchor}"}, normalized_for_echo, routing="text")
                         idx = m.start() if position == "before" else m.end()
@@ -669,7 +682,12 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         pattern = e.get("pattern") or ""
                         repl = text_field
                         flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
-                        m = _re.search(pattern, base_text, flags)
+                        # Early compile for clearer error messages
+                        try:
+                            regex_obj = _re.compile(pattern, flags)
+                        except Exception as ex:
+                            return _with_norm(_err("bad_regex", f"Invalid regex pattern: {ex}", normalized=normalized_for_echo, routing="text", extra={"hint": "Escape special chars or prefer structured delete for methods."}), normalized_for_echo, routing="text")
+                        m = regex_obj.search(base_text)
                         if not m:
                             continue
                         # Expand $1, $2... backrefs in replacement using the first match (consistent with mixed-path behavior)
@@ -679,12 +697,9 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         # Preview structural balance after replacement; refuse destructive deletes
                         preview = base_text[:m.start()] + repl_expanded + base_text[m.end():]
                         if not _is_structurally_balanced(preview):
-                            return _with_norm({
-                                "success": False,
-                                "code": "validation_failed",
-                                "message": "regex_replace would unbalance braces/parentheses; prefer delete_method",
-                                "data": {"status": "validation_failed", "normalizedEdits": normalized_for_echo, "hint": "Use script_apply_edits delete_method for method removal"}
-                            }, normalized_for_echo, routing="text")
+                            return _with_norm(_err("validation_failed", "regex_replace would unbalance braces/parentheses; prefer delete_method",
+                                                   normalized=normalized_for_echo, routing="text",
+                                                   extra={"status": "validation_failed", "hint": "Use script_apply_edits delete_method for method removal"}), normalized_for_echo, routing="text")
                         sl, sc = line_col_from_index(m.start())
                         el, ec = line_col_from_index(m.end())
                         at_edits.append({

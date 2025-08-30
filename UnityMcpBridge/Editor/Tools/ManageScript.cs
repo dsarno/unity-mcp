@@ -659,6 +659,7 @@ namespace MCPForUnity.Editor.Tools
 
             string working = original;
             bool relaxed = string.Equals(validateMode, "relaxed", StringComparison.OrdinalIgnoreCase);
+            bool syntaxOnly = string.Equals(validateMode, "syntax", StringComparison.OrdinalIgnoreCase);
             foreach (var sp in spans)
             {
                 string next = working.Remove(sp.start, sp.end - sp.start).Insert(sp.start, sp.text ?? string.Empty);
@@ -696,32 +697,38 @@ namespace MCPForUnity.Editor.Tools
                 int startLine = Math.Max(1, line - 5);
                 int endLine = line + 5;
                 string hint = $"unbalanced_braces at line {line}. Call resources/read for lines {startLine}-{endLine} and resend a smaller apply_text_edits that restores balance.";
-                return Response.Error(hint, new { status = "unbalanced_braces", line, expected = expected.ToString() });
+                return Response.Error(hint, new { status = "unbalanced_braces", line, expected = expected.ToString(), evidenceWindow = new { startLine, endLine } });
             }
 
 #if USE_ROSLYN
-            var tree = CSharpSyntaxTree.ParseText(working);
-            var diagnostics = tree.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).Take(3)
-                .Select(d => new {
-                    line = d.Location.GetLineSpan().StartLinePosition.Line + 1,
-                    col = d.Location.GetLineSpan().StartLinePosition.Character + 1,
-                    code = d.Id,
-                    message = d.GetMessage()
-                }).ToArray();
-            if (diagnostics.Length > 0)
+            if (!syntaxOnly)
             {
-                return Response.Error("syntax_error", new { status = "syntax_error", diagnostics });
-            }
+                var tree = CSharpSyntaxTree.ParseText(working);
+                var diagnostics = tree.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).Take(3)
+                    .Select(d => new {
+                        line = d.Location.GetLineSpan().StartLinePosition.Line + 1,
+                        col = d.Location.GetLineSpan().StartLinePosition.Character + 1,
+                        code = d.Id,
+                        message = d.GetMessage()
+                    }).ToArray();
+                if (diagnostics.Length > 0)
+                {
+                    int firstLine = diagnostics[0].line;
+                    int startLineRos = Math.Max(1, firstLine - 5);
+                    int endLineRos = firstLine + 5;
+                    return Response.Error("syntax_error", new { status = "syntax_error", diagnostics, evidenceWindow = new { startLine = startLineRos, endLine = endLineRos } });
+                }
 
-            // Optional formatting
-            try
-            {
-                var root = tree.GetRoot();
-                var workspace = new AdhocWorkspace();
-                root = Microsoft.CodeAnalysis.Formatting.Formatter.Format(root, workspace);
-                working = root.ToFullString();
+                // Optional formatting
+                try
+                {
+                    var root = tree.GetRoot();
+                    var workspace = new AdhocWorkspace();
+                    root = Microsoft.CodeAnalysis.Formatting.Formatter.Format(root, workspace);
+                    working = root.ToFullString();
+                }
+                catch { }
             }
-            catch { }
 #endif
 
             string newSha = ComputeSha256(working);
