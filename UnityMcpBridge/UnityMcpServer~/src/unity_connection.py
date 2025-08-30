@@ -124,12 +124,20 @@ class UnityConnection:
         """Receive a complete response from Unity, handling chunked data."""
         if self.use_framing:
             try:
+                # Consume heartbeats, but do not hang indefinitely if only zero-length frames arrive
+                heartbeat_count = 0
+                deadline = time.monotonic() + getattr(config, 'framed_receive_timeout', 2.0)
                 while True:
                     header = self._read_exact(sock, 8)
                     payload_len = struct.unpack('>Q', header)[0]
                     if payload_len == 0:
                         # Heartbeat/no-op frame: consume and continue waiting for a data frame
                         logger.debug("Received heartbeat frame (length=0)")
+                        heartbeat_count += 1
+                        if heartbeat_count >= getattr(config, 'max_heartbeat_frames', 16) or time.monotonic() > deadline:
+                            # Treat as empty successful response to match C# server behavior
+                            logger.debug("Heartbeat threshold reached; returning empty response")
+                            return b""
                         continue
                     if payload_len > FRAMED_MAX:
                         raise ValueError(f"Invalid framed length: {payload_len}")
