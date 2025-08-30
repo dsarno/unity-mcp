@@ -3,7 +3,7 @@
 You are running inside CI for the `unity-mcp` repo. Use only the tools allowed by the workflow. Work autonomously; do not prompt the user. Do NOT spawn subagents.
 
 **Print this once, verbatim, early in the run:**
-AllowedTools: Write,Bash(printf:*),Bash(echo:*),Bash(scripts/nlt-revert.sh:*),mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script,mcp__unity__find_in_file,mcp__unity__read_console
+AllowedTools: Write,Bash(printf:*),Bash(echo:*),Bash(scripts/nlt-revert.sh:*),mcp__unity__manage_editor,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__apply_text_edits,mcp__unity__script_apply_edits,mcp__unity__validate_script,mcp__unity__find_in_file,mcp__unity__read_console,mcp__unity__get_sha
 
 ---
 
@@ -36,6 +36,7 @@ CI provides:
 - **Anchors/regex/structured**: `mcp__unity__script_apply_edits`
   - Allowed ops: `anchor_insert`, `replace_range`, `regex_replace` (no overlapping ranges within a single call)
 - **Precise ranges / atomic batch**: `mcp__unity__apply_text_edits` (non‑overlapping ranges)
+- **Hash-only**: `mcp__unity__get_sha` — returns `{sha256,lengthBytes,lastModifiedUtc}` without file body
 - **Validation**: `mcp__unity__validate_script(level:"standard")`
 - **Reporting**: `Write` small XML fragments to `reports/*_results.xml`
 - **Editor state/flush**: `mcp__unity__manage_editor` (use sparingly; no project mutations)
@@ -83,6 +84,12 @@ CI provides:
 - On `bad_request`: write the testcase with `<failure>…</failure>`, restore, and continue to next test.
 - On `missing_field`: FALL BACK per above; if the fallback also returns `unsupported` or `bad_request`, then fail as above.
 > Don’t use `mcp__unity__create_script`. Avoid the header/`using` region entirely.
+
+Span formats for `apply_text_edits`:
+- Prefer LSP ranges (0‑based): `{ "range": { "start": {"line": L, "character": C}, "end": {…} }, "newText": "…" }`
+- Explicit fields are 1‑based: `{ "startLine": L1, "startCol": C1, "endLine": L2, "endCol": C2, "newText": "…" }`
+- SDK preflights overlap after normalization; overlapping non‑zero spans → `{status:"overlap"}` with conflicts and no file mutation.
+- Optional debug: pass `strict:true` to reject explicit 0‑based fields (else they are normalized and a warning is emitted).
 
 ---
 
@@ -135,6 +142,7 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 
 - Before any mutation: `res = mcp__unity__read_resource(uri)`; `pre_sha = sha256(res.bytes)`.
 - Write with `precondition_sha256 = pre_sha` on `apply_text_edits`/`script_apply_edits`.
+- To compute `pre_sha` without reading file contents, you may instead call `mcp__unity__get_sha(uri).sha256`.
 - On `{status:"stale_file"}`:
   - Retry once using the server-provided hash (e.g., `data.current_sha256` or `data.expected_sha256`, per API schema).
   - If absent, one re-read then a final retry. No loops.
@@ -188,8 +196,9 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 - Restore baseline.
 - (1) OVERLAP:
   * Fresh read of file; compute two interior ranges that overlap inside HasTarget.
+  * Prefer LSP ranges (0‑based) or explicit 1‑based fields; ensure both spans come from the same snapshot.
   * Single mcp__unity__apply_text_edits call with both ranges.
-  * Expect {status:"overlap"} → record as PASS; else FAIL. Restore.
+  * Expect `{status:"overlap"}` (SDK preflight) → record as PASS; else FAIL. Restore.
 - (2) STALE_FILE:
   * Fresh read → pre_sha.
   * Make a tiny legit edit with pre_sha; success.

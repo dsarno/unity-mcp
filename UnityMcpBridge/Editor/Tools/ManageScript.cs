@@ -247,6 +247,34 @@ namespace MCPForUnity.Editor.Tools
                     var structEdits = @params["edits"] as JArray;
                     var options = @params["options"] as JObject;
                     return EditScript(fullPath, relativePath, name, structEdits, options);
+                case "get_sha":
+                {
+                    try
+                    {
+                        if (!File.Exists(fullPath))
+                            return Response.Error($"Script not found at '{relativePath}'.");
+
+                        string text = File.ReadAllText(fullPath);
+                        string sha = ComputeSha256(text);
+                        var fi = new FileInfo(fullPath);
+                        long lengthBytes;
+                        try { lengthBytes = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetByteCount(text); }
+                        catch { lengthBytes = fi.Exists ? fi.Length : 0; }
+                        var data = new
+                        {
+                            uri = $"unity://path/{relativePath}",
+                            path = relativePath,
+                            sha256 = sha,
+                            lengthBytes,
+                            lastModifiedUtc = fi.Exists ? fi.LastWriteTimeUtc.ToString("o") : string.Empty
+                        };
+                        return Response.Success($"SHA computed for '{relativePath}'.", data);
+                    }
+                    catch (Exception ex)
+                    {
+                        return Response.Error($"Failed to compute SHA: {ex.Message}");
+                    }
+                }
                 default:
                     return Response.Error(
                         $"Unknown action: '{action}'. Valid actions are: create, delete, apply_text_edits, validate, read (deprecated), update (deprecated), edit (deprecated)."
@@ -631,6 +659,24 @@ namespace MCPForUnity.Editor.Tools
             foreach (var sp in spans)
             {
                 working = working.Remove(sp.start, sp.end - sp.start).Insert(sp.start, sp.text ?? string.Empty);
+            }
+
+            // No-op guard: if resulting text is identical, avoid writes and return explicit no-op
+            if (string.Equals(working, original, StringComparison.Ordinal))
+            {
+                string noChangeSha = ComputeSha256(original);
+                return Response.Success(
+                    $"No-op: contents unchanged for '{relativePath}'.",
+                    new
+                    {
+                        uri = $"unity://path/{relativePath}",
+                        path = relativePath,
+                        editsApplied = 0,
+                        no_op = true,
+                        sha256 = noChangeSha,
+                        evidence = new { reason = "identical_content" }
+                    }
+                );
             }
 
             if (!CheckBalancedDelimiters(working, out int line, out char expected))
@@ -1239,6 +1285,24 @@ namespace MCPForUnity.Editor.Tools
                     foreach (var r in replacements.OrderByDescending(r => r.start))
                         working = working.Remove(r.start, r.length).Insert(r.start, r.text);
                     appliedCount = replacements.Count;
+                }
+
+                // No-op guard for structured edits: if text unchanged, return explicit no-op
+                if (string.Equals(working, original, StringComparison.Ordinal))
+                {
+                    var sameSha = ComputeSha256(original);
+                    return Response.Success(
+                        $"No-op: contents unchanged for '{relativePath}'.",
+                        new
+                        {
+                            path = relativePath,
+                            uri = $"unity://path/{relativePath}",
+                            editsApplied = 0,
+                            no_op = true,
+                            sha256 = sameSha,
+                            evidence = new { reason = "identical_content" }
+                        }
+                    );
                 }
 
                 // Validate result using override from options if provided; otherwise GUI strictness

@@ -285,7 +285,8 @@ jobs:
               mcp__unity__script_apply_edits,
               mcp__unity__validate_script,
               mcp__unity__find_in_file,
-              mcp__unity__read_console
+              mcp__unity__read_console,
+              mcp__unity__get_sha
             disallowed_tools: TodoWrite,Task
             model: claude-3-7-sonnet-latest
             timeout_minutes: "30"

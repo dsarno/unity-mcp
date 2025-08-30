@@ -624,6 +624,10 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         m = _re.search(pattern, current_text, flags)
                         if not m:
                             continue
+                        # Expand $1, $2... backrefs in replacement using the first match (consistent with mixed-path behavior)
+                        def _expand_dollars(rep: str) -> str:
+                            return _re.sub(r"\$(\d+)", lambda g: m.group(int(g.group(1))) or "", rep)
+                        repl_expanded = _expand_dollars(repl)
                         sl, sc = line_col_from_index(m.start())
                         el, ec = line_col_from_index(m.end())
                         at_edits.append({
@@ -631,9 +635,9 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                             "startCol": sc,
                             "endLine": el,
                             "endCol": ec,
-                            "newText": repl
+                            "newText": repl_expanded
                         })
-                        current_text = current_text[:m.start()] + repl + current_text[m.end():]
+                        current_text = current_text[:m.start()] + repl_expanded + current_text[m.end():]
                     else:
                         return _with_norm({"success": False, "code": "unsupported_op", "message": f"Unsupported text edit op for server-side apply_text_edits: {op}"}, normalized_for_echo, routing="text")
 
@@ -685,6 +689,14 @@ def register_manage_script_edits_tools(mcp: FastMCP):
             new_contents = _apply_edits_locally(contents, edits)
         except Exception as e:
             return {"success": False, "message": f"Edit application failed: {e}"}
+
+        # Short-circuit no-op edits to avoid false "applied" reports downstream
+        if new_contents == contents:
+            return _with_norm({
+                "success": True,
+                "message": "No-op: contents unchanged",
+                "data": {"no_op": True, "evidence": {"reason": "identical_content"}}
+            }, normalized_for_echo, routing="text")
 
         if preview:
             # Produce a compact unified diff limited to small context

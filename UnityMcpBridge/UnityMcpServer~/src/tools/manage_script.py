@@ -74,19 +74,200 @@ def register_manage_script_tools(mcp: FastMCP):
         uri: str,
         edits: List[Dict[str, Any]],
         precondition_sha256: str | None = None,
+        strict: bool | None = None,
     ) -> Dict[str, Any]:
         """Apply small text edits to a C# script identified by URI."""
         name, directory = _split_uri(uri)
+
+        # Normalize common aliases/misuses for resilience:
+        # - Accept LSP-style range objects: {range:{start:{line,character}, end:{...}}, newText|text}
+        # - Accept index ranges as a 2-int array: {range:[startIndex,endIndex], text}
+        # If normalization is required, read current contents to map indices -> 1-based line/col.
+        def _needs_normalization(arr: List[Dict[str, Any]]) -> bool:
+            for e in arr or []:
+                if ("startLine" not in e) or ("startCol" not in e) or ("endLine" not in e) or ("endCol" not in e) or ("newText" not in e and "text" in e):
+                    return True
+            return False
+
+        normalized_edits: List[Dict[str, Any]] = []
+        warnings: List[str] = []
+        if _needs_normalization(edits):
+            # Read file to support index->line/col conversion when needed
+            read_resp = send_command_with_retry("manage_script", {
+                "action": "read",
+                "name": name,
+                "path": directory,
+            })
+            if not (isinstance(read_resp, dict) and read_resp.get("success")):
+                return read_resp if isinstance(read_resp, dict) else {"success": False, "message": str(read_resp)}
+            data = read_resp.get("data", {})
+            contents = data.get("contents")
+            if not contents and data.get("contentsEncoded"):
+                try:
+                    contents = base64.b64decode(data.get("encodedContents", "").encode("utf-8")).decode("utf-8", "replace")
+                except Exception:
+                    contents = contents or ""
+
+            # Helper to map 0-based character index to 1-based line/col
+            def line_col_from_index(idx: int) -> tuple[int, int]:
+                if idx <= 0:
+                    return 1, 1
+                # Count lines up to idx and position within line
+                nl_count = contents.count("\n", 0, idx)
+                line = nl_count + 1
+                last_nl = contents.rfind("\n", 0, idx)
+                col = (idx - (last_nl + 1)) + 1 if last_nl >= 0 else idx + 1
+                return line, col
+
+            for e in edits or []:
+                e2 = dict(e)
+                # Map text->newText if needed
+                if "newText" not in e2 and "text" in e2:
+                    e2["newText"] = e2.pop("text")
+
+                if "startLine" in e2 and "startCol" in e2 and "endLine" in e2 and "endCol" in e2:
+                    # Guard: explicit fields must be 1-based.
+                    zero_based = False
+                    for k in ("startLine","startCol","endLine","endCol"):
+                        try:
+                            if int(e2.get(k, 1)) < 1:
+                                zero_based = True
+                        except Exception:
+                            pass
+                    if zero_based:
+                        if strict:
+                            return {"success": False, "code": "zero_based_explicit_fields", "message": "Explicit line/col fields are 1-based; received zero-based.", "data": {"normalizedEdits": normalized_edits}}
+                        # Normalize by clamping to 1 and warn
+                        for k in ("startLine","startCol","endLine","endCol"):
+                            try:
+                                if int(e2.get(k, 1)) < 1:
+                                    e2[k] = 1
+                            except Exception:
+                                pass
+                        warnings.append("zero_based_explicit_fields_normalized")
+                    normalized_edits.append(e2)
+                    continue
+
+                rng = e2.get("range")
+                if isinstance(rng, dict):
+                    # LSP style: 0-based
+                    s = rng.get("start", {})
+                    t = rng.get("end", {})
+                    e2["startLine"] = int(s.get("line", 0)) + 1
+                    e2["startCol"] = int(s.get("character", 0)) + 1
+                    e2["endLine"] = int(t.get("line", 0)) + 1
+                    e2["endCol"] = int(t.get("character", 0)) + 1
+                    e2.pop("range", None)
+                    normalized_edits.append(e2)
+                    continue
+                if isinstance(rng, (list, tuple)) and len(rng) == 2:
+                    try:
+                        a = int(rng[0])
+                        b = int(rng[1])
+                        if b < a:
+                            a, b = b, a
+                        sl, sc = line_col_from_index(a)
+                        el, ec = line_col_from_index(b)
+                        e2["startLine"] = sl
+                        e2["startCol"] = sc
+                        e2["endLine"] = el
+                        e2["endCol"] = ec
+                        e2.pop("range", None)
+                        normalized_edits.append(e2)
+                        continue
+                    except Exception:
+                        pass
+                # Could not normalize this edit
+                return {
+                    "success": False,
+                    "code": "missing_field",
+                    "message": "apply_text_edits requires startLine/startCol/endLine/endCol/newText or a normalizable 'range'",
+                    "data": {"expected": ["startLine","startCol","endLine","endCol","newText"], "got": e}
+                }
+        else:
+            # Even when edits appear already in explicit form, validate 1-based coordinates.
+            normalized_edits = []
+            for e in edits or []:
+                e2 = dict(e)
+                has_all = all(k in e2 for k in ("startLine","startCol","endLine","endCol"))
+                if has_all:
+                    zero_based = False
+                    for k in ("startLine","startCol","endLine","endCol"):
+                        try:
+                            if int(e2.get(k, 1)) < 1:
+                                zero_based = True
+                        except Exception:
+                            pass
+                    if zero_based:
+                        if strict:
+                            return {"success": False, "code": "zero_based_explicit_fields", "message": "Explicit line/col fields are 1-based; received zero-based.", "data": {"normalizedEdits": [e2]}}
+                        for k in ("startLine","startCol","endLine","endCol"):
+                            try:
+                                if int(e2.get(k, 1)) < 1:
+                                    e2[k] = 1
+                            except Exception:
+                                pass
+                        if "zero_based_explicit_fields_normalized" not in warnings:
+                            warnings.append("zero_based_explicit_fields_normalized")
+                normalized_edits.append(e2)
+
+        # Preflight: detect overlapping ranges among normalized line/col spans
+        def _pos_tuple(e: Dict[str, Any], key_start: bool) -> tuple[int, int]:
+            return (
+                int(e.get("startLine", 1)) if key_start else int(e.get("endLine", 1)),
+                int(e.get("startCol", 1)) if key_start else int(e.get("endCol", 1)),
+            )
+
+        def _le(a: tuple[int, int], b: tuple[int, int]) -> bool:
+            return a[0] < b[0] or (a[0] == b[0] and a[1] <= b[1])
+
+        # Consider only true replace ranges (non-zero length). Pure insertions (zero-width) don't overlap.
+        spans = []
+        for e in normalized_edits or []:
+            try:
+                s = _pos_tuple(e, True)
+                t = _pos_tuple(e, False)
+                if s != t:
+                    spans.append((s, t))
+            except Exception:
+                # If coordinates missing or invalid, let the server validate later
+                pass
+
+        if spans:
+            spans_sorted = sorted(spans, key=lambda p: (p[0][0], p[0][1]))
+            for i in range(1, len(spans_sorted)):
+                prev_end = spans_sorted[i-1][1]
+                curr_start = spans_sorted[i][0]
+                # Overlap if prev_end > curr_start (strict), i.e., not prev_end <= curr_start
+                if not _le(prev_end, curr_start):
+                    conflicts = [{
+                        "startA": {"line": spans_sorted[i-1][0][0], "col": spans_sorted[i-1][0][1]},
+                        "endA":   {"line": spans_sorted[i-1][1][0], "col": spans_sorted[i-1][1][1]},
+                        "startB": {"line": spans_sorted[i][0][0],  "col": spans_sorted[i][0][1]},
+                        "endB":   {"line": spans_sorted[i][1][0],  "col": spans_sorted[i][1][1]},
+                    }]
+                    return {"success": False, "code": "overlap", "data": {"status": "overlap", "conflicts": conflicts}}
+
+        # Note: Do not auto-compute precondition if missing; callers should supply it
+        # via mcp__unity__get_sha or a prior read. This avoids hidden extra calls and
+        # preserves existing call-count expectations in clients/tests.
+
         params = {
             "action": "apply_text_edits",
             "name": name,
             "path": directory,
-            "edits": edits,
+            "edits": normalized_edits,
             "precondition_sha256": precondition_sha256,
         }
         params = {k: v for k, v in params.items() if v is not None}
         resp = send_command_with_retry("manage_script", params)
-        return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
+        if isinstance(resp, dict):
+            data = resp.setdefault("data", {})
+            data.setdefault("normalizedEdits", normalized_edits)
+            if warnings:
+                data.setdefault("warnings", warnings)
+            return resp
+        return {"success": False, "message": str(resp)}
 
     @mcp.tool(description=(
         "Create a new C# script at the given project path.\n\n"
@@ -313,11 +494,28 @@ def register_manage_script_tools(mcp: FastMCP):
             # Match ManageScript.MaxEditPayloadBytes if exposed; hardcode a sensible default fallback
             max_edit_payload_bytes = 256 * 1024
             guards = {"using_guard": True}
+            extras = {"get_sha": True}
             return {"success": True, "data": {
                 "ops": ops,
                 "text_ops": text_ops,
                 "max_edit_payload_bytes": max_edit_payload_bytes,
                 "guards": guards,
+                "extras": extras,
             }}
         except Exception as e:
             return {"success": False, "error": f"capabilities error: {e}"}
+
+    @mcp.tool(description=(
+        "Get SHA256 and metadata for a Unity C# script without returning file contents.\n\n"
+        "Args: uri (unity://path/Assets/... or file://... or Assets/...).\n"
+        "Returns: {sha256, lengthBytes, lastModifiedUtc, uri, path}."
+    ))
+    def get_sha(ctx: Context, uri: str) -> Dict[str, Any]:
+        """Return SHA256 and basic metadata for a script."""
+        try:
+            name, directory = _split_uri(uri)
+            params = {"action": "get_sha", "name": name, "path": directory}
+            resp = send_command_with_retry("manage_script", params)
+            return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
+        except Exception as e:
+            return {"success": False, "message": f"get_sha error: {e}"}
