@@ -91,6 +91,57 @@ def _extract_code_after(keyword: str, request: str) -> str:
     if idx >= 0:
         return request[idx + len(keyword):].strip()
     return ""
+def _is_structurally_balanced(text: str) -> bool:
+    """Lightweight delimiter balance check for braces/paren/brackets.
+    Not a full parser; used to preflight destructive regex deletes.
+    """
+    brace = paren = bracket = 0
+    in_str = in_chr = False
+    esc = False
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        nxt = text[i+1] if i+1 < n else ''
+        if in_str:
+            if not esc and c == '"':
+                in_str = False
+            esc = (not esc and c == '\\')
+            i += 1
+            continue
+        if in_chr:
+            if not esc and c == "'":
+                in_chr = False
+            esc = (not esc and c == '\\')
+            i += 1
+            continue
+        # comments
+        if c == '/' and nxt == '/':
+            # skip to EOL
+            i = text.find('\n', i)
+            if i == -1:
+                break
+            i += 1
+            continue
+        if c == '/' and nxt == '*':
+            j = text.find('*/', i+2)
+            i = (j + 2) if j != -1 else n
+            continue
+        if c == '"':
+            in_str = True; esc = False; i += 1; continue
+        if c == "'":
+            in_chr = True; esc = False; i += 1; continue
+        if c == '{': brace += 1
+        elif c == '}': brace -= 1
+        elif c == '(': paren += 1
+        elif c == ')': paren -= 1
+        elif c == '[': bracket += 1
+        elif c == ']': bracket -= 1
+        if brace < 0 or paren < 0 or bracket < 0:
+            return False
+        i += 1
+    return brace == 0 and paren == 0 and bracket == 0
+
 
 
 def _normalize_script_locator(name: str, path: str) -> Tuple[str, str]:
@@ -628,6 +679,15 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         def _expand_dollars(rep: str) -> str:
                             return _re.sub(r"\$(\d+)", lambda g: m.group(int(g.group(1))) or "", rep)
                         repl_expanded = _expand_dollars(repl)
+                        # Preview structural balance after replacement; refuse destructive deletes
+                        preview = current_text[:m.start()] + repl_expanded + current_text[m.end():]
+                        if not _is_structurally_balanced(preview):
+                            return _with_norm({
+                                "success": False,
+                                "code": "validation_failed",
+                                "message": "regex_replace would unbalance braces/parentheses; prefer delete_method",
+                                "data": {"status": "validation_failed", "normalizedEdits": normalized_for_echo, "hint": "Use script_apply_edits delete_method for method removal"}
+                            }, normalized_for_echo, routing="text")
                         sl, sc = line_col_from_index(m.start())
                         el, ec = line_col_from_index(m.end())
                         at_edits.append({
@@ -637,7 +697,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                             "endCol": ec,
                             "newText": repl_expanded
                         })
-                        current_text = current_text[:m.start()] + repl_expanded + current_text[m.end():]
+                        current_text = preview
                     else:
                         return _with_norm({"success": False, "code": "unsupported_op", "message": f"Unsupported text edit op for server-side apply_text_edits: {op}"}, normalized_for_echo, routing="text")
 

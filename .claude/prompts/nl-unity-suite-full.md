@@ -68,14 +68,9 @@ CI provides:
 ```
 
 # Delete the temporary helper (T‑A/T‑E)
-- Do NOT use `anchor_replace`.
-- Use `script_apply_edits` with:
-```json
-{"op":"regex_replace",
- "pattern":"(?ms)^\\s*private\\s+int\\s+__TempHelper\\s*\\(.*?\\)\\s*=>\\s*.*?;\\s*\\r?\\n",
- "replacement":""}
-```
-- If rejected, fall back to `apply_text_edits` with a single `replace_range` spanning the method.
+- Prefer structured delete:
+  - Use `script_apply_edits` with `{ "op":"delete_method", "className":"LongUnityScriptClaudeTest", "methodName":"PrintSeries" }` (or `__TempHelper` for T‑A).
+- If structured delete is unavailable, fall back to `apply_text_edits` with a single `replace_range` spanning the exact method block (bounds computed from a fresh read); avoid whole‑file regex deletes.
 
 # T‑B (replace method body)
 - Use `mcp__unity__apply_text_edits` with a single `replace_range` strictly inside the `HasTarget` braces.
@@ -204,6 +199,14 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
   * Make a tiny legit edit with pre_sha; success.
   * Attempt another edit reusing the OLD pre_sha.
   * Expect {status:"stale_file"} → record as PASS; else FAIL. Re-read to refresh, restore.
+
+### Per‑test error handling and recovery
+- For each test (NL‑0..T‑J), use a try/finally pattern:
+  - try: run the test steps; always write `reports/<ID>_results.xml` with PASS/FAIL/ERROR
+  - finally: run Bash(scripts/nlt-revert.sh:restore …baseline) to restore the target file
+- On any transport/JSON/tool exception:
+  - catch and write a `<testcase>` fragment with an `<error>` node (include the message), then proceed to the next test.
+- After NL‑4 completes, proceed directly to T‑A regardless of any earlier validator warnings (do not abort the run).
 - (3) USING_GUARD (optional):
   * Attempt a 1-line insert above the first 'using'.
   * Expect {status:"using_guard"} → record as PASS; else note 'not emitted'. Restore.
