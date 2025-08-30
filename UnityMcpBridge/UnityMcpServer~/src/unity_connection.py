@@ -124,16 +124,18 @@ class UnityConnection:
         """Receive a complete response from Unity, handling chunked data."""
         if self.use_framing:
             try:
-                header = self._read_exact(sock, 8)
-                payload_len = struct.unpack('>Q', header)[0]
-                if payload_len == 0:
-                    logger.debug("Received framed response (0 bytes)")
-                    return b""
-                if payload_len > FRAMED_MAX:
-                    raise ValueError(f"Invalid framed length: {payload_len}")
-                payload = self._read_exact(sock, payload_len)
-                logger.debug(f"Received framed response ({len(payload)} bytes)")
-                return payload
+                while True:
+                    header = self._read_exact(sock, 8)
+                    payload_len = struct.unpack('>Q', header)[0]
+                    if payload_len == 0:
+                        # Heartbeat/no-op frame: consume and continue waiting for a data frame
+                        logger.debug("Received heartbeat frame (length=0)")
+                        continue
+                    if payload_len > FRAMED_MAX:
+                        raise ValueError(f"Invalid framed length: {payload_len}")
+                    payload = self._read_exact(sock, payload_len)
+                    logger.debug(f"Received framed response ({len(payload)} bytes)")
+                    return payload
             except socket.timeout as e:
                 logger.warning("Socket timeout during framed receive")
                 raise TimeoutError("Timeout receiving Unity response") from e

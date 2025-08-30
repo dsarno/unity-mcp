@@ -157,9 +157,45 @@ def test_unframed_data_disconnect():
         sock.close()
 
 
-@pytest.mark.skip(reason="TODO: zero-length payload should raise error")
-def test_zero_length_payload_error():
-    pass
+def test_zero_length_payload_heartbeat():
+    # Server that sends handshake and a zero-length heartbeat frame followed by a pong payload
+    import socket, struct, threading, time
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(1)
+    port = sock.getsockname()[1]
+    ready = threading.Event()
+
+    def _run():
+        ready.set()
+        conn, _ = sock.accept()
+        try:
+            conn.sendall(b"MCP/0.1 FRAMING=1\n")
+            time.sleep(0.02)
+            # Heartbeat frame (length=0)
+            conn.sendall(struct.pack(">Q", 0))
+            time.sleep(0.02)
+            # Real payload frame
+            payload = b'{"type":"pong"}'
+            conn.sendall(struct.pack(">Q", len(payload)) + payload)
+            time.sleep(0.02)
+        finally:
+            try: conn.close()
+            except Exception: pass
+            sock.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+    ready.wait()
+
+    conn = UnityConnection(host="127.0.0.1", port=port)
+    try:
+        assert conn.connect() is True
+        # Receive should skip heartbeat and return the pong payload
+        resp = conn.receive_full_response(conn.sock)
+        assert resp == b'{"type":"pong"}'
+    finally:
+        conn.disconnect()
 
 
 @pytest.mark.skip(reason="TODO: oversized payload should disconnect")
