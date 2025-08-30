@@ -176,7 +176,9 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 
 ### T‑A. Anchor insert (text path) — Insert helper after `GetCurrentTarget`; verify; delete via `regex_replace`; restore.
 ### T‑B. Replace body — Single `replace_range` inside `HasTarget`; restore.
+- Options: pass {"validate":"relaxed"} for interior one-line edits.
 ### T‑C. Header/region preservation — Edit interior of `ApplyBlend`; preserve signature/docs/regions; restore.
+- Options: pass {"validate":"relaxed"} for interior one-line edits.
 ### T‑D. End‑of‑class (anchor) — Insert helper before final brace; remove; restore.
 ### T‑E. Lifecycle — Insert → update → delete via regex; restore.
 ### T‑F. Atomic batch — One `mcp__unity__apply_text_edits` call (text ranges only)
@@ -185,6 +187,7 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
     2) One **end‑of‑class insertion**: find the **index of the final `}`** for the class; create a zero‑width range `[idx, idx)` and set `replacement` to the 3‑line comment block.
   - Send all three ranges in **one call**, sorted **descending by start index** to avoid offset drift.
   - Expect all‑or‑nothing semantics; on `{status:"overlap"}` or `{status:"bad_request"}`, write the testcase fragment with `<failure>…</failure>`, **restore**, and continue.
+  - Options: pass {"applyMode":"atomic"} to enforce all‑or‑nothing.
 - T‑G. Path normalization — Make the same edit with `unity://path/Assets/...` then `Assets/...`. Without refreshing `precondition_sha256`, the second attempt returns `{stale_file}`; retry with the server-provided hash to confirm both forms resolve to the same file.
 
 ### T-H. Validation (standard)
@@ -208,6 +211,7 @@ Note: Emit the PLAN line only in NL‑0 (do not repeat it for later tests).
 
 ### Per‑test error handling and recovery
 - For each test (NL‑0..T‑J), use a try/finally pattern:
+  - Always write a testcase fragment and perform restore in finally, even when tools return error payloads.
   - try: run the test steps; always write `reports/<ID>_results.xml` with PASS/FAIL/ERROR
   - finally: run Bash(scripts/nlt-revert.sh:restore …baseline) to restore the target file
 - On any transport/JSON/tool exception:
