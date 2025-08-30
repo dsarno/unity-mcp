@@ -204,9 +204,10 @@ namespace MCPForUnity.Editor.Tools
                 {
                     var textEdits = @params["edits"] as JArray;
                     string precondition = @params["precondition_sha256"]?.ToString();
-                    // Respect optional refresh options for immediate compile
+                    // Respect optional options
                     string refreshOpt = @params["options"]?["refresh"]?.ToString()?.ToLowerInvariant();
-                    return ApplyTextEdits(fullPath, relativePath, name, textEdits, precondition, refreshOpt);
+                    string validateOpt = @params["options"]?["validate"]?.ToString()?.ToLowerInvariant();
+                    return ApplyTextEdits(fullPath, relativePath, name, textEdits, precondition, refreshOpt, validateOpt);
                 }
                 case "validate":
                 {
@@ -489,7 +490,8 @@ namespace MCPForUnity.Editor.Tools
             string name,
             JArray edits,
             string preconditionSha256,
-            string refreshModeFromCaller = null)
+            string refreshModeFromCaller = null,
+            string validateMode = null)
         {
             if (!File.Exists(fullPath))
                 return Response.Error($"Script not found at '{relativePath}'.");
@@ -656,9 +658,19 @@ namespace MCPForUnity.Editor.Tools
             }
 
             string working = original;
+            bool relaxed = string.Equals(validateMode, "relaxed", StringComparison.OrdinalIgnoreCase);
             foreach (var sp in spans)
             {
-                working = working.Remove(sp.start, sp.end - sp.start).Insert(sp.start, sp.text ?? string.Empty);
+                string next = working.Remove(sp.start, sp.end - sp.start).Insert(sp.start, sp.text ?? string.Empty);
+                if (relaxed)
+                {
+                    // Scoped balance check: validate just around the changed region to avoid false positives
+                    if (!CheckScopedBalance(next, Math.Max(0, sp.start - 500), Math.Min(next.Length, sp.start + (sp.text?.Length ?? 0) + 500)))
+                    {
+                        return Response.Error("unbalanced_braces", new { status = "unbalanced_braces", line = 0, expected = "{}()[] (scoped)", hint = "Use standard validation or shrink the edit range." });
+                    }
+                }
+                working = next;
             }
 
             // No-op guard: if resulting text is identical, avoid writes and return explicit no-op
@@ -679,7 +691,7 @@ namespace MCPForUnity.Editor.Tools
                 );
             }
 
-            if (!CheckBalancedDelimiters(working, out int line, out char expected))
+            if (!relaxed && !CheckBalancedDelimiters(working, out int line, out char expected))
             {
                 int startLine = Math.Max(1, line - 5);
                 int endLine = line + 5;
@@ -888,6 +900,37 @@ namespace MCPForUnity.Editor.Tools
             if (bracketStack.Count > 0) { line = bracketStack.Peek(); expected = ']'; return false; }
 
             return true;
+        }
+
+        // Lightweight scoped balance: checks delimiters within a substring, ignoring outer context
+        private static bool CheckScopedBalance(string text, int start, int end)
+        {
+            start = Math.Max(0, Math.Min(text.Length, start));
+            end = Math.Max(start, Math.Min(text.Length, end));
+            int brace = 0, paren = 0, bracket = 0;
+            bool inStr = false, inChr = false, esc = false;
+            for (int i = start; i < end; i++)
+            {
+                char c = text[i];
+                char n = (i + 1 < end) ? text[i + 1] : '\0';
+                if (inStr)
+                {
+                    if (!esc && c == '"') inStr = false; esc = (!esc && c == '\\'); continue;
+                }
+                if (inChr)
+                {
+                    if (!esc && c == '\'') inChr = false; esc = (!esc && c == '\\'); continue;
+                }
+                if (c == '"') { inStr = true; esc = false; continue; }
+                if (c == '\'') { inChr = true; esc = false; continue; }
+                if (c == '/' && n == '/') { while (i < end && text[i] != '\n') i++; continue; }
+                if (c == '/' && n == '*') { i += 2; while (i + 1 < end && !(text[i] == '*' && text[i + 1] == '/')) i++; i++; continue; }
+                if (c == '{') brace++; else if (c == '}') brace--;
+                else if (c == '(') paren++; else if (c == ')') paren--;
+                else if (c == '[') bracket++; else if (c == ']') bracket--;
+                if (brace < 0 || paren < 0 || bracket < 0) return false;
+            }
+            return brace >= -1 && paren >= -1 && bracket >= -1; // tolerate context from outside region
         }
 
         private static object DeleteScript(string fullPath, string relativePath)

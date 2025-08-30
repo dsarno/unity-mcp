@@ -464,9 +464,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
         # If everything is structured (method/class/anchor ops), forward directly to Unity's structured editor.
         if all_struct:
             opts2 = dict(options or {})
-            # Be conservative: when multiple structured ops are present, ensure deterministic order
-            if len(edits or []) > 1:
-                opts2.setdefault("applyMode", "sequential")
+            # Do not force sequential; allow server default (atomic) unless caller requests otherwise
             opts2.setdefault("refresh", "immediate")
             params_struct: Dict[str, Any] = {
                 "action": "edit",
@@ -506,10 +504,10 @@ def register_manage_script_edits_tools(mcp: FastMCP):
             text_edits = [e for e in edits or [] if (e.get("op") or "").lower() in TEXT]
             struct_edits = [e for e in edits or [] if (e.get("op") or "").lower() in STRUCT]
             try:
-                current_text = contents
+                base_text = contents
                 def line_col_from_index(idx: int) -> Tuple[int, int]:
-                    line = current_text.count("\n", 0, idx) + 1
-                    last_nl = current_text.rfind("\n", 0, idx)
+                    line = base_text.count("\n", 0, idx) + 1
+                    last_nl = base_text.rfind("\n", 0, idx)
                     col = (idx - (last_nl + 1)) + 1 if last_nl >= 0 else idx + 1
                     return line, col
 
@@ -522,7 +520,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         anchor = e.get("anchor") or ""
                         position = (e.get("position") or "after").lower()
                         flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
-                        m = _re.search(anchor, current_text, flags)
+                        m = _re.search(anchor, base_text, flags)
                         if not m:
                             return _with_norm({"success": False, "code": "anchor_not_found", "message": f"anchor not found: {anchor}"}, normalized_for_echo, routing="mixed/text-first")
                         idx = m.start() if position == "before" else m.end()
@@ -534,7 +532,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                             text_field_norm = text_field_norm + "\n"
                         sl, sc = line_col_from_index(idx)
                         at_edits.append({"startLine": sl, "startCol": sc, "endLine": sl, "endCol": sc, "newText": text_field_norm})
-                        current_text = current_text[:idx] + text_field_norm + current_text[idx:]
+                        # do not mutate base_text when building atomic spans
                     elif opx == "replace_range":
                         if all(k in e for k in ("startLine","startCol","endLine","endCol")):
                             at_edits.append({
@@ -548,7 +546,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                             return _with_norm(_err("missing_field", "replace_range requires startLine/startCol/endLine/endCol", normalized=normalized_for_echo, routing="mixed/text-first"), normalized_for_echo, routing="mixed/text-first")
                     elif opx == "regex_replace":
                         pattern = e.get("pattern") or ""
-                        m = _re.search(pattern, current_text, _re.MULTILINE)
+                        m = _re.search(pattern, base_text, _re.MULTILINE)
                         if not m:
                             continue
                         # Expand $1, $2... in replacement using this match
@@ -558,24 +556,24 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         sl, sc = line_col_from_index(m.start())
                         el, ec = line_col_from_index(m.end())
                         at_edits.append({"startLine": sl, "startCol": sc, "endLine": el, "endCol": ec, "newText": repl})
-                        current_text = current_text[:m.start()] + repl + current_text[m.end():]
+                        # do not mutate base_text when building atomic spans
                     elif opx in ("prepend","append"):
                         if opx == "prepend":
                             sl, sc = 1, 1
                             at_edits.append({"startLine": sl, "startCol": sc, "endLine": sl, "endCol": sc, "newText": text_field})
-                            current_text = text_field + current_text
+                            # prepend can be applied atomically without local mutation
                         else:
                             # Insert at true EOF position (handles both \n and \r\n correctly)
-                            eof_idx = len(current_text)
+                            eof_idx = len(base_text)
                             sl, sc = line_col_from_index(eof_idx)
-                            new_text = ("\n" if not current_text.endswith("\n") else "") + text_field
+                            new_text = ("\n" if not base_text.endswith("\n") else "") + text_field
                             at_edits.append({"startLine": sl, "startCol": sc, "endLine": sl, "endCol": sc, "newText": new_text})
-                            current_text = current_text + new_text
+                            # do not mutate base_text when building atomic spans
                     else:
                         return _with_norm(_err("unknown_op", f"Unsupported text edit op: {opx}", normalized=normalized_for_echo, routing="mixed/text-first"), normalized_for_echo, routing="mixed/text-first")
 
                 import hashlib
-                sha = hashlib.sha256(contents.encode("utf-8")).hexdigest()
+                sha = hashlib.sha256(base_text.encode("utf-8")).hexdigest()
                 if at_edits:
                     params_text: Dict[str, Any] = {
                         "action": "apply_text_edits",
@@ -585,7 +583,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         "scriptType": script_type,
                         "edits": at_edits,
                         "precondition_sha256": sha,
-                        "options": {"refresh": "immediate", "validate": (options or {}).get("validate", "standard")}
+                        "options": {"refresh": "immediate", "validate": (options or {}).get("validate", "standard"), "applyMode": ("atomic" if len(at_edits) > 1 else (options or {}).get("applyMode", "sequential"))}
                     }
                     resp_text = send_command_with_retry("manage_script", params_text)
                     if not (isinstance(resp_text, dict) and resp_text.get("success")):
@@ -595,7 +593,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
 
             if struct_edits:
                 opts2 = dict(options or {})
-                opts2.setdefault("applyMode", "sequential")
+                # Let server decide; do not force sequential
                 opts2.setdefault("refresh", "immediate")
                 params_struct: Dict[str, Any] = {
                     "action": "edit",
@@ -619,11 +617,11 @@ def register_manage_script_edits_tools(mcp: FastMCP):
         if not text_ops.issubset(structured_kinds):
             # Convert to apply_text_edits payload
             try:
-                current_text = contents
+                base_text = contents
                 def line_col_from_index(idx: int) -> Tuple[int, int]:
-                    # 1-based line/col
-                    line = current_text.count("\n", 0, idx) + 1
-                    last_nl = current_text.rfind("\n", 0, idx)
+                    # 1-based line/col against base buffer
+                    line = base_text.count("\n", 0, idx) + 1
+                    last_nl = base_text.rfind("\n", 0, idx)
                     col = (idx - (last_nl + 1)) + 1 if last_nl >= 0 else idx + 1
                     return line, col
 
@@ -636,7 +634,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     if op == "anchor_insert":
                         anchor = e.get("anchor") or ""
                         position = (e.get("position") or "after").lower()
-                        m = _re.search(anchor, current_text, _re.MULTILINE)
+                        m = _re.search(anchor, base_text, _re.MULTILINE)
                         if not m:
                             return _with_norm({"success": False, "code": "anchor_not_found", "message": f"anchor not found: {anchor}"}, normalized_for_echo, routing="text")
                         idx = m.start() if position == "before" else m.end()
@@ -653,8 +651,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                             "endCol": sc,
                             "newText": text_field or ""
                         })
-                        # Update local snapshot to keep subsequent anchors stable
-                        current_text = current_text[:idx] + (text_field or "") + current_text[idx:]
+                        # Do not mutate base buffer when building an atomic batch
                     elif op == "replace_range":
                         # Directly forward if already in line/col form
                         if "startLine" in e:
@@ -672,7 +669,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                         pattern = e.get("pattern") or ""
                         repl = text_field
                         flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
-                        m = _re.search(pattern, current_text, flags)
+                        m = _re.search(pattern, base_text, flags)
                         if not m:
                             continue
                         # Expand $1, $2... backrefs in replacement using the first match (consistent with mixed-path behavior)
@@ -680,7 +677,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                             return _re.sub(r"\$(\d+)", lambda g: m.group(int(g.group(1))) or "", rep)
                         repl_expanded = _expand_dollars(repl)
                         # Preview structural balance after replacement; refuse destructive deletes
-                        preview = current_text[:m.start()] + repl_expanded + current_text[m.end():]
+                        preview = base_text[:m.start()] + repl_expanded + base_text[m.end():]
                         if not _is_structurally_balanced(preview):
                             return _with_norm({
                                 "success": False,
@@ -697,7 +694,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                             "endCol": ec,
                             "newText": repl_expanded
                         })
-                        current_text = preview
+                        # Do not mutate base buffer when building an atomic batch
                     else:
                         return _with_norm({"success": False, "code": "unsupported_op", "message": f"Unsupported text edit op for server-side apply_text_edits: {op}"}, normalized_for_echo, routing="text")
 
@@ -706,7 +703,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
 
                 # Send to Unity with precondition SHA to enforce guards and immediate refresh
                 import hashlib
-                sha = hashlib.sha256(contents.encode("utf-8")).hexdigest()
+                sha = hashlib.sha256(base_text.encode("utf-8")).hexdigest()
                 params: Dict[str, Any] = {
                     "action": "apply_text_edits",
                     "name": name,
@@ -718,7 +715,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     "options": {
                         "refresh": "immediate",
                         "validate": (options or {}).get("validate", "standard"),
-                        "applyMode": "sequential"
+                        "applyMode": ("atomic" if len(at_edits) > 1 else (options or {}).get("applyMode", "sequential"))
                     }
                 }
                 resp = send_command_with_retry("manage_script", params)

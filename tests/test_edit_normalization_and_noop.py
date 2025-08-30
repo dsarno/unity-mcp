@@ -28,6 +28,7 @@ def _load(path: pathlib.Path, name: str):
     return mod
 
 manage_script = _load(SRC / "tools" / "manage_script.py", "manage_script_mod2")
+manage_script_edits = _load(SRC / "tools" / "manage_script_edits.py", "manage_script_edits_mod2")
 
 
 class DummyMCP:
@@ -87,4 +88,29 @@ def test_noop_evidence_shape(monkeypatch):
     resp = apply(None, uri="unity://path/Assets/Scripts/F.cs", edits=[{"startLine":1,"startCol":1,"endLine":1,"endCol":1,"newText":""}], precondition_sha256="x")
     assert resp["success"] is True
     assert resp.get("data", {}).get("no_op") is True
+
+
+def test_atomic_multi_span_and_relaxed(monkeypatch):
+    tools_text = setup_tools()
+    apply_text = tools_text["apply_text_edits"]
+    tools_struct = DummyMCP(); manage_script_edits.register_manage_script_edits_tools(tools_struct)
+    # Fake send for read and write; verify atomic applyMode and validate=relaxed passes through
+    sent = {}
+    def fake_send(cmd, params):
+        if params.get("action") == "read":
+            return {"success": True, "data": {"contents": "public class C{\nvoid M(){ int x=2; }\n}\n"}}
+        sent.setdefault("calls", []).append(params)
+        return {"success": True}
+    monkeypatch.setattr(manage_script, "send_command_with_retry", fake_send)
+
+    edits = [
+        {"startLine": 2, "startCol": 14, "endLine": 2, "endCol": 15, "newText": "3"},
+        {"startLine": 3, "startCol": 2, "endLine": 3, "endCol": 2, "newText": "// tail\n"}
+    ]
+    resp = apply_text(None, uri="unity://path/Assets/Scripts/C.cs", edits=edits, precondition_sha256="sha", options={"validate": "relaxed", "applyMode": "atomic"})
+    assert resp["success"] is True
+    # Last manage_script call should include options with applyMode atomic and validate relaxed
+    last = sent["calls"][-1]
+    assert last.get("options", {}).get("applyMode") == "atomic"
+    assert last.get("options", {}).get("validate") == "relaxed"
 

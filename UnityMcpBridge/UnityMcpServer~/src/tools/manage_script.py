@@ -75,6 +75,7 @@ def register_manage_script_tools(mcp: FastMCP):
         edits: List[Dict[str, Any]],
         precondition_sha256: str | None = None,
         strict: bool | None = None,
+        options: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Apply small text edits to a C# script identified by URI."""
         name, directory = _split_uri(uri)
@@ -259,6 +260,8 @@ def register_manage_script_tools(mcp: FastMCP):
             "edits": normalized_edits,
             "precondition_sha256": precondition_sha256,
         }
+        if options:
+            params["options"] = options
         params = {k: v for k, v in params.items() if v is not None}
         resp = send_command_with_retry("manage_script", params)
         if isinstance(resp, dict):

@@ -94,6 +94,22 @@ def test_sequential_edits_use_precondition(monkeypatch):
     assert calls[1]["precondition_sha256"] == resp1["sha256"]
     assert resp2["sha256"] == "hash2"
 
+
+def test_apply_text_edits_forwards_options(monkeypatch):
+    tools = setup_manage_script()
+    apply_edits = tools["apply_text_edits"]
+    captured = {}
+
+    def fake_send(cmd, params):
+        captured["params"] = params
+        return {"success": True}
+
+    monkeypatch.setattr(manage_script_module, "send_command_with_retry", fake_send)
+
+    opts = {"validate": "relaxed", "applyMode": "atomic", "refresh": "immediate"}
+    apply_edits(None, "unity://path/Assets/Scripts/File.cs", [{"startLine":1,"startCol":1,"endLine":1,"endCol":1,"newText":"x"}], options=opts)
+    assert captured["params"].get("options") == opts
+
 def test_manage_asset_prefab_modify_request(monkeypatch):
     tools = setup_manage_asset()
     manage_asset = tools["manage_asset"]

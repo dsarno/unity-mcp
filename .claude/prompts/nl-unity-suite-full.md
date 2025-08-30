@@ -36,8 +36,13 @@ CI provides:
 - **Anchors/regex/structured**: `mcp__unity__script_apply_edits`
   - Allowed ops: `anchor_insert`, `replace_range`, `regex_replace` (no overlapping ranges within a single call)
 - **Precise ranges / atomic batch**: `mcp__unity__apply_text_edits` (non‑overlapping ranges)
+  - Multi‑span batches are computed from the same fresh read and sent atomically by default.
+  - Prefer `options.applyMode:"atomic"` when passing options for multiple spans; for single‑span, sequential is fine.
 - **Hash-only**: `mcp__unity__get_sha` — returns `{sha256,lengthBytes,lastModifiedUtc}` without file body
 - **Validation**: `mcp__unity__validate_script(level:"standard")`
+  - For edits, you may pass `options.validate`:
+    - `standard` (default): full‑file delimiter balance checks.
+    - `relaxed`: scoped checks for interior, non‑structural text edits; do not use for header/signature/brace‑touching changes.
 - **Reporting**: `Write` small XML fragments to `reports/*_results.xml`
 - **Editor state/flush**: `mcp__unity__manage_editor` (use sparingly; no project mutations)
 - **Console readback**: `mcp__unity__read_console` (INFO capture only; do not assert in place of `validate_script`)
@@ -85,6 +90,7 @@ Span formats for `apply_text_edits`:
 - Explicit fields are 1‑based: `{ "startLine": L1, "startCol": C1, "endLine": L2, "endCol": C2, "newText": "…" }`
 - SDK preflights overlap after normalization; overlapping non‑zero spans → `{status:"overlap"}` with conflicts and no file mutation.
 - Optional debug: pass `strict:true` to reject explicit 0‑based fields (else they are normalized and a warning is emitted).
+- Apply mode guidance: router defaults to atomic for multi‑span; you can explicitly set `options.applyMode` if needed.
 
 ---
 
