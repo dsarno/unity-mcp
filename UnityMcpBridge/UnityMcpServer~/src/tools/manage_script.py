@@ -253,15 +253,22 @@ def register_manage_script_tools(mcp: FastMCP):
         # via mcp__unity__get_sha or a prior read. This avoids hidden extra calls and
         # preserves existing call-count expectations in clients/tests.
 
+        # Default options: for multi-span batches, prefer atomic to avoid mid-apply imbalance
+        opts: Dict[str, Any] = dict(options or {})
+        try:
+            if len(normalized_edits) > 1 and "applyMode" not in opts:
+                opts["applyMode"] = "atomic"
+        except Exception:
+            pass
+
         params = {
             "action": "apply_text_edits",
             "name": name,
             "path": directory,
             "edits": normalized_edits,
             "precondition_sha256": precondition_sha256,
+            "options": opts,
         }
-        if options:
-            params["options"] = options
         params = {k: v for k, v in params.items() if v is not None}
         resp = send_command_with_retry("manage_script", params)
         if isinstance(resp, dict):
