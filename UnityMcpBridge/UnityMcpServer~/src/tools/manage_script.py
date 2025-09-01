@@ -307,8 +307,38 @@ def register_manage_script_tools(mcp: FastMCP):
             if warnings:
                 data.setdefault("warnings", warnings)
             if resp.get("success"):
-                # Unity-side ManageScript handles sentinel flip after successful writes.
-                # Avoid Python-side file writes that can fail due to working dir/permissions.
+                # Ensure reload via Unity menu without blocking this response
+                try:
+                    import threading, time, json, glob, os
+                    def _latest_status() -> dict | None:
+                        try:
+                            files = sorted(glob.glob(os.path.expanduser("~/.unity-mcp/unity-mcp-status-*.json")), key=os.path.getmtime, reverse=True)
+                            if not files:
+                                return None
+                            with open(files[0], "r") as f:
+                                return json.loads(f.read())
+                        except Exception:
+                            return None
+
+                    def _flip_async():
+                        try:
+                            # Small delay so write flushes; prefer early flip to avoid editor-focus second reload
+                            time.sleep(0.1)
+                            st = _latest_status()
+                            if st and st.get("reloading"):
+                                return  # skip if a reload already started
+                            # Best‑effort, single-shot; avoid retries during reload window
+                            send_command_with_retry(
+                                "execute_menu_item",
+                                {"menuPath": "MCP/Flip Reload Sentinel"},
+                                max_retries=0,
+                                retry_ms=0,
+                            )
+                        except Exception:
+                            pass
+                    threading.Thread(target=_flip_async, daemon=True).start()
+                except Exception:
+                    pass
                 return resp
             return resp
         return {"success": False, "message": str(resp)}

@@ -81,6 +81,43 @@ def _apply_edits_locally(original_text: str, edits: List[Dict[str, Any]]) -> str
     return text
 
 
+def _trigger_sentinel_async() -> None:
+    """Fire the Unity menu flip on a short-lived background thread.
+
+    This avoids blocking the current request or getting stuck during domain reloads
+    (socket reconnects) when the Editor recompiles.
+    """
+    try:
+        import threading, time
+
+        def _flip():
+            try:
+                import json, glob, os
+                # Small delay so write flushes; prefer early flip to avoid editor-focus second reload
+                time.sleep(0.1)
+                try:
+                    files = sorted(glob.glob(os.path.expanduser("~/.unity-mcp/unity-mcp-status-*.json")), key=os.path.getmtime, reverse=True)
+                    if files:
+                        with open(files[0], "r") as f:
+                            st = json.loads(f.read())
+                            if st.get("reloading"):
+                                return
+                except Exception:
+                    pass
+                # Best‑effort, single-shot; avoid retries during reload window
+                send_command_with_retry(
+                    "execute_menu_item",
+                    {"menuPath": "MCP/Flip Reload Sentinel"},
+                    max_retries=0,
+                    retry_ms=0,
+                )
+            except Exception:
+                pass
+
+        threading.Thread(target=_flip, daemon=True).start()
+    except Exception:
+        pass
+
 def _infer_class_name(script_name: str) -> str:
     # Default to script name as class name (common Unity pattern)
     return (script_name or "").strip()
@@ -485,7 +522,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
             resp_struct = send_command_with_retry("manage_script", params_struct)
             if isinstance(resp_struct, dict) and resp_struct.get("success"):
                 try:
-                    send_command_with_retry("execute_menu_item", {"menuPath": "MCP/Flip Reload Sentinel"})
+                    _trigger_sentinel_async()
                 except Exception:
                     pass
             return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="structured")
@@ -608,9 +645,9 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     resp_text = send_command_with_retry("manage_script", params_text)
                     if not (isinstance(resp_text, dict) and resp_text.get("success")):
                         return _with_norm(resp_text if isinstance(resp_text, dict) else {"success": False, "message": str(resp_text)}, normalized_for_echo, routing="mixed/text-first")
-                    # Successful text write; flip sentinel via Unity menu to force reload
+                    # Successful text write; flip sentinel asynchronously to avoid blocking
                     try:
-                        send_command_with_retry("execute_menu_item", {"menuPath": "MCP/Flip Reload Sentinel"})
+                        _trigger_sentinel_async()
                     except Exception:
                         pass
             except Exception as e:
@@ -632,7 +669,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                 resp_struct = send_command_with_retry("manage_script", params_struct)
                 if isinstance(resp_struct, dict) and resp_struct.get("success"):
                     try:
-                        send_command_with_retry("execute_menu_item", {"menuPath": "MCP/Flip Reload Sentinel"})
+                        _trigger_sentinel_async()
                     except Exception:
                         pass
                 return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="mixed/text-first")
@@ -758,7 +795,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                 resp = send_command_with_retry("manage_script", params)
                 if isinstance(resp, dict) and resp.get("success"):
                     try:
-                        send_command_with_retry("execute_menu_item", {"menuPath": "MCP/Flip Reload Sentinel"})
+                        _trigger_sentinel_async()
                     except Exception:
                         pass
                 return _with_norm(
@@ -843,7 +880,7 @@ def register_manage_script_edits_tools(mcp: FastMCP):
         write_resp = send_command_with_retry("manage_script", params)
         if isinstance(write_resp, dict) and write_resp.get("success"):
             try:
-                send_command_with_retry("execute_menu_item", {"menuPath": "MCP/Flip Reload Sentinel"})
+                _trigger_sentinel_async()
             except Exception:
                 pass
         return _with_norm(

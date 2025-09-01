@@ -361,9 +361,7 @@ namespace MCPForUnity.Editor.Tools
 
                 // Schedule heavy work AFTER replying
                 ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
-                // Also flip the reload sentinel from a background thread so Unity detects an on-disk IL change without requiring focus
-                Debug.Log("MCP: FlipSentinelInBackground() call [Create] for '{relativePath}'");
-                ManageScriptRefreshHelpers.FlipSentinelInBackground();
+                
                 return ok;
             }
             catch (Exception e)
@@ -473,8 +471,6 @@ namespace MCPForUnity.Editor.Tools
 
                 // Schedule a debounced import/compile on next editor tick to avoid stalling the reply
                 ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
-                Debug.Log("MCP: FlipSentinelInBackground() call [Update] for '{relativePath}'");
-                ManageScriptRefreshHelpers.FlipSentinelInBackground();
 
                 return ok;
             }
@@ -655,7 +651,7 @@ namespace MCPForUnity.Editor.Tools
             spans = spans.OrderByDescending(t => t.start).ToList();
             for (int i = 1; i < spans.Count; i++)
             {
-                if (spans[i].end > spans[i - 1].start)
+                if (spans[i].start + (spans[i].end - spans[i].start) > spans[i - 1].start)
                 {
                     var conflict = new[] { new { startA = spans[i].start, endA = spans[i].end, startB = spans[i - 1].start, endB = spans[i - 1].end } };
                     return Response.Error("overlap", new { status = "overlap", conflicts = conflict, hint = "Sort ranges descending by start and compute from the same snapshot." });
@@ -774,35 +770,11 @@ namespace MCPForUnity.Editor.Tools
                             relativePath,
                             ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
                         );
-#if UNITY_EDITOR
-                        UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
-#endif
                     };
                 }
                 else
                 {
                     ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
-                }
-
-                // Trigger sentinel flip synchronously so domain reload happens deterministically
-                try
-                {
-                    Debug.Log("MCP: Executing menu MCP/Flip Reload Sentinel (sync)");
-                    bool executed = EditorApplication.ExecuteMenuItem("MCP/Flip Reload Sentinel");
-                    if (!executed)
-                    {
-                        Debug.LogWarning("MCP: Sentinel menu not found/disabled; falling back to AssetDatabase.Refresh()");
-                        AssetDatabase.Refresh();
-                    }
-                    else
-                    {
-                        Debug.Log("MCP: Sentinel flip executed synchronously");
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogError("MCP: Exception flipping sentinel (sync): " + e.Message);
-                    AssetDatabase.Refresh();
                 }
 
                 return Response.Success(
@@ -1352,7 +1324,7 @@ namespace MCPForUnity.Editor.Tools
                             if (ordered[i].start + ordered[i].length > ordered[i - 1].start)
                             {
                                 var conflict = new[] { new { startA = ordered[i].start, endA = ordered[i].start + ordered[i].length, startB = ordered[i - 1].start, endB = ordered[i - 1].start + ordered[i - 1].length } };
-                                return Response.Error("overlap", new { status = "overlap", conflicts = conflict, hint = "Apply in descending order against the same precondition snapshot." });
+                                return Response.Error("overlap", new { status = "overlap", conflicts = conflict, hint = "Sort ranges descending by start and compute from the same snapshot." });
                             }
                         }
                         return Response.Error("overlap", new { status = "overlap" });
@@ -2645,35 +2617,6 @@ static class ManageScriptRefreshHelpers
     public static void ScheduleScriptRefresh(string relPath)
     {
         RefreshDebounce.Schedule(relPath, TimeSpan.FromMilliseconds(200));
-    }
-
-    // Flip the MCP reload sentinel on the next editor tick to ensure Unity detects
-    // an on-disk IL change even if the Editor window is not focused.
-    public static void FlipSentinelInBackground()
-    {
-        Debug.Log("MCP: FlipSentinelInBackground() scheduled");
-        EditorApplication.delayCall += () =>
-        {
-            try
-            {
-                Debug.Log("MCP: Executing menu MCP/Flip Reload Sentinel");
-                bool executed = EditorApplication.ExecuteMenuItem("MCP/Flip Reload Sentinel");
-                if (!executed)
-                {
-                    Debug.LogWarning("MCP: Menu execution failed; falling back to AssetDatabase.Refresh()");
-                    AssetDatabase.Refresh();
-                }
-                else
-                {
-                    Debug.Log("MCP: Sentinel flip menu executed successfully");
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError("MCP: Exception in FlipSentinelInBackground: " + e.Message + " — falling back to AssetDatabase.Refresh()");
-                AssetDatabase.Refresh();
-            }
-        };
     }
 }
 

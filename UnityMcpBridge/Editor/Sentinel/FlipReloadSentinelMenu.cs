@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.RegularExpressions;
 using UnityEditor;
+using UnityEngine;
 
 namespace MCPForUnity.Editor.Sentinel
 {
@@ -13,10 +14,11 @@ namespace MCPForUnity.Editor.Sentinel
         {
             try
             {
+                Debug.Log("[FlipReloadSentinelMenu] Executing menu MCP/Flip Reload Sentinel");
                 string path = PackageSentinelPath;
                 if (!File.Exists(path))
                 {
-                    EditorUtility.DisplayDialog("Flip Sentinel", $"Sentinel not found at '{path}'.", "OK");
+                    Debug.LogWarning($"[FlipReloadSentinelMenu] Sentinel not found at '{path}'.");
                     return;
                 }
 
@@ -33,12 +35,15 @@ namespace MCPForUnity.Editor.Sentinel
                     File.AppendAllText(path, "\n// MCP touch\n");
                 }
 
-                AssetDatabase.ImportAsset(path);
-                AssetDatabase.Refresh();
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+#if UNITY_EDITOR
+                UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
+#endif
+                Debug.Log("[FlipReloadSentinelMenu] Sentinel flip menu executed successfully");
             }
             catch (System.Exception ex)
             {
-                UnityEngine.Debug.LogError($"Flip Reload Sentinel failed: {ex.Message}");
+                Debug.LogError($"[FlipReloadSentinelMenu] Flip failed: {ex.Message}");
             }
         }
     }
