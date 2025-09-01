@@ -1,0 +1,59 @@
+name: Unity MCP — Desktop Parity
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  desktop-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python + uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: '3.11'
+
+      - name: Run Claude (desktop-parity)
+        uses: anthropics/claude-code-base-action@beta
+        with:
+          # Use the same model Desktop uses today in your logs
+          model: claude-3-7-sonnet-20250219
+
+          # Let it actually think & iterate like Desktop
+          max_turns: 60
+          timeout_minutes: 15
+
+          # Give it the standard code tools + your Unity MCP tools
+          allowed_tools: >
+            Bash(git:*),Read,Write,Edit,MultiEdit,LS,Glob,Grep,BashOutput,KillBash,
+            mcp__unity__*
+
+          # Prevent planner/subagent drift that doesn't carry MCP tools
+          disallowed_tools: TodoWrite
+
+          # Keep the exact MCP wiring you already use
+          mcp_config: |
+            {
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": ["run","--directory","UnityMcpBridge/UnityMcpServer~/src","python","server.py"],
+                  "transport": { "type": "stdio" },
+                  "env": { "PYTHONUNBUFFERED": "1", "MCP_LOG_LEVEL": "debug" }
+                }
+              }
+            }
+
+          # Map Desktop’s “click allow” to CI: auto-approve only what you intend
+          settings: |
+            {
+              "permissionMode": "allow",
+              "defaultMode": "bypassPermissions",
+              "permissionStorage": "none",
+              "autoApprove": ["Bash","Write","Edit","MultiEdit","mcp__unity__*"]
+            }
+
+          prompt_file: .claude/prompts/nl-unity-suite.md

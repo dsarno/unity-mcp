@@ -1,0 +1,91 @@
+name: Unity MCP — Smoke
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Minimal Python + uv so the server can run in its own project env
+      - name: Install Python + uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: '3.11'
+
+      # Optional but cheap: set up a venv and install the server in editable mode
+      - name: Install UnityMcpServer (editable)
+        run: |
+          set -eux
+          if [ -f "UnityMcpBridge/UnityMcpServer~/src/pyproject.toml" ]; then
+            uv venv
+            echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
+            echo "$GITHUB_WORKSPACE/.venv/bin"       >> "$GITHUB_PATH"
+            uv pip install -e "UnityMcpBridge/UnityMcpServer~/src"
+          fi
+
+      - name: Make prompt file (smoke)
+        run: |
+          mkdir -p .claude/prompts
+          cat > .claude/prompts/mcp-smoke.md <<'MD'
+          You are running a one-shot smoke check. Do exactly one Unity MCP tool call and nothing else.
+
+          1) Call the tool named: mcp__unity__list_resources
+          2) Use this exact JSON input:
+             {
+               "ctx": {},                 // IMPORTANT: ctx must be a dictionary (not a string)
+               "under": "ClaudeTests",    // keep it local/fast
+               "pattern": "*.cs"
+             }
+          3) Print the raw tool result to the console. Do not transform it.
+          4) If the call raises a validation error, print the exception type and message exactly.
+          5) Stop.
+          MD
+
+      - name: Run smoke (single tool call)
+        uses: anthropics/claude-code-base-action@beta
+        with:
+          prompt_file: .claude/prompts/mcp-smoke.md
+          # Only allow the one Unity tool needed for the smoke (no wildcards)
+          allowed_tools: mcp__unity__list_resources
+          # Start the Unity MCP server via stdio using uv
+          mcp_config: |
+            {
+              "mcpServers": {
+                "unity": {
+                  "command": "uv",
+                  "args": [
+                    "run",
+                    "--active",
+                    "--directory",
+                    "UnityMcpBridge/UnityMcpServer~/src",
+                    "python",
+                    "server.py"
+                  ],
+                  "transport": { "type": "stdio" },
+                  "env": {
+                    "PYTHONUNBUFFERED": "1",
+                    "MCP_LOG_LEVEL": "debug"
+                  }
+                }
+              }
+            }
+          # Remove permission friction; the agent only has one tool anyway
+          settings: |
+            {
+              "permissionMode": "allow",
+              "autoApprove": ["mcp__unity__list_resources"],
+              "defaultMode": "bypassPermissions",
+              "permissionStorage": "none"
+            }
+          model: claude-3-7-sonnet-20250219
+          max_turns: 3
+          timeout_minutes: 3
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
