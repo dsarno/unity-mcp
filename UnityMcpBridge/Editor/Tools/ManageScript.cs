@@ -764,16 +764,18 @@ namespace MCPForUnity.Editor.Tools
                                   string.Equals(refreshModeFromCaller, "sync", StringComparison.OrdinalIgnoreCase);
                 if (immediate)
                 {
-                    EditorApplication.delayCall += () =>
-                    {
-                        AssetDatabase.ImportAsset(
-                            relativePath,
-                            ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
-                        );
-                    };
+                    Debug.Log($"[ManageScript] ApplyTextEdits: immediate refresh for '{relativePath}'");
+                    AssetDatabase.ImportAsset(
+                        relativePath,
+                        ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
+                    );
+#if UNITY_EDITOR
+                    UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
+#endif
                 }
                 else
                 {
+                    Debug.Log($"[ManageScript] ApplyTextEdits: debounced refresh scheduled for '{relativePath}'");
                     ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
                 }
 
@@ -1419,17 +1421,14 @@ namespace MCPForUnity.Editor.Tools
 
                 if (immediate)
                 {
-                    // Force on main thread
-                    EditorApplication.delayCall += () =>
-                    {
-                        AssetDatabase.ImportAsset(
-                            relativePath,
-                            ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
-                        );
+                    // Perform synchronous import/compile immediately to ensure reload even when Editor is unfocused
+                    AssetDatabase.ImportAsset(
+                        relativePath,
+                        ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
+                    );
 #if UNITY_EDITOR
-                        UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
+                    UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
 #endif
-                    };
                 }
                 else
                 {

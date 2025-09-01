@@ -306,8 +306,8 @@ def register_manage_script_tools(mcp: FastMCP):
             data.setdefault("normalizedEdits", normalized_edits)
             if warnings:
                 data.setdefault("warnings", warnings)
-            if resp.get("success"):
-                # Ensure reload via Unity menu without blocking this response
+            if resp.get("success") and (options or {}).get("force_sentinel_reload"):
+                # Optional: flip sentinel via menu if explicitly requested
                 try:
                     import threading, time, json, glob, os
                     def _latest_status() -> dict | None:
@@ -322,12 +322,10 @@ def register_manage_script_tools(mcp: FastMCP):
 
                     def _flip_async():
                         try:
-                            # Small delay so write flushes; prefer early flip to avoid editor-focus second reload
                             time.sleep(0.1)
                             st = _latest_status()
                             if st and st.get("reloading"):
-                                return  # skip if a reload already started
-                            # Best‑effort, single-shot; avoid retries during reload window
+                                return
                             send_command_with_retry(
                                 "execute_menu_item",
                                 {"menuPath": "MCP/Flip Reload Sentinel"},
@@ -491,7 +489,7 @@ def register_manage_script_tools(mcp: FastMCP):
                         "path": path,
                         "edits": edits,
                         "precondition_sha256": sha,
-                        "options": {"refresh": "immediate", "validate": "standard"},
+                        "options": {"refresh": "debounced", "validate": "standard"},
                     }
                     # Preflight size vs. default cap (256 KiB) to avoid opaque server errors
                     try:
