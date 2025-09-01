@@ -2,6 +2,7 @@ from mcp.server.fastmcp import FastMCP, Context
 from typing import Dict, Any, List, Tuple
 import base64
 import re
+import os
 from unity_connection import send_command_with_retry
 
 
@@ -482,6 +483,11 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                 "options": opts2,
             }
             resp_struct = send_command_with_retry("manage_script", params_struct)
+            if isinstance(resp_struct, dict) and resp_struct.get("success"):
+                try:
+                    send_command_with_retry("execute_menu_item", {"menuPath": "MCP/Flip Reload Sentinel"})
+                except Exception:
+                    pass
             return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="structured")
 
         # 1) read from Unity
@@ -602,6 +608,11 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     resp_text = send_command_with_retry("manage_script", params_text)
                     if not (isinstance(resp_text, dict) and resp_text.get("success")):
                         return _with_norm(resp_text if isinstance(resp_text, dict) else {"success": False, "message": str(resp_text)}, normalized_for_echo, routing="mixed/text-first")
+                    # Successful text write; flip sentinel via Unity menu to force reload
+                    try:
+                        send_command_with_retry("execute_menu_item", {"menuPath": "MCP/Flip Reload Sentinel"})
+                    except Exception:
+                        pass
             except Exception as e:
                 return _with_norm({"success": False, "message": f"Text edit conversion failed: {e}"}, normalized_for_echo, routing="mixed/text-first")
 
@@ -619,6 +630,11 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     "options": opts2
                 }
                 resp_struct = send_command_with_retry("manage_script", params_struct)
+                if isinstance(resp_struct, dict) and resp_struct.get("success"):
+                    try:
+                        send_command_with_retry("execute_menu_item", {"menuPath": "MCP/Flip Reload Sentinel"})
+                    except Exception:
+                        pass
                 return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="mixed/text-first")
 
             return _with_norm({"success": True, "message": "Applied text edits (no structured ops)"}, normalized_for_echo, routing="mixed/text-first")
@@ -740,6 +756,11 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     }
                 }
                 resp = send_command_with_retry("manage_script", params)
+                if isinstance(resp, dict) and resp.get("success"):
+                    try:
+                        send_command_with_retry("execute_menu_item", {"menuPath": "MCP/Flip Reload Sentinel"})
+                    except Exception:
+                        pass
                 return _with_norm(
                     resp if isinstance(resp, dict) else {"success": False, "message": str(resp)},
                     normalized_for_echo,
@@ -820,6 +841,11 @@ def register_manage_script_edits_tools(mcp: FastMCP):
         }
 
         write_resp = send_command_with_retry("manage_script", params)
+        if isinstance(write_resp, dict) and write_resp.get("success"):
+            try:
+                send_command_with_retry("execute_menu_item", {"menuPath": "MCP/Flip Reload Sentinel"})
+            except Exception:
+                pass
         return _with_norm(
             write_resp if isinstance(write_resp, dict) 
                       else {"success": False, "message": str(write_resp)},

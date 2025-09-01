@@ -362,7 +362,6 @@ namespace MCPForUnity.Editor.Tools
                 // Schedule heavy work AFTER replying
                 ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
                 // Also flip the reload sentinel from a background thread so Unity detects an on-disk IL change without requiring focus
-                Debug.Log("MCP: FlipSentinelInBackground() call [Create] for '{relativePath}'");
                 ManageScriptRefreshHelpers.FlipSentinelInBackground();
                 return ok;
             }
@@ -473,7 +472,6 @@ namespace MCPForUnity.Editor.Tools
 
                 // Schedule a debounced import/compile on next editor tick to avoid stalling the reply
                 ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
-                Debug.Log("MCP: FlipSentinelInBackground() call [Update] for '{relativePath}'");
                 ManageScriptRefreshHelpers.FlipSentinelInBackground();
 
                 return ok;
@@ -782,27 +780,6 @@ namespace MCPForUnity.Editor.Tools
                 else
                 {
                     ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
-                }
-
-                // Trigger sentinel flip synchronously so domain reload happens deterministically
-                try
-                {
-                    Debug.Log("MCP: Executing menu MCP/Flip Reload Sentinel (sync)");
-                    bool executed = EditorApplication.ExecuteMenuItem("MCP/Flip Reload Sentinel");
-                    if (!executed)
-                    {
-                        Debug.LogWarning("MCP: Sentinel menu not found/disabled; falling back to AssetDatabase.Refresh()");
-                        AssetDatabase.Refresh();
-                    }
-                    else
-                    {
-                        Debug.Log("MCP: Sentinel flip executed synchronously");
-                    }
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogError("MCP: Exception flipping sentinel (sync): " + e.Message);
-                    AssetDatabase.Refresh();
                 }
 
                 return Response.Success(
@@ -2651,26 +2628,19 @@ static class ManageScriptRefreshHelpers
     // an on-disk IL change even if the Editor window is not focused.
     public static void FlipSentinelInBackground()
     {
-        Debug.Log("MCP: FlipSentinelInBackground() scheduled");
         EditorApplication.delayCall += () =>
         {
             try
             {
-                Debug.Log("MCP: Executing menu MCP/Flip Reload Sentinel");
                 bool executed = EditorApplication.ExecuteMenuItem("MCP/Flip Reload Sentinel");
                 if (!executed)
                 {
-                    Debug.LogWarning("MCP: Menu execution failed; falling back to AssetDatabase.Refresh()");
+                    // Fallback: at least refresh assets so changes are noticed
                     AssetDatabase.Refresh();
                 }
-                else
-                {
-                    Debug.Log("MCP: Sentinel flip menu executed successfully");
-                }
             }
-            catch (System.Exception e)
+            catch
             {
-                Debug.LogError("MCP: Exception in FlipSentinelInBackground: " + e.Message + " — falling back to AssetDatabase.Refresh()");
                 AssetDatabase.Refresh();
             }
         };

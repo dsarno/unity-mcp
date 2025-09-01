@@ -68,6 +68,8 @@ namespace MCPForUnity.Editor.Tools
         {
             // Try both naming conventions: snake_case and camelCase
             string menuPath = @params["menu_path"]?.ToString() ?? @params["menuPath"]?.ToString();
+            // Optional future param retained for API compatibility; not used in synchronous mode
+            // int timeoutMs = Math.Max(0, (@params["timeout_ms"]?.ToObject<int>() ?? 2000));
 
             // string alias = @params["alias"]?.ToString(); // TODO: Implement alias mapping based on refactor plan requirements.
             // JObject parameters = @params["parameters"] as JObject; // TODO: Investigate parameter passing (often not directly supported by ExecuteMenuItem).
@@ -94,42 +96,24 @@ namespace MCPForUnity.Editor.Tools
 
             try
             {
-                // Attempt to execute the menu item on the main thread using delayCall for safety.
-                EditorApplication.delayCall += () =>
+                // Execute synchronously. This code runs on the Editor main thread in our bridge path.
+                bool executed = EditorApplication.ExecuteMenuItem(menuPath);
+                if (executed)
                 {
-                    try
-                    {
-                        bool executed = EditorApplication.ExecuteMenuItem(menuPath);
-                        // Log potential failure inside the delayed call.
-                        if (!executed)
-                        {
-                            Debug.LogError(
-                                $"[ExecuteMenuItem] Failed to find or execute menu item via delayCall: '{menuPath}'. It might be invalid, disabled, or context-dependent."
-                            );
-                        }
-                    }
-                    catch (Exception delayEx)
-                    {
-                        Debug.LogError(
-                            $"[ExecuteMenuItem] Exception during delayed execution of '{menuPath}': {delayEx}"
-                        );
-                    }
-                };
-
-                // Report attempt immediately, as execution is delayed.
-                return Response.Success(
-                    $"Attempted to execute menu item: '{menuPath}'. Check Unity logs for confirmation or errors."
+                    return Response.Success(
+                        $"Executed menu item: '{menuPath}'",
+                        new { executed = true, menuPath }
+                    );
+                }
+                return Response.Error(
+                    $"Failed to execute menu item (not found or disabled): '{menuPath}'",
+                    new { executed = false, menuPath }
                 );
             }
             catch (Exception e)
             {
-                // Catch errors during setup phase.
-                Debug.LogError(
-                    $"[ExecuteMenuItem] Failed to setup execution for '{menuPath}': {e}"
-                );
-                return Response.Error(
-                    $"Error setting up execution for menu item '{menuPath}': {e.Message}"
-                );
+                Debug.LogError($"[ExecuteMenuItem] Error executing '{menuPath}': {e}");
+                return Response.Error($"Error executing menu item '{menuPath}': {e.Message}");
             }
         }
 

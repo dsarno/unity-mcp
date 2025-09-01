@@ -306,6 +306,10 @@ def register_manage_script_tools(mcp: FastMCP):
             data.setdefault("normalizedEdits", normalized_edits)
             if warnings:
                 data.setdefault("warnings", warnings)
+            if resp.get("success"):
+                # Unity-side ManageScript handles sentinel flip after successful writes.
+                # Avoid Python-side file writes that can fail due to working dir/permissions.
+                return resp
             return resp
         return {"success": False, "message": str(resp)}
 
