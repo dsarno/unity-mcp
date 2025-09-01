@@ -1771,7 +1771,7 @@ namespace MCPForUnity.Editor.Windows
                             {
                                 if (debugLogsEnabled)
                                 {
-                                    UnityEngine.Debug.Log($"MCP for Unity: Auto-updated MCP config for '{mcpClient.name}' to new path: {pythonDir}");
+                                    MCPForUnity.Editor.Helpers.McpLog.Info($"Auto-updated MCP config for '{mcpClient.name}' to new path: {pythonDir}", always: false);
                                 }
                                 mcpClient.SetStatus(McpStatus.Configured);
                             }
@@ -1971,7 +1971,7 @@ namespace MCPForUnity.Editor.Windows
                 
                 if (debugLogsEnabled)
                 {
-                    UnityEngine.Debug.Log($"Checking Claude config at: {configPath}");
+                    MCPForUnity.Editor.Helpers.McpLog.Info($"Checking Claude config at: {configPath}", always: false);
                 }
                 
                 if (!File.Exists(configPath))

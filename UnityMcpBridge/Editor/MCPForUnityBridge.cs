@@ -48,7 +48,7 @@ namespace MCPForUnity.Editor
         {
             if (IsDebugEnabled())
             {
-                Debug.Log($"<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: [{stage}]");
+                McpLog.Info($"[{stage}]", always: false);
             }
         }
 
@@ -230,7 +230,10 @@ namespace MCPForUnity.Editor
                 // Don't restart if already running on a working port
                 if (isRunning && listener != null)
                 {
-                    Debug.Log($"<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: MCPForUnityBridge already running on port {currentUnityPort}");
+                    if (IsDebugEnabled())
+                    {
+                        Debug.Log($"<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: MCPForUnityBridge already running on port {currentUnityPort}");
+                    }
                     return;
                 }
 
@@ -348,7 +351,7 @@ namespace MCPForUnity.Editor
                     listener?.Stop();
                     listener = null;
                     EditorApplication.update -= ProcessCommands;
-                    Debug.Log("<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: MCPForUnityBridge stopped.");
+                    if (IsDebugEnabled()) Debug.Log("<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: MCPForUnityBridge stopped.");
                 }
                 catch (Exception ex)
                 {
@@ -389,7 +392,7 @@ namespace MCPForUnity.Editor
                 {
                     if (isRunning)
                     {
-                        Debug.LogError($"Listener error: {ex.Message}");
+                        if (IsDebugEnabled()) Debug.LogError($"Listener error: {ex.Message}");
                     }
                 }
             }
@@ -403,8 +406,11 @@ namespace MCPForUnity.Editor
                 // Framed I/O only; legacy mode removed
                 try
                 {
-                    var ep = client.Client?.RemoteEndPoint?.ToString() ?? "unknown";
-                    Debug.Log($"<b><color=#2EA3FF>UNITY-MCP</color></b>: Client connected {ep}");
+                    if (IsDebugEnabled())
+                    {
+                        var ep = client.Client?.RemoteEndPoint?.ToString() ?? "unknown";
+                        Debug.Log($"<b><color=#2EA3FF>UNITY-MCP</color></b>: Client connected {ep}");
+                    }
                 }
                 catch { }
                 // Strict framing: always require FRAMING=1 and frame all I/O
@@ -423,11 +429,11 @@ namespace MCPForUnity.Editor
 #else
                     await stream.WriteAsync(handshakeBytes, 0, handshakeBytes.Length, cts.Token).ConfigureAwait(false);
 #endif
-                    Debug.Log("<b><color=#2EA3FF>UNITY-MCP</color></b>: Sent handshake FRAMING=1 (strict)");
+                    if (IsDebugEnabled()) MCPForUnity.Editor.Helpers.McpLog.Info("Sent handshake FRAMING=1 (strict)", always: false);
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogWarning($"<b><color=#2EA3FF>UNITY-MCP</color></b>: Handshake failed: {ex.Message}");
+                    if (IsDebugEnabled()) MCPForUnity.Editor.Helpers.McpLog.Warn($"Handshake failed: {ex.Message}");
                     return; // abort this client
                 }
 
@@ -440,8 +446,11 @@ namespace MCPForUnity.Editor
 
                         try
                         {
-                            var preview = commandText.Length > 120 ? commandText.Substring(0, 120) + "…" : commandText;
-                            Debug.Log($"<b><color=#2EA3FF>UNITY-MCP</color></b>: recv framed: {preview}");
+                            if (IsDebugEnabled())
+                            {
+                                var preview = commandText.Length > 120 ? commandText.Substring(0, 120) + "…" : commandText;
+                                MCPForUnity.Editor.Helpers.McpLog.Info($"recv framed: {preview}", always: false);
+                            }
                         }
                         catch { }
                         string commandId = Guid.NewGuid().ToString();
@@ -470,7 +479,20 @@ namespace MCPForUnity.Editor
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"Client handler error: {ex.Message}");
+                        // Treat common disconnects/timeouts as benign; only surface hard errors
+                        string msg = ex.Message ?? string.Empty;
+                        bool isBenign =
+                            msg.IndexOf("Connection closed before reading expected bytes", StringComparison.OrdinalIgnoreCase) >= 0
+                            || msg.IndexOf("Read timed out", StringComparison.OrdinalIgnoreCase) >= 0
+                            || ex is System.IO.IOException;
+                        if (isBenign)
+                        {
+                            if (IsDebugEnabled()) MCPForUnity.Editor.Helpers.McpLog.Info($"Client handler: {msg}", always: false);
+                        }
+                        else
+                        {
+                            MCPForUnity.Editor.Helpers.McpLog.Error($"Client handler error: {msg}");
+                        }
                         break;
                     }
                 }

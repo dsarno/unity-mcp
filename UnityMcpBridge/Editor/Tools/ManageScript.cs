@@ -356,12 +356,18 @@ namespace MCPForUnity.Editor.Tools
                 var uri = $"unity://path/{relativePath}";
                 var ok = Response.Success(
                     $"Script '{name}.cs' created successfully at '{relativePath}'.",
-                    new { uri, scheduledRefresh = true }
+                    new { uri, scheduledRefresh = false }
                 );
 
-                // Schedule heavy work AFTER replying
-                ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
-                
+                // Perform synchronous import/compile to ensure immediate reload
+                AssetDatabase.ImportAsset(
+                    relativePath,
+                    ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
+                );
+#if UNITY_EDITOR
+                UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
+#endif
+
                 return ok;
             }
             catch (Exception e)
