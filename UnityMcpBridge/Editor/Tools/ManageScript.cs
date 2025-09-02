@@ -359,14 +359,7 @@ namespace MCPForUnity.Editor.Tools
                     new { uri, scheduledRefresh = false }
                 );
 
-                // Perform synchronous import/compile to ensure immediate reload
-                AssetDatabase.ImportAsset(
-                    relativePath,
-                    ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
-                );
-#if UNITY_EDITOR
-                UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
-#endif
+                ManageScriptRefreshHelpers.ImportAndRequestCompile(relativePath);
 
                 return ok;
             }
@@ -1427,14 +1420,7 @@ namespace MCPForUnity.Editor.Tools
 
                 if (immediate)
                 {
-                    // Perform synchronous import/compile immediately to ensure reload even when Editor is unfocused
-                    AssetDatabase.ImportAsset(
-                        relativePath,
-                        ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
-                    );
-#if UNITY_EDITOR
-                    UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
-#endif
+                    ManageScriptRefreshHelpers.ImportAndRequestCompile(relativePath);
                 }
                 else
                 {
@@ -2622,6 +2608,16 @@ static class ManageScriptRefreshHelpers
     public static void ScheduleScriptRefresh(string relPath)
     {
         RefreshDebounce.Schedule(relPath, TimeSpan.FromMilliseconds(200));
+    }
+
+    public static void ImportAndRequestCompile(string relPath, bool synchronous = true)
+    {
+        var opts = ImportAssetOptions.ForceUpdate;
+        if (synchronous) opts |= ImportAssetOptions.ForceSynchronousImport;
+        AssetDatabase.ImportAsset(relPath, opts);
+#if UNITY_EDITOR
+        UnityEditor.Compilation.CompilationPipeline.RequestScriptCompilation();
+#endif
     }
 }
 
