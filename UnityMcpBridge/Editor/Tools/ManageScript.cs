@@ -193,10 +193,10 @@ namespace MCPForUnity.Editor.Tools
                         namespaceName
                     );
                 case "read":
-                    Debug.LogWarning("manage_script.read is deprecated; prefer resources/read. Serving read for backward compatibility.");
+                    McpLog.Warn("manage_script.read is deprecated; prefer resources/read. Serving read for backward compatibility.");
                     return ReadScript(fullPath, relativePath);
                 case "update":
-                    Debug.LogWarning("manage_script.update is deprecated; prefer apply_text_edits. Serving update for backward compatibility.");
+                    McpLog.Warn("manage_script.update is deprecated; prefer apply_text_edits. Serving update for backward compatibility.");
                     return UpdateScript(fullPath, relativePath, name, contents);
                 case "delete":
                     return DeleteScript(fullPath, relativePath);
@@ -785,7 +785,8 @@ namespace MCPForUnity.Editor.Tools
                         uri = $"unity://path/{relativePath}",
                         path = relativePath,
                         editsApplied = spans.Count,
-                        sha256 = newSha
+                        sha256 = newSha,
+                        scheduledRefresh = !immediate
                     }
                 );
             }
@@ -1420,6 +1421,7 @@ namespace MCPForUnity.Editor.Tools
 
                 if (immediate)
                 {
+                    McpLog.Info($"[ManageScript] EditScript: immediate refresh for '{relativePath}'", always: false);
                     ManageScriptRefreshHelpers.ImportAndRequestCompile(relativePath);
                 }
                 else
