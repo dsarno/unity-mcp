@@ -104,7 +104,7 @@ def _trigger_sentinel_async() -> None:
                                 return
                 except Exception:
                     pass
-                # Removed best‑effort menu flip; rely on import/compile triggers instead
+
             except Exception:
                 pass
 
@@ -699,9 +699,10 @@ def register_manage_script_edits_tools(mcp: FastMCP):
                     if op == "anchor_insert":
                         anchor = e.get("anchor") or ""
                         position = (e.get("position") or "after").lower()
-                        # Early regex compile with helpful errors
+                        # Early regex compile with helpful errors, honoring ignore_case
                         try:
-                            regex_obj = _re.compile(anchor, _re.MULTILINE)
+                            flags = _re.MULTILINE | (_re.IGNORECASE if e.get("ignore_case") else 0)
+                            regex_obj = _re.compile(anchor, flags)
                         except Exception as ex:
                             return _with_norm(_err("bad_regex", f"Invalid anchor regex: {ex}", normalized=normalized_for_echo, routing="text", extra={"hint": "Escape parentheses/braces or use a simpler anchor."}), normalized_for_echo, routing="text")
                         m = regex_obj.search(base_text)
