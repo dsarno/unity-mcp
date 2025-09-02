@@ -96,7 +96,12 @@ def _trigger_sentinel_async() -> None:
                 # Small delay so write flushes; prefer early flip to avoid editor-focus second reload
                 time.sleep(0.1)
                 try:
-                    files = sorted(glob.glob(os.path.expanduser("~/.unity-mcp/unity-mcp-status-*.json")), key=os.path.getmtime, reverse=True)
+                    status_dir = os.environ.get("UNITY_MCP_STATUS_DIR") or os.path.join(os.path.expanduser("~"), ".unity-mcp")
+                    files = sorted(
+                        glob.glob(os.path.join(status_dir, "unity-mcp-status-*.json")),
+                        key=os.path.getmtime,
+                        reverse=True,
+                    )
                     if files:
                         with open(files[0], "r") as f:
                             st = json.loads(f.read())
