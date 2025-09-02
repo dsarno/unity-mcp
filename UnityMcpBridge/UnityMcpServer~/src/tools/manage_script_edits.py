@@ -104,13 +104,7 @@ def _trigger_sentinel_async() -> None:
                                 return
                 except Exception:
                     pass
-                # Best‑effort, single-shot; avoid retries during reload window
-                send_command_with_retry(
-                    "execute_menu_item",
-                    {"menuPath": "MCP/Flip Reload Sentinel"},
-                    max_retries=0,
-                    retry_ms=0,
-                )
+                # Removed best‑effort menu flip; rely on import/compile triggers instead
             except Exception:
                 pass
 
