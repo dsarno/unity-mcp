@@ -657,7 +657,7 @@ namespace MCPForUnity.Editor.Tools
             spans = spans.OrderByDescending(t => t.start).ToList();
             for (int i = 1; i < spans.Count; i++)
             {
-                if (spans[i].start + (spans[i].end - spans[i].start) > spans[i - 1].start)
+                if (spans[i].end > spans[i - 1].start)
                 {
                     var conflict = new[] { new { startA = spans[i].start, endA = spans[i].end, startB = spans[i - 1].start, endB = spans[i - 1].end } };
                     return Response.Error("overlap", new { status = "overlap", conflicts = conflict, hint = "Sort ranges descending by start and compute from the same snapshot." });
@@ -770,7 +770,7 @@ namespace MCPForUnity.Editor.Tools
                                   string.Equals(refreshModeFromCaller, "sync", StringComparison.OrdinalIgnoreCase);
                 if (immediate)
                 {
-                    Debug.Log($"[ManageScript] ApplyTextEdits: immediate refresh for '{relativePath}'");
+                    McpLog.Info($"[ManageScript] ApplyTextEdits: immediate refresh for '{relativePath}'");
                     AssetDatabase.ImportAsset(
                         relativePath,
                         ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate
@@ -781,7 +781,7 @@ namespace MCPForUnity.Editor.Tools
                 }
                 else
                 {
-                    Debug.Log($"[ManageScript] ApplyTextEdits: debounced refresh scheduled for '{relativePath}'");
+                    McpLog.Info($"[ManageScript] ApplyTextEdits: debounced refresh scheduled for '{relativePath}'");
                     ManageScriptRefreshHelpers.ScheduleScriptRefresh(relativePath);
                 }
 
