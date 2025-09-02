@@ -657,7 +657,7 @@ namespace MCPForUnity.Editor.Tools
             spans = spans.OrderByDescending(t => t.start).ToList();
             for (int i = 1; i < spans.Count; i++)
             {
-                if (spans[i].end > spans[i - 1].start)
+                 if (spans[i].end > spans[i - 1].start)
                 {
                     var conflict = new[] { new { startA = spans[i].start, endA = spans[i].end, startB = spans[i - 1].start, endB = spans[i - 1].end } };
                     return Response.Error("overlap", new { status = "overlap", conflicts = conflict, hint = "Sort ranges descending by start and compute from the same snapshot." });
