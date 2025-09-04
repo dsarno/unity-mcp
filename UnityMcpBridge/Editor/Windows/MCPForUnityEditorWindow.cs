@@ -1223,147 +1223,190 @@ namespace MCPForUnity.Editor.Windows
 			}
 			catch { }
 
-			// 1) Start from existing, only fill gaps (prefer trusted resolver)
-			string uvPath = ServerInstaller.FindUvPath();
-			// Optionally trust existingCommand if it looks like uv/uv.exe
-			try
-			{
-				var name = System.IO.Path.GetFileName((existingCommand ?? string.Empty).Trim()).ToLowerInvariant();
-				if ((name == "uv" || name == "uv.exe") && ValidateUvBinarySafe(existingCommand))
-				{
-					uvPath = existingCommand;
-				}
-			}
-			catch { }
-			if (uvPath == null) return "UV package manager not found. Please install UV first.";
-			string serverSrc = ExtractDirectoryArg(existingArgs);
-			bool serverValid = !string.IsNullOrEmpty(serverSrc)
-				&& System.IO.File.Exists(System.IO.Path.Combine(serverSrc, "server.py"));
-			if (!serverValid)
-			{
-				// Prefer the provided pythonDir if valid; fall back to resolver
-				if (!string.IsNullOrEmpty(pythonDir) && System.IO.File.Exists(System.IO.Path.Combine(pythonDir, "server.py")))
-				{
-					serverSrc = pythonDir;
-				}
-				else
-				{
-					serverSrc = ResolveServerSrc();
-				}
-			}
+                        if (ServerInstaller.TryGetDockerCommandArgs(out string dockerCommand, out string[] dockerArgs))
+                        {
+                                bool changedDocker = !string.Equals(existingCommand, dockerCommand, StringComparison.Ordinal)
+                                        || !ArgsEqual(existingArgs, dockerArgs);
+                                if (!changedDocker) return "Configured successfully";
 
-			// macOS normalization: map XDG-style ~/.local/share to canonical Application Support
-			try
-			{
-				if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX)
-					&& !string.IsNullOrEmpty(serverSrc))
-				{
-					string norm = serverSrc.Replace('\\', '/');
-					int idx = norm.IndexOf("/.local/share/UnityMCP/", StringComparison.Ordinal);
-					if (idx >= 0)
-					{
-						string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
-						string suffix = norm.Substring(idx + "/.local/share/".Length); // UnityMCP/...
-						serverSrc = System.IO.Path.Combine(home, "Library", "Application Support", suffix);
-					}
-				}
-			}
-			catch { }
+                                JObject rootObj = existingConfig is JObject eo ? eo : JObject.FromObject(existingConfig);
+                                rootObj = ConfigJsonBuilder.ApplyDockerServerToExistingConfig(rootObj, dockerCommand, dockerArgs, mcpClient);
+                                string merged = JsonConvert.SerializeObject(rootObj, jsonSettings);
 
-			// Hard-block PackageCache on Windows unless dev override is set
-			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-				&& !string.IsNullOrEmpty(serverSrc)
-				&& serverSrc.IndexOf(@"\Library\PackageCache\", StringComparison.OrdinalIgnoreCase) >= 0
-				&& !UnityEditor.EditorPrefs.GetBool("MCPForUnity.UseEmbeddedServer", false))
-			{
-				serverSrc = ServerInstaller.GetServerPath();
-			}
+                                string tmpPath = configPath + ".tmp";
+                                string backupPath = configPath + ".backup";
+                                bool wrote = false;
+                                try
+                                {
+                                        File.WriteAllText(tmpPath, merged, new System.Text.UTF8Encoding(false));
+                                        try
+                                        {
+                                                File.Replace(tmpPath, configPath, backupPath);
+                                                wrote = true;
+                                        }
+                                        catch (FileNotFoundException)
+                                        {
+                                                File.Move(tmpPath, configPath);
+                                                wrote = true;
+                                        }
+                                        catch (PlatformNotSupportedException)
+                                        {
+                                                if (File.Exists(configPath))
+                                                {
+                                                        try { if (File.Exists(backupPath)) File.Delete(backupPath); } catch { }
+                                                        File.Move(configPath, backupPath);
+                                                }
+                                                File.Move(tmpPath, configPath);
+                                                wrote = true;
+                                        }
+                                }
+                                catch (Exception ex)
+                                {
+                                        try
+                                        {
+                                                if (!wrote && File.Exists(backupPath))
+                                                {
+                                                        try { File.Copy(backupPath, configPath, true); } catch { }
+                                                }
+                                        }
+                                        catch { }
+                                        throw new Exception($"Failed to write config file '{configPath}': {ex.Message}", ex);
+                                }
+                                finally
+                                {
+                                        try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
+                                        try { if (wrote && File.Exists(backupPath)) File.Delete(backupPath); } catch { }
+                                }
 
-			// 2) Canonical args order
-			var newArgs = new[] { "run", "--directory", serverSrc, "server.py" };
+                                try { UnityEditor.EditorPrefs.SetString("MCPForUnity.ServerSrc", "docker"); } catch { }
+                                return "Configured successfully";
+                        }
 
-			// 3) Only write if changed
-			bool changed = !string.Equals(existingCommand, uvPath, StringComparison.Ordinal)
-				|| !ArgsEqual(existingArgs, newArgs);
-			if (!changed)
-			{
-				return "Configured successfully"; // nothing to do
-			}
+                        // 1) Start from existing, only fill gaps (prefer trusted resolver)
+                        string uvPath = ServerInstaller.FindUvPath();
+                        // Optionally trust existingCommand if it looks like uv/uv.exe
+                        try
+                        {
+                                var name = System.IO.Path.GetFileName((existingCommand ?? string.Empty).Trim()).ToLowerInvariant();
+                                if ((name == "uv" || name == "uv.exe") && ValidateUvBinarySafe(existingCommand))
+                                {
+                                        uvPath = existingCommand;
+                                }
+                        }
+                        catch { }
+                        if (uvPath == null) return "UV package manager not found. Please install UV first.";
+                        string serverSrc = ExtractDirectoryArg(existingArgs);
+                        bool serverValid = !string.IsNullOrEmpty(serverSrc)
+                                && System.IO.File.Exists(System.IO.Path.Combine(serverSrc, "server.py"));
+                        if (!serverValid)
+                        {
+                                if (!string.IsNullOrEmpty(pythonDir) && System.IO.File.Exists(Path.Combine(pythonDir, "server.py")))
+                                {
+                                        serverSrc = pythonDir;
+                                }
+                                else
+                                {
+                                        serverSrc = ResolveServerSrc();
+                                }
+                        }
 
-			// 4) Ensure containers exist and write back minimal changes
-            JObject existingRoot;
-            if (existingConfig is JObject eo)
-                existingRoot = eo;
-            else
-                existingRoot = JObject.FromObject(existingConfig);
+                        try
+                        {
+                                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && !string.IsNullOrEmpty(serverSrc))
+                                {
+                                        string norm = serverSrc.Replace('\\', '/');
+                                        int idx = norm.IndexOf("/.local/share/UnityMCP/", StringComparison.Ordinal);
+                                        if (idx >= 0)
+                                        {
+                                                string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
+                                                string suffix = norm.Substring(idx + "/.local/share/".Length);
+                                                serverSrc = Path.Combine(home, "Library", "Application Support", suffix);
+                                        }
+                                }
+                        }
+                        catch { }
 
-            existingRoot = ConfigJsonBuilder.ApplyUnityServerToExistingConfig(existingRoot, uvPath, serverSrc, mcpClient);
+                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                                && !string.IsNullOrEmpty(serverSrc)
+                                && serverSrc.IndexOf(@"\Library\PackageCache\", StringComparison.OrdinalIgnoreCase) >= 0
+                                && !UnityEditor.EditorPrefs.GetBool("MCPForUnity.UseEmbeddedServer", false))
+                        {
+                                serverSrc = ServerInstaller.GetServerPath();
+                        }
 
-			string mergedJson = JsonConvert.SerializeObject(existingRoot, jsonSettings);
-			
-			// Robust atomic write without redundant backup or race on existence
-			string tmp = configPath + ".tmp";
-			string backup = configPath + ".backup";
-			bool writeDone = false;
-			try
-			{
-				// Write to temp file first (in same directory for atomicity)
-				System.IO.File.WriteAllText(tmp, mergedJson, new System.Text.UTF8Encoding(false));
+                        var newArgs = new[] { "run", "--directory", serverSrc, "server.py" };
 
-				try
-				{
-					// Try atomic replace; creates 'backup' only on success (platform-dependent)
-					System.IO.File.Replace(tmp, configPath, backup);
-					writeDone = true;
-				}
-				catch (System.IO.FileNotFoundException)
-				{
-					// Destination didn't exist; fall back to move
-					System.IO.File.Move(tmp, configPath);
-                    writeDone = true;
-				}
-				catch (System.PlatformNotSupportedException)
-				{
-					// Fallback: rename existing to backup, then move tmp into place
-					if (System.IO.File.Exists(configPath))
-					{
-						try { if (System.IO.File.Exists(backup)) System.IO.File.Delete(backup); } catch { }
-						System.IO.File.Move(configPath, backup);
-					}
-					System.IO.File.Move(tmp, configPath);
-					writeDone = true;
-				}
-			}
-			catch (Exception ex)
-			{
+                        bool changed = !string.Equals(existingCommand, uvPath, StringComparison.Ordinal)
+                                || !ArgsEqual(existingArgs, newArgs);
+                        if (!changed)
+                        {
+                                return "Configured successfully";
+                        }
 
-				// If write did not complete, attempt restore from backup without deleting current file first
-				try
-				{
-					if (!writeDone && System.IO.File.Exists(backup))
-					{
-						try { System.IO.File.Copy(backup, configPath, true); } catch { }
-					}
-				}
-				catch { }
-				throw new Exception($"Failed to write config file '{configPath}': {ex.Message}", ex);
-			}
-			finally
-			{
-				// Best-effort cleanup of temp
-				try { if (System.IO.File.Exists(tmp)) System.IO.File.Delete(tmp); } catch { }
-				// Only remove backup after a confirmed successful write
-				try { if (writeDone && System.IO.File.Exists(backup)) System.IO.File.Delete(backup); } catch { }
-			}
+                        JObject existingRoot;
+                        if (existingConfig is JObject eo)
+                            existingRoot = eo;
+                        else
+                            existingRoot = JObject.FromObject(existingConfig);
 
-			try
-			{
-				if (IsValidUv(uvPath)) UnityEditor.EditorPrefs.SetString("MCPForUnity.UvPath", uvPath);
-				UnityEditor.EditorPrefs.SetString("MCPForUnity.ServerSrc", serverSrc);
-			}
-			catch { }
+                        existingRoot = ConfigJsonBuilder.ApplyUnityServerToExistingConfig(existingRoot, uvPath, serverSrc, mcpClient);
 
-			return "Configured successfully";
+                        string mergedJson = JsonConvert.SerializeObject(existingRoot, jsonSettings);
+
+                        string tmp = configPath + ".tmp";
+                        string backup = configPath + ".backup";
+                        bool writeDone = false;
+                        try
+                        {
+                                File.WriteAllText(tmp, mergedJson, new System.Text.UTF8Encoding(false));
+
+                                try
+                                {
+                                        File.Replace(tmp, configPath, backup);
+                                        writeDone = true;
+                                }
+                                catch (FileNotFoundException)
+                                {
+                                        File.Move(tmp, configPath);
+                                        writeDone = true;
+                                }
+                                catch (PlatformNotSupportedException)
+                                {
+                                        if (File.Exists(configPath))
+                                        {
+                                                try { if (File.Exists(backup)) File.Delete(backup); } catch { }
+                                                File.Move(configPath, backup);
+                                        }
+                                        File.Move(tmp, configPath);
+                                        writeDone = true;
+                                }
+                        }
+                        catch (Exception ex)
+                        {
+                                try
+                                {
+                                        if (!writeDone && File.Exists(backup))
+                                        {
+                                                try { File.Copy(backup, configPath, true); } catch { }
+                                        }
+                                }
+                                catch { }
+                                throw new Exception($"Failed to write config file '{configPath}': {ex.Message}", ex);
+                        }
+                        finally
+                        {
+                                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+                                try { if (writeDone && File.Exists(backup)) File.Delete(backup); } catch { }
+                        }
+
+                        try
+                        {
+                                if (IsValidUv(uvPath)) UnityEditor.EditorPrefs.SetString("MCPForUnity.UvPath", uvPath);
+                                UnityEditor.EditorPrefs.SetString("MCPForUnity.ServerSrc", serverSrc);
+                        }
+                        catch { }
+
+                        return "Configured successfully";
         }
 
         private void ShowManualConfigurationInstructions(
@@ -1381,7 +1424,12 @@ namespace MCPForUnity.Editor.Windows
         {
             // Get the Python directory path using Package Manager API
             string pythonDir = FindPackagePythonDirectory();
-            // Build manual JSON centrally using the shared builder
+            if (ServerInstaller.TryGetDockerCommandArgs(out string dockerCommand, out string[] dockerArgs))
+            {
+                string dockerJson = ConfigJsonBuilder.BuildDockerConfigJson(dockerCommand, dockerArgs, mcpClient);
+                ManualConfigEditorWindow.ShowWindow(configPath, dockerJson, mcpClient);
+                return;
+            }
             string uvPathForManual = FindUvPath();
             if (uvPathForManual == null)
             {
@@ -1719,6 +1767,7 @@ namespace MCPForUnity.Editor.Windows
                 
                 // Use switch statement to handle different client types, extracting common logic
                 string[] args = null;
+                string command = null;
                 bool configExists = false;
                 
                 switch (mcpClient.mcpType)
@@ -1730,12 +1779,14 @@ namespace MCPForUnity.Editor.Windows
                         if (config?.servers?.unityMCP != null)
                         {
                             args = config.servers.unityMCP.args.ToObject<string[]>();
+                            command = config.servers.unityMCP.command?.ToString();
                             configExists = true;
                         }
                         // Back-compat: legacy mcp.servers
                         else if (config?.mcp?.servers?.unityMCP != null)
                         {
                             args = config.mcp.servers.unityMCP.args.ToObject<string[]>();
+                            command = config.mcp.servers.unityMCP.command?.ToString();
                             configExists = true;
                         }
                         break;
@@ -1747,14 +1798,26 @@ namespace MCPForUnity.Editor.Windows
                         if (standardConfig?.mcpServers?.unityMCP != null)
                         {
                             args = standardConfig.mcpServers.unityMCP.args;
+                            command = standardConfig.mcpServers.unityMCP.command;
                             configExists = true;
                         }
                         break;
                 }
-                
+
                 // Common logic for checking configuration status
                 if (configExists)
                 {
+                    if (ServerInstaller.TryGetDockerCommandArgs(out string dockerCmd, out string[] dockerArgs))
+                    {
+                        bool dockerMatch = string.Equals(command, dockerCmd, StringComparison.Ordinal)
+                            && ArgsEqual(args, dockerArgs);
+                        if (dockerMatch)
+                        {
+                            mcpClient.SetStatus(McpStatus.Configured);
+                            return;
+                        }
+                    }
+
                     string configuredDir = ExtractDirectoryArg(args);
                     bool matches = !string.IsNullOrEmpty(configuredDir) && PathsEqual(configuredDir, pythonDir);
                     if (matches)
@@ -1763,7 +1826,6 @@ namespace MCPForUnity.Editor.Windows
                     }
                     else
                     {
-                        // Attempt auto-rewrite once if the package path changed
                         try
                         {
                             string rewriteResult = WriteToConfig(pythonDir, configPath, mcpClient);

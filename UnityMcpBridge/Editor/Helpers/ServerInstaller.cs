@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Collections.Generic;
 using System.Linq;
+using System.Diagnostics;
 using UnityEditor;
 using UnityEngine;
 
@@ -14,6 +15,9 @@ namespace MCPForUnity.Editor.Helpers
         private const string RootFolder = "UnityMCP";
         private const string ServerFolder = "UnityMcpServer";
         private const string VersionFileName = "server_version.txt";
+        private const string DockerImageRepo = "ghcr.io/coplaydev/unity-mcp-server";
+        private const string DockerVolume = "unity_mcp_uv_cache";
+        private const string DockerContainerName = "unity-mcp";
 
         /// <summary>
         /// Ensures the mcp-for-unity-server is installed locally by copying from the embedded package source.
@@ -21,6 +25,20 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         public static void EnsureServerInstalled()
         {
+            if (TryGetDockerCommandArgs(out string dockerCmd, out string[] dockerArgs))
+            {
+                try
+                {
+                    string image = dockerArgs != null && dockerArgs.Length > 0 ? dockerArgs[^1] : null;
+                    if (!string.IsNullOrEmpty(image))
+                    {
+                        TryPullDockerImage(dockerCmd, image);
+                    }
+                }
+                catch { }
+                return;
+            }
+
             try
             {
                 string saveLocation = GetSaveLocation();
@@ -734,6 +752,92 @@ namespace MCPForUnity.Editor.Helpers
             }
             catch { }
             return false;
+        }
+
+        internal static bool TryGetDockerCommandArgs(out string command, out string[] args)
+        {
+            command = null;
+            args = null;
+            string docker = FindDockerCli();
+            if (docker == null) return false;
+
+            string version = ReadVersionFile(Path.Combine(GetServerPath(), VersionFileName));
+            if (string.IsNullOrEmpty(version) && TryGetEmbeddedServerSource(out string embeddedSrc))
+            {
+                version = ReadVersionFile(Path.Combine(embeddedSrc, VersionFileName));
+            }
+            if (string.IsNullOrEmpty(version)) version = "latest";
+            string image = DockerImageRepo + ":" + version;
+
+            var list = new List<string>
+            {
+                "run","--rm","-i","--pull=missing",
+                "--name", DockerContainerName,
+                "-v", DockerVolume + ":/opt/uv-cache",
+                "-e","UNITY_HOST=host.docker.internal"
+            };
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                list.Add("--add-host");
+                list.Add("host.docker.internal:host-gateway");
+            }
+            list.Add(image);
+            command = docker;
+            args = list.ToArray();
+            return true;
+        }
+
+        private static string FindDockerCli()
+        {
+            string[] candidates;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                candidates = new[] { "docker.exe", "docker" };
+            }
+            else
+            {
+                candidates = new[] { "/usr/bin/docker", "/usr/local/bin/docker", "docker" };
+            }
+            foreach (string c in candidates)
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = c,
+                        Arguments = "--version",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
+                    using var p = Process.Start(psi);
+                    if (p == null) continue;
+                    if (!p.WaitForExit(3000)) { try { p.Kill(); } catch { } continue; }
+                    if (p.ExitCode == 0) return c;
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        private static void TryPullDockerImage(string docker, string image)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = docker,
+                    Arguments = "pull " + image,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using var p = Process.Start(psi);
+                p?.WaitForExit(60000);
+            }
+            catch { }
         }
     }
 }

@@ -50,5 +50,20 @@ namespace MCPForUnityTests.Editor.Windows
             Assert.IsNull(unity["disabled"], "disabled should not be added for Cursor");
             Assert.IsNull(unity["type"], "type should not be added for non-VSCode clients");
         }
+
+        [Test]
+        public void VSCode_DockerJson_UsesDockerCommand()
+        {
+            var client = new McpClient { name = "VSCode", mcpType = McpTypes.VSCode };
+            string[] args = new[] { "run", "--rm", "image" };
+            string json = ConfigJsonBuilder.BuildDockerConfigJson("docker", args, client);
+
+            var root = JObject.Parse(json);
+            var unity = (JObject)root.SelectToken("servers.unityMCP");
+            Assert.NotNull(unity, "Expected servers.unityMCP node");
+            Assert.AreEqual("docker", (string)unity["command"]);
+            CollectionAssert.AreEqual(args, unity["args"].ToObject<string[]>());
+            Assert.AreEqual("stdio", (string)unity["type"]);
+        }
     }
 }

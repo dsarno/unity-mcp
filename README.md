@@ -171,6 +171,28 @@ If Auto-Setup fails or you use a different client:
 
 On Windows, set `command` to the absolute shim, e.g. `C:\\Users\\YOU\\AppData\\Local\\Microsoft\\WinGet\\Links\\uv.exe`.
 
+**Docker runtime (all OS)**
+
+```json
+{
+  "servers": {
+    "unityMCP": {
+      "command": "docker",
+      "args": [
+        "run","--rm","-i","--pull=missing",
+        "--name","unity-mcp",
+        "-v","unity_mcp_uv_cache:/opt/uv-cache",
+        "-e","UNITY_HOST=host.docker.internal",
+        "ghcr.io/coplaydev/unity-mcp-server:<VERSION>"
+      ],
+      "type": "stdio"
+    }
+  }
+}
+```
+
+For Linux add: `"--add-host","host.docker.internal:host-gateway"` before the image name.
+
 **Windows:**
 
   ```json

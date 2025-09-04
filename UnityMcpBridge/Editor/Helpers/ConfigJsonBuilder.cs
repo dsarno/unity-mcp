@@ -28,6 +28,17 @@ namespace MCPForUnity.Editor.Helpers
             return root.ToString(Formatting.Indented);
         }
 
+        public static string BuildDockerConfigJson(string command, string[] args, McpClient client)
+        {
+            var root = new JObject();
+            bool isVSCode = client?.mcpType == McpTypes.VSCode;
+            JObject container = isVSCode ? EnsureObject(root, "servers") : EnsureObject(root, "mcpServers");
+            var unity = new JObject();
+            PopulateDockerNode(unity, command, args, client, isVSCode);
+            container["unityMCP"] = unity;
+            return root.ToString(Formatting.Indented);
+        }
+
         public static JObject ApplyUnityServerToExistingConfig(JObject root, string uvPath, string serverSrc, McpClient client)
         {
             if (root == null) root = new JObject();
@@ -36,6 +47,17 @@ namespace MCPForUnity.Editor.Helpers
             JObject unity = container["unityMCP"] as JObject ?? new JObject();
             PopulateUnityNode(unity, uvPath, serverSrc, client, isVSCode);
 
+            container["unityMCP"] = unity;
+            return root;
+        }
+
+        public static JObject ApplyDockerServerToExistingConfig(JObject root, string command, string[] args, McpClient client)
+        {
+            if (root == null) root = new JObject();
+            bool isVSCode = client?.mcpType == McpTypes.VSCode;
+            JObject container = isVSCode ? EnsureObject(root, "servers") : EnsureObject(root, "mcpServers");
+            JObject unity = container["unityMCP"] as JObject ?? new JObject();
+            PopulateDockerNode(unity, command, args, client, isVSCode);
             container["unityMCP"] = unity;
             return root;
         }
@@ -111,6 +133,33 @@ namespace MCPForUnity.Editor.Helpers
                     unity["env"] = new JObject();
                 }
 
+                if (unity["disabled"] == null)
+                {
+                    unity["disabled"] = false;
+                }
+            }
+        }
+
+        private static void PopulateDockerNode(JObject unity, string command, string[] args, McpClient client, bool isVSCode)
+        {
+            unity["command"] = command;
+            unity["args"] = JArray.FromObject(args);
+
+            if (isVSCode)
+            {
+                unity["type"] = "stdio";
+            }
+            else if (unity["type"] != null)
+            {
+                unity.Remove("type");
+            }
+
+            if (client != null && (client.mcpType == McpTypes.Windsurf || client.mcpType == McpTypes.Kiro))
+            {
+                if (unity["env"] == null)
+                {
+                    unity["env"] = new JObject();
+                }
                 if (unity["disabled"] == null)
                 {
                     unity["disabled"] = false;
