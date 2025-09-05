@@ -70,66 +70,70 @@ jobs:
               echo "No MCP Python deps found (skipping)"
             fi
 
-        # --- Licensing: works with ULF or Email/Password (EBL) ---
-        - name: Decide license mode
+        # --- Licensing: allow both ULF and EBL when available ---
+        - name: Decide license sources
           id: lic
           shell: bash
           env:
-            UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-            UNITY_EMAIL:   ${{ secrets.UNITY_EMAIL }}
+            UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
+            UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
             UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
             UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
           run: |
             set -eu
-            if [[ -n "${UNITY_LICENSE:-}" ]]; then
-              echo "mode=ulf" >> "$GITHUB_OUTPUT"
-            elif [[ -n "${UNITY_EMAIL:-}" && -n "${UNITY_PASSWORD:-}" ]]; then
-              echo "mode=ebl" >> "$GITHUB_OUTPUT"
-            else
-              echo "mode=none" >> "$GITHUB_OUTPUT"
-            fi
-            if [[ -n "${UNITY_SERIAL:-}" ]]; then
-              echo "has_serial=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "has_serial=false" >> "$GITHUB_OUTPUT"
-            fi
+            use_ulf=false; use_ebl=false
+            [[ -n "${UNITY_LICENSE:-}" ]] && use_ulf=true
+            [[ -n "${UNITY_EMAIL:-}" && -n "${UNITY_PASSWORD:-}" ]] && use_ebl=true
+            echo "use_ulf=$use_ulf" >> "$GITHUB_OUTPUT"
+            echo "use_ebl=$use_ebl" >> "$GITHUB_OUTPUT"
+            echo "has_serial=$([[ -n \"${UNITY_SERIAL:-}\" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
         - name: Stage Unity .ulf license (from secret)
-          if: steps.lic.outputs.mode == 'ulf'
+          if: steps.lic.outputs.use_ulf == 'true'
+          id: ulf
           env:
             UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           shell: bash
           run: |
             set -eu
-            mkdir -p "$RUNNER_TEMP/unity-license-ulf"
-            # Accept raw text or base64 ULF
+            mkdir -p "$RUNNER_TEMP/unity-license-ulf" "$RUNNER_TEMP/unity-license-xml"
+            f="$RUNNER_TEMP/unity-license-ulf/Unity_lic.ulf"
             if echo "$UNITY_LICENSE" | base64 -d >/dev/null 2>&1; then
-              echo "$UNITY_LICENSE" | base64 -d > "$RUNNER_TEMP/unity-license-ulf/Unity_lic.ulf"
+              echo "$UNITY_LICENSE" | base64 -d > "$f"
             else
-              printf "%s" "$UNITY_LICENSE" > "$RUNNER_TEMP/unity-license-ulf/Unity_lic.ulf"
+              printf "%s" "$UNITY_LICENSE" > "$f"
+            fi
+            # If someone pasted an entitlement XML into UNITY_LICENSE by mistake, re-home it:
+            if head -c 100 "$f" | grep -qi '<\?xml'; then
+              mv "$f" "$RUNNER_TEMP/unity-license-xml/UnityEntitlementLicense.xml"
+              echo "ok=false" >> "$GITHUB_OUTPUT"
+            elif grep -qi '<Signature>' "$f"; then
+              echo "ok=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "ok=false" >> "$GITHUB_OUTPUT"
             fi
 
         - name: Activate Unity (EBL on host)
-          if: steps.lic.outputs.mode == 'ebl'
+          if: steps.lic.outputs.use_ebl == 'true'
           uses: game-ci/unity-activate@v2
+          with:
+            unityVersion: ${{ env.UNITY_VERSION }}
           env:
             UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
             UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}   # optional (Pro/Enterprise)
+            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}   # optional for Pro
 
         - name: Stage host license artifacts for container
-          if: steps.lic.outputs.mode == 'ebl'
+          if: steps.lic.outputs.use_ebl == 'true'
           shell: bash
           run: |
             set -euxo pipefail
             mkdir -p "$RUNNER_TEMP/unity-license-ulf" "$RUNNER_TEMP/unity-license-xml"
-            # Serial-based license, if produced
             ULF="$HOME/.local/share/unity3d/Unity/Unity_lic.ulf"
-            [[ -f "$ULF" ]] && cp "$ULF" "$RUNNER_TEMP/unity-license-ulf/"
-            # Named-user entitlement license (XML), if produced
+            [[ -f "$ULF" ]] && cp -f "$ULF" "$RUNNER_TEMP/unity-license-ulf/"
             XML_DIR="$HOME/.config/unity3d/Unity/licenses"
             if [[ -d "$XML_DIR" ]]; then
-              cp -r "$XML_DIR/." "$RUNNER_TEMP/unity-license-xml/"
+              cp -rf "$XML_DIR/." "$RUNNER_TEMP/unity-license-xml/"
             fi
   
         # ---------- Clean old MCP status ----------
@@ -141,15 +145,14 @@ jobs:
   
         # ---------- Start headless Unity (persistent bridge) ----------
         - name: Start Unity (persistent bridge)
-          if: steps.lic.outputs.mode != 'none'
+          if: steps.lic.outputs.use_ulf == 'true' || steps.lic.outputs.use_ebl == 'true'
           shell: bash
           env:
             UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
           run: |
             set -euxo pipefail
-
             MANUAL_ARG=""
-            if [[ -f "$RUNNER_TEMP/unity-license-ulf/Unity_lic.ulf" ]]; then
+            if [[ "${{ steps.ulf.outputs.ok || 'false' }}" == "true" ]]; then
               MANUAL_ARG="-manualLicenseFile /root/.local/share/unity3d/Unity/Unity_lic.ulf"
             fi
 
@@ -169,19 +172,24 @@ jobs:
                 -executeMethod MCPForUnity.Editor.MCPForUnityBridge.StartAutoConnect
   
         # ---------- Wait for Unity bridge ----------
-        - name: Wait for Unity bridge (fast fail if licensing breaks)
+        - name: Wait for Unity bridge (real readiness & fast fail)
           shell: bash
           run: |
             set -eu
-            timeout 90s bash -c '
-              until docker logs unity-mcp 2>&1 | egrep -q "Entitlement|License|listening|ready"; do
+            timeout 300s bash -lc '
+              ok_pat="(MCPForUnity|MCP For Unity|AutoConnect).*listening|ready"
+              err_pat="No valid Unity|cannot load ULF|Token not found|0 entitlement|headless.*not found|Batchmode quit|Aborting batchmode|Fatal error"
+              while :; do
+                l=$(docker logs unity-mcp 2>&1 || true)
+                echo "$l" | grep -qiE "$ok_pat" && exit 0
+                echo "$l" | grep -qiE "$err_pat" && { echo "$l" | tail -n 200; exit 1; }
                 sleep 2
               done
             '
             docker logs unity-mcp --tail 200
 
         - name: Return Pro license (if used)
-          if: always() && steps.lic.outputs.mode == 'ebl' && steps.lic.outputs.has_serial == 'true'
+          if: always() && steps.lic.outputs.use_ebl == 'true' && steps.lic.outputs.has_serial == 'true'
           uses: game-ci/unity-return-license@v2
           env:
             UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
