@@ -1,7 +1,6 @@
 name: Claude NL/T Full Suite (Unity live)
 
-on:
-    workflow_dispatch: {}
+on: [workflow_dispatch]
   
 permissions:
     contents: read
@@ -113,7 +112,7 @@ jobs:
             fi
 
         # --- Activate via EBL inside the same Unity image (writes host-side entitlement) ---
-        - name: Activate Unity (EBL via container — host-mount)
+        - name: Activate Unity (EBL via container - host-mount)
           if: steps.lic.outputs.use_ebl == 'true'
           shell: bash
           env:
@@ -206,15 +205,10 @@ jobs:
             while :; do
               l="$(docker logs unity-mcp 2>&1 || true)"
               if echo "$l" | grep -qiE "$ok_pat"; then exit 0; fi
-              # Alternate readiness: parse bridge status JSON for unity_port and verify TCP connect on host
-              port="$(docker exec unity-mcp bash -lc 'python3 - <<PY\nimport glob,json,sys\nfor p in glob.glob("/root/.unity-mcp/unity-mcp-status-*.json"):\n  try:\n    with open(p,"r",encoding="utf-8") as f:\n      d=json.load(f)\n    if isinstance(d.get("unity_port"), int) and not d.get("reloading") and str(d.get("reason","")) in ("ready","idle"):\n      print(d["unity_port"])\n      sys.exit(0)\n  except Exception:\n    pass\nsys.exit(1)\nPY' 2>/dev/null || true)"
-              if [[ -n "$port" ]]; then
-                python3 - <<PY || true
-import socket,sys\ntry:\n  s=socket.socket()\n  s.settimeout(0.5)\n  s.connect(("127.0.0.1", int("$port")))\n  s.close()\n  sys.exit(0)\nexcept Exception:\n  sys.exit(1)
-PY
-                if [[ $? -eq 0 ]]; then
-                  exit 0
-                fi
+              # Alternate readiness: parse unity_port from status JSON and verify host TCP connect
+              port="$(docker exec unity-mcp bash -lc 'shopt -s nullglob; for f in /root/.unity-mcp/unity-mcp-status-*.json; do grep -ho "\"unity_port\"\s*:\s*[0-9]\+" "$f"; done | sed -E "s/.*: *([0-9]+).*/\1/" | head -n1' 2>/dev/null || true)"
+              if [[ -n "$port" ]] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port"; then
+                exit 0
               fi
               if echo "$l" | grep -qiE "$err_pat"; then
                 echo "$l" | tail -n 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig'
@@ -535,7 +529,7 @@ PY
                 p.write_text(s, encoding='utf-8', newline='\n')
             PY
   
-        - name: NL/T details → Job Summary
+        - name: NL/T details -> Job Summary
           if: always()
           run: |
             echo "## Unity NL/T Editing Suite — Summary" >> $GITHUB_STEP_SUMMARY
