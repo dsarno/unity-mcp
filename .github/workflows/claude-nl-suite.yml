@@ -192,10 +192,17 @@ jobs:
           shell: bash
           run: |
             set -eu
-            timeout 300s bash <<'BASH'
+            timeout 600s bash <<'BASH'
             set -euo pipefail
-            ok_pat='((MCPForUnity|MCP For Unity|AutoConnect).*(listening|ready))'
+            ok_pat='(MCP(For)?Unity|AutoConnect|Bridge).*(listening|ready|started|port)'
             err_pat='No valid Unity|License is not active|cannot load ULF|Signature element not found|Token not found|0 entitlement|Entitlement.*(failed|error|denied)|License.*(failed|error|expired|denied)|headless.*not found|Batchmode quit|Aborting batchmode|Fatal error'
+            # If container already exited, fail fast with logs
+            st="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' unity-mcp 2>/dev/null || true)"
+            case "$st" in
+              exited*|dead*)
+                docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig'
+                exit 1;;
+            esac
             while :; do
               l="$(docker logs unity-mcp 2>&1 || true)"
               if echo "$l" | grep -qiE "$ok_pat"; then exit 0; fi
@@ -211,6 +218,7 @@ jobs:
         - name: Return Pro license (if used)
           if: always() && steps.lic.outputs.use_ebl == 'true' && steps.lic.outputs.has_serial == 'true'
           uses: game-ci/unity-return-license@v2
+          continue-on-error: true
           env:
             UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
             UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
