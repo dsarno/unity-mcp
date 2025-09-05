@@ -194,7 +194,9 @@ jobs:
             timeout 600s bash <<'BASH'
             set -euo pipefail
             ok_pat='(MCP(For)?Unity|AutoConnect|Bridge).*(listening|ready|started|port)'
-            err_pat='No valid Unity|License is not active|cannot load ULF|Signature element not found|Token not found|0 entitlement|Entitlement.*(failed|error|denied)|License.*(failed|error|expired|denied)|headless.*not found|Batchmode quit|Aborting batchmode|Fatal error'
+            # Be strict on actual license failures; avoid benign startup messages like
+            # "Licensing::IpcConnector ... failed because channel doesn't exist" before client launch
+            err_pat='No valid Unity|License is not active|cannot load ULF|Signature element not found|Token not found|0 entitlement|Entitlement.*(failed|error|denied)|License (activation|return|renewal).*(failed|error|expired|denied)|headless.*not found|Batchmode quit|Aborting batchmode|Fatal error'
             # If container already exited, fail fast with logs
             st="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' unity-mcp 2>/dev/null || true)"
             case "$st" in
