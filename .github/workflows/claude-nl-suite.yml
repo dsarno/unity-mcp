@@ -173,7 +173,7 @@ jobs:
           run: |
             set -euxo pipefail
             MANUAL_ARG=""
-            if [[ "${{ steps.ulf.outputs.ok || 'false' }}" == "true" ]]; then
+            if [[ "${{ steps.ulf.outputs.ok }}" == "true" ]]; then
               MANUAL_ARG="-manualLicenseFile /root/.local/share/unity3d/Unity/Unity_lic.ulf"
             fi
 
@@ -199,7 +199,7 @@ jobs:
             set -eu
             timeout 300s bash -lc '
               ok_pat="(MCPForUnity|MCP For Unity|AutoConnect).*(listening|ready)"
-              err_pat="No valid Unity|cannot load ULF|Token not found|0 entitlement|headless.*not found|Batchmode quit|Aborting batchmode|Fatal error"
+              err_pat="No valid Unity|License is not active|cannot load ULF|Signature element not found|Token not found|0 entitlement|headless.*not found|Batchmode quit|Aborting batchmode|Fatal error"
               while :; do
                 l=$(docker logs unity-mcp 2>&1 || true)
                 echo "$l" | grep -qiE "$ok_pat" && exit 0
