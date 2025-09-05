@@ -98,11 +98,12 @@ jobs:
             set -eu
             mkdir -p "$RUNNER_TEMP/unity-license-ulf" "$RUNNER_TEMP/unity-license-xml"
             f="$RUNNER_TEMP/unity-license-ulf/Unity_lic.ulf"
-            if echo "$UNITY_LICENSE" | base64 -d >/dev/null 2>&1; then
-              echo "$UNITY_LICENSE" | base64 -d > "$f"
+            if printf "%s" "$UNITY_LICENSE" | base64 -d - >/dev/null 2>&1; then
+              printf "%s" "$UNITY_LICENSE" | base64 -d - > "$f"
             else
               printf "%s" "$UNITY_LICENSE" > "$f"
             fi
+            chmod 600 "$f" || true
             # If someone pasted an entitlement XML into UNITY_LICENSE by mistake, re-home it:
             if head -c 100 "$f" | grep -qi '<\?xml'; then
               mv "$f" "$RUNNER_TEMP/unity-license-xml/UnityEntitlementLicense.xml"
@@ -170,11 +171,12 @@ jobs:
           shell: bash
           env:
             UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
+            ULF_OK: ${{ steps.ulf.outputs.ok }}
           run: |
             set -euxo pipefail
-            MANUAL_ARG=""
-            if [[ "${{ steps.ulf.outputs.ok }}" == "true" ]]; then
-              MANUAL_ARG="-manualLicenseFile /root/.local/share/unity3d/Unity/Unity_lic.ulf"
+            manual_args=()
+            if [[ "${ULF_OK:-false}" == "true" ]]; then
+              manual_args=(-manualLicenseFile "/root/.local/share/unity3d/Unity/Unity_lic.ulf")
             fi
 
             docker rm -f unity-mcp >/dev/null 2>&1 || true
@@ -189,7 +191,7 @@ jobs:
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -stackTraceLogType Full \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
-                ${MANUAL_ARG} \
+                "${manual_args[@]}" \
                 -executeMethod MCPForUnity.Editor.MCPForUnityBridge.StartAutoConnect
   
         # ---------- Wait for Unity bridge ----------
@@ -198,16 +200,19 @@ jobs:
           run: |
             set -eu
             timeout 300s bash -lc '
-              ok_pat="(MCPForUnity|MCP For Unity|AutoConnect).*(listening|ready)"
-              err_pat="No valid Unity|License is not active|cannot load ULF|Signature element not found|Token not found|0 entitlement|headless.*not found|Batchmode quit|Aborting batchmode|Fatal error"
+              ok_pat="((MCPForUnity|MCP For Unity|AutoConnect).*(listening|ready))"
+              err_pat="No valid Unity|License is not active|cannot load ULF|Signature element not found|Token not found|0 entitlement|Entitlement.*(failed|error|denied)|License.*(failed|error|expired|denied)|headless.*not found|Batchmode quit|Aborting batchmode|Fatal error"
               while :; do
                 l=$(docker logs unity-mcp 2>&1 || true)
                 echo "$l" | grep -qiE "$ok_pat" && exit 0
-                echo "$l" | grep -qiE "$err_pat" && { echo "$l" | tail -n 200; exit 1; }
+                echo "$l" | grep -qiE "$err_pat" && {
+                  echo "$l" | tail -n 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig';
+                  exit 1;
+                }
                 sleep 2
               done
             '
-            docker logs unity-mcp --tail 200
+            docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' || true
 
         - name: Return Pro license (if used)
           if: always() && steps.lic.outputs.use_ebl == 'true' && steps.lic.outputs.has_serial == 'true'
