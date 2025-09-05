@@ -14,7 +14,6 @@ concurrency:
 env:
     UNITY_VERSION: 2021.3.45f1
     UNITY_IMAGE: unityci/editor:ubuntu-2021.3.45f1-linux-il2cpp-3
-    UNITY_CACHE_ROOT: /home/runner/work/_temp/_github_home
   
 jobs:
     nl-suite:
@@ -70,28 +69,68 @@ jobs:
             else
               echo "No MCP Python deps found (skipping)"
             fi
-  
-        # ---------- License prime on host (GameCI) ----------
-        - name: Prime Unity license on host (GameCI)
-          if: steps.detect.outputs.unity_ok == 'true'
-          uses: game-ci/unity-test-runner@v4
+
+        # --- Licensing: works with ULF or Email/Password (EBL) ---
+        - name: Decide license mode
+          id: lic
+          shell: bash
           env:
-            UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
-            UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+            UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+            UNITY_EMAIL:   ${{ secrets.UNITY_EMAIL }}
             UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
             UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
-          with:
-            projectPath: TestProjects/UnityMCPTests
-            testMode: EditMode
-            customParameters: -runTests -testFilter __NoSuchTest__ -batchmode -nographics
-            unityVersion: ${{ env.UNITY_VERSION }}
-  
-        # (Optional) Inspect license caches
-        - name: Inspect GameCI license caches (host)
-          if: steps.detect.outputs.unity_ok == 'true'
           run: |
-            set -eux
-            find "${{ env.UNITY_CACHE_ROOT }}" -maxdepth 4 \( -path "*/.cache" -prune -o -type f \( -name '*.ulf' -o -name 'user.json' \) -print \) 2>/dev/null || true
+            set -eu
+            if [[ -n "${UNITY_LICENSE:-}" ]]; then
+              echo "mode=ulf" >> "$GITHUB_OUTPUT"
+            elif [[ -n "${UNITY_EMAIL:-}" && -n "${UNITY_PASSWORD:-}" ]]; then
+              echo "mode=ebl" >> "$GITHUB_OUTPUT"
+            else
+              echo "mode=none" >> "$GITHUB_OUTPUT"
+            fi
+            if [[ -n "${UNITY_SERIAL:-}" ]]; then
+              echo "has_serial=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "has_serial=false" >> "$GITHUB_OUTPUT"
+            fi
+
+        - name: Stage Unity .ulf license (from secret)
+          if: steps.lic.outputs.mode == 'ulf'
+          env:
+            UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          shell: bash
+          run: |
+            set -eu
+            mkdir -p "$RUNNER_TEMP/unity-license-ulf"
+            # Accept raw text or base64 ULF
+            if echo "$UNITY_LICENSE" | base64 -d >/dev/null 2>&1; then
+              echo "$UNITY_LICENSE" | base64 -d > "$RUNNER_TEMP/unity-license-ulf/Unity_lic.ulf"
+            else
+              printf "%s" "$UNITY_LICENSE" > "$RUNNER_TEMP/unity-license-ulf/Unity_lic.ulf"
+            fi
+
+        - name: Activate Unity (EBL on host)
+          if: steps.lic.outputs.mode == 'ebl'
+          uses: game-ci/unity-activate@v2
+          env:
+            UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+            UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}   # optional (Pro/Enterprise)
+
+        - name: Stage host license artifacts for container
+          if: steps.lic.outputs.mode == 'ebl'
+          shell: bash
+          run: |
+            set -euxo pipefail
+            mkdir -p "$RUNNER_TEMP/unity-license-ulf" "$RUNNER_TEMP/unity-license-xml"
+            # Serial-based license, if produced
+            ULF="$HOME/.local/share/unity3d/Unity/Unity_lic.ulf"
+            [[ -f "$ULF" ]] && cp "$ULF" "$RUNNER_TEMP/unity-license-ulf/"
+            # Named-user entitlement license (XML), if produced
+            XML_DIR="$HOME/.config/unity3d/Unity/licenses"
+            if [[ -d "$XML_DIR" ]]; then
+              cp -r "$XML_DIR/." "$RUNNER_TEMP/unity-license-xml/"
+            fi
   
         # ---------- Clean old MCP status ----------
         - name: Clean old MCP status
@@ -102,80 +141,52 @@ jobs:
   
         # ---------- Start headless Unity (persistent bridge) ----------
         - name: Start Unity (persistent bridge)
-          if: steps.detect.outputs.unity_ok == 'true'
+          if: steps.lic.outputs.mode != 'none'
+          shell: bash
+          env:
+            UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
+          run: |
+            set -euxo pipefail
+
+            MANUAL_ARG=""
+            if [[ -f "$RUNNER_TEMP/unity-license-ulf/Unity_lic.ulf" ]]; then
+              MANUAL_ARG="-manualLicenseFile /root/.local/share/unity3d/Unity/Unity_lic.ulf"
+            fi
+
+            docker rm -f unity-mcp >/dev/null 2>&1 || true
+            docker run -d --name unity-mcp --network host \
+              -e HOME=/root \
+              -e UNITY_MCP_ALLOW_BATCH=1 \
+              -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
+              -e UNITY_MCP_BIND_HOST=127.0.0.1 \
+              -v "${{ github.workspace }}:/workspace" -w /workspace \
+              -v "$RUNNER_TEMP/unity-license-ulf:/root/.local/share/unity3d/Unity:ro" \
+              -v "$RUNNER_TEMP/unity-license-xml:/root/.config/unity3d/Unity/licenses:ro" \
+              "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
+                -stackTraceLogType Full \
+                -projectPath /workspace/TestProjects/UnityMCPTests \
+                ${MANUAL_ARG} \
+                -executeMethod MCPForUnity.Editor.MCPForUnityBridge.StartAutoConnect
+  
+        # ---------- Wait for Unity bridge ----------
+        - name: Wait for Unity bridge (fast fail if licensing breaks)
+          shell: bash
+          run: |
+            set -eu
+            timeout 90s bash -c '
+              until docker logs unity-mcp 2>&1 | egrep -q "Entitlement|License|listening|ready"; do
+                sleep 2
+              done
+            '
+            docker logs unity-mcp --tail 200
+
+        - name: Return Pro license (if used)
+          if: always() && steps.lic.outputs.mode == 'ebl' && steps.lic.outputs.has_serial == 'true'
+          uses: game-ci/unity-return-license@v2
           env:
             UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
             UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
             UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
-          run: |
-            set -eu
-            if [ ! -d "${{ github.workspace }}/TestProjects/UnityMCPTests/ProjectSettings" ]; then
-              echo "Unity project not found; failing fast."
-              exit 1
-            fi
-            mkdir -p "$HOME/.unity-mcp"
-            MANUAL_ARG=()
-            if [ -f "${UNITY_CACHE_ROOT}/.local/share/unity3d/Unity_lic.ulf" ]; then
-              MANUAL_ARG=(-manualLicenseFile /root/.local/share/unity3d/Unity_lic.ulf)
-            fi
-            EBL_ARGS=()
-            [ -n "${UNITY_SERIAL:-}" ]   && EBL_ARGS+=(-serial "$UNITY_SERIAL")
-            [ -n "${UNITY_EMAIL:-}" ]    && EBL_ARGS+=(-username "$UNITY_EMAIL")
-            [ -n "${UNITY_PASSWORD:-}" ] && EBL_ARGS+=(-password "$UNITY_PASSWORD")
-            docker rm -f unity-mcp >/dev/null 2>&1 || true
-            docker run -d --name unity-mcp --network host \
-              -e HOME=/root \
-              -e UNITY_MCP_ALLOW_BATCH=1 -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
-              -e UNITY_MCP_BIND_HOST=127.0.0.1 \
-              -v "${{ github.workspace }}:/workspace" -w /workspace \
-              -v "${{ env.UNITY_CACHE_ROOT }}:/root" \
-              -v "$HOME/.unity-mcp:/root/.unity-mcp" \
-              ${{ env.UNITY_IMAGE }} /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
-                -stackTraceLogType Full \
-                -projectPath /workspace/TestProjects/UnityMCPTests \
-                "${MANUAL_ARG[@]}" \
-                "${EBL_ARGS[@]}" \
-                -executeMethod MCPForUnity.Editor.MCPForUnityBridge.StartAutoConnect
-  
-        # ---------- Wait for Unity bridge ----------
-        - name: Wait for Unity bridge (robust)
-          if: steps.detect.outputs.unity_ok == 'true'
-          run: |
-            set -euo pipefail
-            if ! docker ps --format '{{.Names}}' | grep -qx 'unity-mcp'; then
-              echo "Unity container failed to start"; docker ps -a || true; exit 1
-            fi
-            docker logs -f unity-mcp 2>&1 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' & LOGPID=$!
-            deadline=$((SECONDS+420)); READY=0
-            try_connect_host() {
-              P="$1"
-              timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$P; head -c 8 <&3 >/dev/null" && return 0 || true
-              if command -v nc >/dev/null 2>&1; then nc -6 -z ::1 "$P" && return 0 || true; fi
-              return 1
-            }
-            while [ $SECONDS -lt $deadline ]; do
-              if docker logs unity-mcp 2>&1 | grep -qE "MCP Bridge listening|Bridge ready|Server started"; then
-                READY=1; echo "Bridge ready (log markers)"; break
-              fi
-              PORT=$(python3 -c "import os,glob,json,sys,time; b=os.path.expanduser('~/.unity-mcp'); fs=sorted(glob.glob(os.path.join(b,'unity-mcp-status-*.json')), key=os.path.getmtime, reverse=True); print(next((json.load(open(f,'r',encoding='utf-8')).get('unity_port') for f in fs if time.time()-os.path.getmtime(f)<=300 and json.load(open(f,'r',encoding='utf-8')).get('unity_port')), '' ))" 2>/dev/null || true)
-              if [ -n "${PORT:-}" ] && { try_connect_host "$PORT" || docker exec unity-mcp bash -lc "timeout 1 bash -lc 'exec 3<>/dev/tcp/127.0.0.1/$PORT' || (command -v nc >/dev/null 2>&1 && nc -6 -z ::1 $PORT)"; }; then
-                READY=1; echo "Bridge ready on port $PORT"; break
-              fi
-              if docker logs unity-mcp 2>&1 | grep -qE "No valid Unity Editor license|Token not found in cache|com\.unity\.editor\.headless"; then
-                echo "Licensing error detected"; break
-              fi
-              sleep 2
-            done
-            kill $LOGPID || true
-            if [ "$READY" != "1" ]; then
-              echo "Bridge not ready; diagnostics:"
-              echo "== status files =="; ls -la "$HOME/.unity-mcp" || true
-              echo "== status contents =="; for f in "$HOME"/.unity-mcp/unity-mcp-status-*.json; do [ -f "$f" ] && { echo "--- $f"; sed -n '1,120p' "$f"; }; done
-              echo "== sockets (inside container) =="; docker exec unity-mcp bash -lc 'ss -lntp || netstat -tulpen || true'
-              echo "== tail of Unity log =="
-              docker logs --tail 200 unity-mcp | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' || true
-              exit 1
-            fi
   
         # ---------- MCP client config ----------
         - name: Write MCP config (.claude/mcp.json)

@@ -32,6 +32,7 @@ CI provides:
 ## Tool Mapping
 - **Anchors/regex/structured**: `mcp__unity__script_apply_edits`
   - Allowed ops: `anchor_insert`, `replace_method`, `insert_method`, `delete_method`, `regex_replace`
+  - For `anchor_insert`, always set `"position": "before"` or `"after"`.
 - **Precise ranges / atomic batch**: `mcp__unity__apply_text_edits` (non‑overlapping ranges)
 - **Hash-only**: `mcp__unity__get_sha` — returns `{sha256,lengthBytes,lastModifiedUtc}` without file body
 - **Validation**: `mcp__unity__validate_script(level:"standard")`
@@ -49,7 +50,8 @@ CI provides:
 5. **Composability**: Tests demonstrate how operations work together in real workflows
 
 **State Tracking:**
-- Track file SHA after each test to ensure operations succeeded
+- Track file SHA after each test (`mcp__unity__get_sha`) and use it as a precondition
+  for `apply_text_edits` in T‑F/T‑G/T‑I to exercise `stale_file` semantics.
 - Use content signatures (method names, comment markers) to verify expected state
 - Validate structural integrity after each major change
 
@@ -85,7 +87,8 @@ CI provides:
 ### NL-3. End-of-Class Content (Additive State C)
 **Goal**: Demonstrate end-of-class insertions with smart brace matching
 **Actions**:
-- Use anchor pattern to find the class-ending brace (accounts for previous additions)
+- Match the final class-closing brace by scanning from EOF (e.g., last `^\s*}\s*$`)
+  or compute via `find_in_file` + ranges; insert immediately before it.
 - Insert three comment lines before final class brace:
   ```
   // Tail test A
@@ -135,9 +138,9 @@ CI provides:
 - **Expected final state**: State E + TestHelper() method before class end
 
 ### T-E. Method Evolution Lifecycle (Additive State G)
-**Goal**: Insert → modify → finalize a method through multiple operations
+**Goal**: Insert → modify → finalize a field + companion method
 **Actions**:
-- Insert basic method: `private int Counter = 0;`
+- Insert field: `private int Counter = 0;`
 - Update it: find and replace with `private int Counter = 42; // initialized`
 - Add companion method: `private void IncrementCounter() { Counter++; }`
 - **Expected final state**: State F + Counter field + IncrementCounter() method
@@ -180,9 +183,12 @@ CI provides:
 ### T-J. Idempotency on Modified File (Additive State I)
 **Goal**: Verify operations behave predictably when repeated
 **Actions**:
-- Add unique marker comment: `// idempotency test marker`
-- Attempt to add same comment again (should detect no-op)
-- Remove marker, attempt removal again (should handle gracefully)
+- **Insert (structured)**: `mcp__unity__script_apply_edits` with:
+  `{"op":"anchor_insert","anchor":"// Tail test C","position":"after","text":"\n    // idempotency test marker"}`
+- **Insert again** (same op) → expect `no_op: true`.
+- **Remove (structured)**: `{"op":"regex_replace","pattern":"(?m)^\\s*// idempotency test marker\\r?\\n?","text":""}`
+- **Remove again** (same `regex_replace`) → expect `no_op: true`.
+- `mcp__unity__validate_script(level:"standard")`
 - **Expected final state**: State H + verified idempotent behavior
 
 ---
