@@ -113,15 +113,36 @@ jobs:
               echo "ok=false" >> "$GITHUB_OUTPUT"
             fi
 
-        - name: Activate Unity (EBL on host)
+        # --- Activate via EBL inside the same Unity image (writes host-side entitlement) ---
+        - name: Activate Unity (EBL via container — host-mount)
           if: steps.lic.outputs.use_ebl == 'true'
-          uses: game-ci/unity-activate@v2
-          with:
-            unityVersion: ${{ env.UNITY_VERSION }}
+          shell: bash
           env:
+            UNITY_IMAGE:    ${{ env.UNITY_IMAGE }}
             UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
             UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}   # optional for Pro
+            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
+          run: |
+            set -euxo pipefail
+            # host dir to receive the entitlement XML
+            mkdir -p "$RUNNER_TEMP/unity-license-xml"
+
+            # Try Pro first if serial is present, otherwise named-user EBL.
+            docker run --rm --network host \
+              -e HOME=/root \
+              -e UNITY_EMAIL -e UNITY_PASSWORD -e UNITY_SERIAL \
+              -v "$RUNNER_TEMP/unity-license-xml:/root/.config/unity3d/Unity/licenses" \
+              "$UNITY_IMAGE" bash -lc '
+                set -euxo pipefail
+                if [[ -n "${UNITY_SERIAL:-}" ]]; then
+                  /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
+                    -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -serial "$UNITY_SERIAL" -quit || true
+                else
+                  /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
+                    -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -quit || true
+                fi
+                ls -la /root/.config/unity3d/Unity/licenses || true
+              '
 
         - name: Stage host license artifacts for container
           if: steps.lic.outputs.use_ebl == 'true'
@@ -177,7 +198,7 @@ jobs:
           run: |
             set -eu
             timeout 300s bash -lc '
-              ok_pat="(MCPForUnity|MCP For Unity|AutoConnect).*listening|ready"
+              ok_pat="(MCPForUnity|MCP For Unity|AutoConnect).*(listening|ready)"
               err_pat="No valid Unity|cannot load ULF|Token not found|0 entitlement|headless.*not found|Batchmode quit|Aborting batchmode|Fatal error"
               while :; do
                 l=$(docker logs unity-mcp 2>&1 || true)
