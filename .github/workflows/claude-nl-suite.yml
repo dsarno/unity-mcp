@@ -145,6 +145,12 @@ jobs:
                 ls -la /root/.config/unity3d/Unity/licenses || true
               '
 
+            # Verify entitlement written to host mount
+            if ! find "$RUNNER_TEMP/unity-license-xml" -maxdepth 1 -type f \( -iname '*.xml' -o -iname '*.ulf' \) | grep -q .; then
+              echo "Unity EBL activation did not produce an entitlement on host mount: $RUNNER_TEMP/unity-license-xml" >&2
+              exit 1
+            fi
+
         - name: Stage host license artifacts for container
           if: steps.lic.outputs.use_ebl == 'true'
           shell: bash
