@@ -34,7 +34,7 @@ jobs:
           run: |
             set -e
             if [ -n "$ANTHROPIC_API_KEY" ]; then echo "anthropic_ok=true" >> "$GITHUB_OUTPUT"; else echo "anthropic_ok=false" >> "$GITHUB_OUTPUT"; fi
-            if [ -n "$UNITY_LICENSE" ] || { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; } || [ -n "$UNITY_SERIAL" ]; then
+            if [ -n "$UNITY_LICENSE" ] || { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; }; then
               echo "unity_ok=true" >> "$GITHUB_OUTPUT"
             else
               echo "unity_ok=false" >> "$GITHUB_OUTPUT"
@@ -146,10 +146,14 @@ jobs:
                 ls -la /root/.config/unity3d/Unity/licenses || true
               '
 
-            # Verify entitlement written to host mount
+            # Verify entitlement written to host mount; allow ULF-only runs to proceed
             if ! find "$RUNNER_TEMP/unity-config" -type f -iname "*.xml" | grep -q .; then
-              echo "Unity EBL activation did not produce an entitlement on host mount: $RUNNER_TEMP/unity-config" >&2
-              exit 1
+              if [[ "${{ steps.ulf.outputs.ok }}" == "true" ]]; then
+                echo "EBL entitlement not found; proceeding with ULF-only (ok=true)."
+              else
+                echo "No entitlement produced and no valid ULF; cannot continue." >&2
+                exit 1
+              fi
             fi
 
         # EBL entitlement is already written directly to $RUNNER_TEMP/unity-config by the activation step
@@ -170,8 +174,8 @@ jobs:
             docker run --rm --network host \
               -e HOME=/root \
               -v "${{ github.workspace }}:/workspace" -w /workspace \
-              -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d:ro" \
-              -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d:ro" \
+              -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d" \
+              -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
                 "${manual_args[@]}" \
