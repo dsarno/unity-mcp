@@ -349,7 +349,7 @@ jobs:
           run: |
             python3 - <<'PY'
             from pathlib import Path
-            import xml.etree.ElementTree as ET, re
+            import xml.etree.ElementTree as ET, re, os
 
             RULES = [
               ("NL-0", r"\b(NL-0|Baseline|State\s*Capture)\b"),
@@ -395,7 +395,8 @@ jobs:
                 return f"T-{m.group(1).upper()}"
               return None
 
-            for frag in sorted(Path("reports").glob("*_results.xml")):
+            frags = list(sorted(Path("reports").glob("*_results.xml")))
+            for frag in frags:
               try:
                 tree = ET.parse(frag); root = tree.getroot()
               except Exception:
@@ -415,6 +416,9 @@ jobs:
                 root.set("name", new)
                 tree.write(frag, encoding="utf-8", xml_declaration=False)
                 print(f'canon: {frag.name}: "{old}" -> "{new}"')
+
+            # Note: Do not auto-relable fragments. We rely on per-test strict emission
+            # and the backfill step to surface missing tests explicitly.
             PY
 
         - name: Backfill missing NL/T tests (fail placeholders)

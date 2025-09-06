@@ -125,6 +125,7 @@ STRICT OP GUARDRAILS
 - Read Unity console messages (INFO level)
 - Validate no compilation errors from previous operations
 - **Expected final state**: State C (unchanged)
+ - **IMMEDIATELY** write clean XML fragment to `reports/NL-4_results.xml` (no extra text). The `<testcase name>` must start with `NL-4`. Include brief evidence (e.g., a few recent console lines or an explicit "no compile errors" note) in `system-out`.
 
 ### T-A. Temporary Helper Lifecycle (Returns to State C)
 **Goal**: Test insert → verify → delete cycle for temporary code
@@ -294,6 +295,16 @@ Applied 3 non-overlapping edits in one atomic call:
 - ApplyBlend(): added "// safe animation"
 - End-of-class: added "// end of test modifications"
 validate_script: OK
+SHA: [sha-here]
+  ]]></system-out>
+</testcase>
+```
+
+```xml
+<testcase name="NL-4 — Console State Verification" classname="UnityMCP.NL-T">
+  <system-out><![CDATA[
+Read Unity console (INFO): OK.
+No compilation errors detected.
 SHA: [sha-here]
   ]]></system-out>
 </testcase>
