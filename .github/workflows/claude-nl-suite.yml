@@ -482,7 +482,8 @@ jobs:
           if: always()
           run: |
             python3 - <<'PY'
-            from pathlib import Path, xml.etree.ElementTree as ET
+            from pathlib import Path
+            import xml.etree.ElementTree as ET
             for p in sorted(Path('reports').glob('*_results.xml')):
                 try:
                     r = ET.parse(p).getroot()
