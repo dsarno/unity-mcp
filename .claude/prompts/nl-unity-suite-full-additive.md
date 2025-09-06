@@ -47,6 +47,18 @@ CI provides:
 
 ---
 
+## Transcript Minimization Rules
+- Do not restate tool JSON; summarize in ≤ 2 short lines.
+- Never paste full file contents. For matches, include only the matched line and ±1 line.
+- Prefer `mcp__unity__find_in_file` for targeting; avoid `mcp__unity__read_resource` unless strictly necessary. If needed, limit to `head_bytes ≤ 256` or `tail_lines ≤ 10`.
+- Per‑test `system-out` ≤ 400 chars: brief status + latest SHA only.
+- Console evidence: fetch the last 10 lines and include ≤ 3 lines in the fragment.
+- Avoid quoting multi‑line diffs; reference markers instead.
+— Console scans: perform two reads — last 10 `log/info` lines and up to 3 `error` entries; include ≤ 3 lines total in the fragment; if no errors, state "no errors".
+— Final check is folded into T‑J: perform an errors‑only scan and include a single "no errors" line or up to 3 error lines within the T‑J fragment.
+
+---
+
 ## Tool Mapping
 - **Anchors/regex/structured**: `mcp__unity__script_apply_edits`
   - Allowed ops: `anchor_insert`, `replace_method`, `insert_method`, `delete_method`, `regex_replace`
@@ -122,10 +134,11 @@ STRICT OP GUARDRAILS
 ### NL-4. Console State Verification (No State Change)
 **Goal**: Verify Unity console integration without file modification
 **Actions**:
-- Read Unity console messages (INFO level)
+- Read last 10 Unity console lines (log/info)
+- Perform a targeted scan for errors/exceptions (type: errors), up to 3 entries
 - Validate no compilation errors from previous operations
 - **Expected final state**: State C (unchanged)
- - **IMMEDIATELY** write clean XML fragment to `reports/NL-4_results.xml` (no extra text). The `<testcase name>` must start with `NL-4`. Include brief evidence (e.g., a few recent console lines or an explicit "no compile errors" note) in `system-out`.
+- **IMMEDIATELY** write clean XML fragment to `reports/NL-4_results.xml` (no extra text). The `<testcase name>` must start with `NL-4`. Include at most 3 lines total across both reads, or simply state "no errors; console OK" (≤ 400 chars), plus the latest SHA.
 
 ### T-A. Temporary Helper Lifecycle (Returns to State C)
 **Goal**: Test insert → verify → delete cycle for temporary code
@@ -218,7 +231,8 @@ STRICT OP GUARDRAILS
 - **Remove (structured)**: `{"op":"regex_replace","pattern":"(?m)^\\s*// idempotency test marker\\r?\\n?","text":""}`
 - **Remove again** (same `regex_replace`) → expect `no_op: true`.
 - `mcp__unity__validate_script(level:"standard")`
-- **IMMEDIATELY** write clean XML fragment to `reports/T-J_results.xml` with evidence of both `no_op: true` outcomes. The `<testcase name>` must start with `T-J` and include the latest SHA.
+- Perform a final console scan for errors/exceptions (errors only, up to 3); include "no errors" if none
+- **IMMEDIATELY** write clean XML fragment to `reports/T-J_results.xml` with evidence of both `no_op: true` outcomes and the console result. The `<testcase name>` must start with `T-J` and include the latest SHA.
 - **Expected final state**: State H + verified idempotent behavior
 
 ---
@@ -256,7 +270,7 @@ find_in_file(pattern: "public bool HasTarget\\(\\)")
 2. Check structural integrity: `validate_script(level:"standard")`  
 3. Update SHA tracking for next test's preconditions
 4. Emit a per‑test fragment to `reports/<TESTID>_results.xml` immediately. If the test failed, still write a single `<testcase>` with a `<failure message="..."/>` and evidence in `system-out`.
-5. Log cumulative changes in test evidence
+5. Log cumulative changes in test evidence (keep concise per Transcript Minimization Rules; never paste raw tool JSON)
 
 **Error Recovery:**
 - If test fails, log current state but continue (don't restore)
