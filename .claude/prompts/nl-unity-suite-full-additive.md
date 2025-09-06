@@ -9,7 +9,8 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__un
 
 ## Result emission (STRICT)
 - For each test NL-0..NL-4 and T-A..T-J, write ONE XML file at: reports/<TESTID>_results.xml
-- The file must contain a SINGLE root element: `<testcase classname="UnityMCP.NL-T" name="<TESTID>: <short description>">...</testcase>`
+- The file must contain a SINGLE root element.
+- When writing a fragment, set `<testcase name="{TESTID} — {Title}" classname="UnityMCP.NL-T">`.
 - `<system-out>` contains evidence; include any key logs.
 - On failure or partial execution, still emit the fragment with a `<failure>` node explaining why.
 - TESTID must be one of: NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J. Use EXACT casing and dash.
@@ -21,7 +22,7 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__un
    - `unity://path/Assets/Scripts/LongUnityScriptClaudeTest.cs`
 2) Execute **all** NL/T tests in order using minimal, precise edits that **build on each other**.
 3) Validate each edit with `mcp__unity__validate_script(level:"standard")`.
-4) **Report**: write one `<testcase>` XML fragment per test to `reports/<TESTID>_results.xml`. Do **not** read or edit `$JUNIT_OUT`.
+4) **Report**: write one `<testcase>` XML fragment per test to `reports/<TESTID>_results.xml`. Do **not** read or edit `$JUNIT_OUT`. Do not create directories; assume `reports/` exists and write fragments directly.
 5) **NO RESTORATION** - tests build additively on previous state.
 
 ---

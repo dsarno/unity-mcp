@@ -501,44 +501,84 @@ jobs:
             from pathlib import Path
             import xml.etree.ElementTree as ET
             import re, os
-            def localname(tag: str) -> str: return tag.rsplit('}', 1)[-1] if '}' in tag else tag
+
+            def localname(tag: str) -> str:
+                return tag.rsplit('}', 1)[-1] if '}' in tag else tag
+
             src = Path(os.environ.get('JUNIT_OUT', 'reports/junit-nl-suite.xml'))
-            if not src.exists(): raise SystemExit(0)
-            tree = ET.parse(src); root = tree.getroot()
+            if not src.exists():
+                raise SystemExit(0)
+
+            tree = ET.parse(src)
+            root = tree.getroot()
             suite = root.find('./*') if localname(root.tag) == 'testsuites' else root
-            if suite is None: raise SystemExit(0)
+            if suite is None:
+                raise SystemExit(0)
+
+            def id_from_filename(p: Path):
+                n = p.name
+                m = re.match(r'NL(\d+)_results\.xml$', n, re.I)
+                if m:
+                    return f"NL-{int(m.group(1))}"
+                m = re.match(r'T([A-J])_results\.xml$', n, re.I)
+                if m:
+                    return f"T-{m.group(1).upper()}"
+                return None
+
+            def id_from_system_out(tc):
+                so = tc.find('system-out')
+                if so is not None and so.text:
+                    m = re.search(r'\b(NL-\d+|T-[A-Z])\b', so.text)
+                    if m:
+                        return m.group(1)
+                return None
+
             fragments = sorted(Path('reports').glob('*_results.xml'))
             added = 0
+            renamed = 0
+
             for frag in fragments:
+                tcs = []
                 try:
                     froot = ET.parse(frag).getroot()
                     if localname(froot.tag) == 'testcase':
-                        suite.append(froot); added += 1
+                        tcs = [froot]
                     else:
-                        for tc in froot.findall('.//testcase'):
-                            suite.append(tc); added += 1
+                        tcs = list(froot.findall('.//testcase'))
                 except Exception:
                     txt = Path(frag).read_text(encoding='utf-8', errors='replace')
-                    for m in re.findall(r'<testcase[\\s\\S]*?</testcase>', txt, flags=re.DOTALL):
-                        try: suite.append(ET.fromstring(m)); added += 1
-                        except Exception: pass
+                    for m in re.findall(r'<testcase[\s\S]*?</testcase>', txt, flags=re.DOTALL):
+                        try:
+                            tcs.append(ET.fromstring(m))
+                        except Exception:
+                            pass
+
+                test_id = id_from_filename(frag)
+
+                for tc in tcs:
+                    current_name = tc.get('name') or ''
+                    tid = test_id or id_from_system_out(tc)
+                    if tid and not re.match(r'^\s*(NL-\d+|T-[A-Z])\b', current_name):
+                        title = current_name.strip()
+                        new_name = f'{tid} — {title}' if title else tid
+                        tc.set('name', new_name)
+                        renamed += 1
+                    suite.append(tc)
+                    added += 1
+
             if added:
                 # Drop bootstrap placeholder and recompute counts
-                removed_bootstrap = 0
                 for tc in list(suite.findall('.//testcase')):
-                    name = (tc.get('name') or '')
-                    if name == 'NL-Suite.Bootstrap':
+                    if (tc.get('name') or '') == 'NL-Suite.Bootstrap':
                         suite.remove(tc)
-                        removed_bootstrap += 1
                 testcases = suite.findall('.//testcase')
-                tests_cnt = len(testcases)
                 failures_cnt = sum(1 for tc in testcases if (tc.find('failure') is not None or tc.find('error') is not None))
-                suite.set('tests', str(tests_cnt))
+                suite.set('tests', str(len(testcases)))
                 suite.set('failures', str(failures_cnt))
-                suite.set('errors', str(0))
-                suite.set('skipped', str(0))
+                suite.set('errors', '0')
+                suite.set('skipped', '0')
                 tree.write(src, encoding='utf-8', xml_declaration=True)
-                print(f"Added {added} testcase fragments; removed bootstrap={removed_bootstrap}; tests={tests_cnt}; failures={failures_cnt}")
+                print(f"Appended {added} testcase(s); renamed {renamed} to canonical NL/T names.")
             PY
   
         # ---------- Markdown summary from JUnit ----------
@@ -549,14 +589,13 @@ jobs:
             python3 - <<'PY'
             import xml.etree.ElementTree as ET
             from pathlib import Path
-            import os, html
+            import os, html, re
 
             def localname(tag: str) -> str:
                 return tag.rsplit('}', 1)[-1] if '}' in tag else tag
 
             src = Path(os.environ.get('JUNIT_OUT', 'reports/junit-nl-suite.xml'))
             md_out = Path(os.environ.get('MD_OUT', 'reports/junit-nl-suite.md'))
-            # Ensure destination directory exists even if earlier prep steps were skipped
             md_out.parent.mkdir(parents=True, exist_ok=True)
 
             if not src.exists():
@@ -568,18 +607,32 @@ jobs:
             suite = root.find('./*') if localname(root.tag) == 'testsuites' else root
             cases = [] if suite is None else list(suite.findall('.//testcase'))
 
+            def id_from_case(tc):
+                n = (tc.get('name') or '')
+                m = re.match(r'\s*(NL-\d+|T-[A-Z])\b', n)
+                if m:
+                    return m.group(1)
+                so = tc.find('system-out')
+                if so is not None and so.text:
+                    m = re.search(r'\b(NL-\d+|T-[A-Z])\b', so.text)
+                    if m:
+                        return m.group(1)
+                return None
+
+            id_status = {}
+            name_map = {}
+            for tc in cases:
+                tid = id_from_case(tc)
+                ok = (tc.find('failure') is None and tc.find('error') is None)
+                if tid and tid not in id_status:
+                    id_status[tid] = ok
+                    name_map[tid] = (tc.get('name') or tid)
+
+            desired = ['NL-0','NL-1','NL-2','NL-3','NL-4','T-A','T-B','T-C','T-D','T-E','T-F','T-G','T-H','T-I','T-J']
+
             total = len(cases)
             failures = sum(1 for tc in cases if (tc.find('failure') is not None or tc.find('error') is not None))
             passed = total - failures
-
-            desired = ['NL-0','NL-1','NL-2','NL-3','NL-4','T-A','T-B','T-C','T-D','T-E','T-F','T-G','T-H','T-I','T-J']
-            name_to_case = {(tc.get('name') or ''): tc for tc in cases}
-
-            def status_for(prefix: str):
-                for name, tc in name_to_case.items():
-                    if name.startswith(prefix):
-                        return not ((tc.find('failure') is not None) or (tc.find('error') is not None))
-                return None
 
             lines = []
             lines += [
@@ -590,52 +643,59 @@ jobs:
                 '## Test Checklist'
             ]
             for p in desired:
-                st = status_for(p)
+                st = id_status.get(p, None)
                 lines.append(f"- [x] {p}" if st is True else (f"- [ ] {p} (fail)" if st is False else f"- [ ] {p} (not run)"))
             lines.append('')
 
-            # Rich per-test system-out details
             lines.append('## Test Details')
 
             def order_key(n: str):
-                try:
-                    if n.startswith('NL-') and n[3].isdigit():
-                        return (0, int(n.split('.')[0].split('-')[1]))
-                except Exception:
-                    pass
-                if n.startswith('T-') and len(n) > 2 and n[2].isalpha():
+                if n.startswith('NL-'):
+                    try:
+                        return (0, int(n.split('-')[1]))
+                    except:
+                        return (0, 999)
+                if n.startswith('T-') and len(n) > 2:
                     return (1, ord(n[2]))
                 return (2, n)
 
             MAX_CHARS = 2000
-            for name in sorted(name_to_case.keys(), key=order_key):
-                tc = name_to_case[name]
-                status_badge = "PASS" if (tc.find('failure') is None and tc.find('error') is None) else "FAIL"
-                lines.append(f"### {name} — {status_badge}")
+            seen = set()
+            for tid in sorted(id_status.keys(), key=order_key):
+                seen.add(tid)
+                tc = next((c for c in cases if (id_from_case(c) == tid)), None)
+                if not tc:
+                    continue
+                title = name_map.get(tid, tid)
+                status_badge = "PASS" if id_status[tid] else "FAIL"
+                lines.append(f"### {title} — {status_badge}")
                 so = tc.find('system-out')
-                text = '' if so is None or so.text is None else so.text.replace('\r\n','\n')
-                # Unescape XML entities so code reads naturally (e.g., => instead of =&gt;)
-                if text:
-                    text = html.unescape(text)
+                text = '' if so is None or so.text is None else html.unescape(so.text.replace('\r\n','\n'))
                 if text.strip():
                     t = text.strip()
                     if len(t) > MAX_CHARS:
                         t = t[:MAX_CHARS] + "\n…(truncated)"
-                    # Use a safer fence if content contains triple backticks
-                    fence = '```'
-                    if '```' in t:
-                        fence = '````'
-                    lines.append(fence)
-                    lines.append(t)
-                    lines.append(fence)
+                    fence = '```' if '```' not in t else '````'
+                    lines += [fence, t, fence]
                 else:
                     lines.append('(no system-out)')
                 node = tc.find('failure') or tc.find('error')
                 if node is not None:
                     msg = (node.get('message') or '').strip()
                     body = (node.text or '').strip()
-                    if msg: lines.append(f"- Message: {msg}")
-                    if body: lines.append(f"- Detail: {body.splitlines()[0][:500]}")
+                    if msg:
+                        lines.append(f"- Message: {msg}")
+                    if body:
+                        lines.append(f"- Detail: {body.splitlines()[0][:500]}")
+                lines.append('')
+
+            for tc in cases:
+                if id_from_case(tc) in seen:
+                    continue
+                title = tc.get('name') or '(unnamed)'
+                status_badge = "PASS" if (tc.find('failure') is None and tc.find('error') is None) else "FAIL"
+                lines.append(f"### {title} — {status_badge}")
+                lines.append('(unmapped test id)')
                 lines.append('')
 
             md_out.write_text('\n'.join(lines), encoding='utf-8')
