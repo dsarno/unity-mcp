@@ -31,6 +31,7 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__un
 - If test fails, include: `<failure message="reason"/>`
 - TESTID must be one of: NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J
 5) **NO RESTORATION** - tests build additively on previous state.
+6) **STRICT FRAGMENT EMISSION** - After completing T-D and T-J, immediately emit a clean XML file under `reports/<TESTID>_results.xml` with exactly one `<testcase>` whose `name` begins with the exact test id. No prologue/epilogue or fences.
 
 ---
 
@@ -153,7 +154,7 @@ CI provides:
 - Use smart anchor matching to find current class-ending brace (after NL-3 tail comments)
 - Insert permanent helper before class brace: `private void TestHelper() { /* placeholder */ }`
 - Validate with `mcp__unity__validate_script(level:"standard")`
-- **IMMEDIATELY** write clean XML fragment to `reports/T-D_results.xml` (no extra text)
+- **IMMEDIATELY** write clean XML fragment to `reports/T-D_results.xml` (no extra text). The `<testcase name>` must start with `T-D`. Include brief evidence and the latest SHA in `system-out`.
 - **Expected final state**: State E + TestHelper() method before class end
 
 ### T-E. Method Evolution Lifecycle (Additive State G)
@@ -174,6 +175,7 @@ CI provides:
   3. Add final class comment: `// end of test modifications`
 - All edits computed from same file snapshot, applied atomically
 - **Expected final state**: State G + three coordinated comments
+- After applying the atomic edits, run `validate_script(level:"standard")` and emit a clean fragment to `reports/T-F_results.xml` with a short summary and the latest SHA.
 
 ### T-G. Path Normalization Test (No State Change)
 **Goal**: Verify URI forms work equivalently on modified file
@@ -183,6 +185,7 @@ CI provides:
 - Second should return `stale_file`, retry with updated SHA
 - Verify both URI forms target same file
 - **Expected final state**: State H (no content change, just path testing)
+- Emit `reports/T-G_results.xml` showing evidence of stale SHA handling and final SHA.
 
 ### T-H. Validation on Modified File (No State Change)
 **Goal**: Ensure validation works correctly on heavily modified file
@@ -190,6 +193,7 @@ CI provides:
 - Run `validate_script(level:"standard")` on current state
 - Verify no structural errors despite extensive modifications
 - **Expected final state**: State H (validation only, no edits)
+- Emit `reports/T-H_results.xml` confirming validation OK and including the latest SHA.
 
 ### T-I. Failure Surface Testing (No State Change)
 **Goal**: Test error handling on real modified file
@@ -198,6 +202,7 @@ CI provides:
 - Attempt edit with stale SHA (should fail cleanly) 
 - Verify error responses are informative
 - **Expected final state**: State H (failed operations don't modify file)
+- Emit `reports/T-I_results.xml` capturing error evidence and final SHA; file must contain one `<testcase>`.
 
 ### T-J. Idempotency on Modified File (Additive State I)
 **Goal**: Verify operations behave predictably when repeated
@@ -208,7 +213,7 @@ CI provides:
 - **Remove (structured)**: `{"op":"regex_replace","pattern":"(?m)^\\s*// idempotency test marker\\r?\\n?","text":""}`
 - **Remove again** (same `regex_replace`) → expect `no_op: true`.
 - `mcp__unity__validate_script(level:"standard")`
-- **IMMEDIATELY** write clean XML fragment to `reports/T-J_results.xml` with evidence of both `no_op: true` outcomes
+- **IMMEDIATELY** write clean XML fragment to `reports/T-J_results.xml` with evidence of both `no_op: true` outcomes. The `<testcase name>` must start with `T-J` and include the latest SHA.
 - **Expected final state**: State H + verified idempotent behavior
 
 ---
@@ -264,3 +269,8 @@ find_in_file(pattern: "public bool HasTarget\\(\\)")
 6. **State Evolution Testing**: Validates SDK handles cumulative file modifications correctly
 
 This additive approach produces a more realistic and maintainable test suite that better represents actual SDK usage patterns.
+
+---
+
+BAN ON EXTRA TOOLS AND DIRS
+- Do not use any tools outside `AllowedTools`. Do not create directories; assume `reports/` exists.

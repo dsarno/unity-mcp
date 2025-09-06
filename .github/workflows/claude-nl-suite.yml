@@ -380,7 +380,6 @@ jobs:
             mcp_config: .claude/mcp.json
             allowed_tools: >-
               Write,
-              Bash(scripts/nlt-revert.sh:*),
               mcp__unity__manage_editor,
               mcp__unity__list_resources,
               mcp__unity__read_resource,
@@ -390,7 +389,7 @@ jobs:
               mcp__unity__find_in_file,
               mcp__unity__read_console,
               mcp__unity__get_sha
-            disallowed_tools: TodoWrite,Task
+            disallowed_tools: TodoWrite,Task,Bash
             model: claude-3-7-sonnet-latest
             timeout_minutes: "30"
             anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -437,6 +436,16 @@ jobs:
                   return tid
               return n
 
+            def id_from_filename(p: Path):
+              n = p.name
+              m = re.match(r'NL(\d+)_results\.xml$', n, re.I)
+              if m:
+                return f"NL-{int(m.group(1))}"
+              m = re.match(r'T([A-J])_results\.xml$', n, re.I)
+              if m:
+                return f"T-{m.group(1).upper()}"
+              return None
+
             for frag in sorted(Path("reports").glob("*_results.xml")):
               try:
                 tree = ET.parse(frag); root = tree.getroot()
@@ -444,8 +453,15 @@ jobs:
                 continue
               if root.tag != "testcase":
                 continue
+              file_id = id_from_filename(frag)
               old = root.get("name") or ""
-              new = canon_name(old)
+              # Prefer filename-derived ID; if name doesn't start with it, override
+              if file_id and not re.match(rf'^\s*{re.escape(file_id)}\b', old):
+                # Strip any existing leading ID + separator to form a clean title
+                title_match = re.sub(r'^\s*(NL-\d+|T-[A-Z])\s*[—–:\-]\s*', '', old).strip()
+                new = f"{file_id} — {title_match}" if title_match else file_id
+              else:
+                new = canon_name(old)
               if new != old and new:
                 root.set("name", new)
                 tree.write(frag, encoding="utf-8", xml_declaration=False)
@@ -459,13 +475,29 @@ jobs:
             python3 - <<'PY'
             from pathlib import Path
             import xml.etree.ElementTree as ET
+            import re
 
             DESIRED = ["NL-0","NL-1","NL-2","NL-3","NL-4","T-A","T-B","T-C","T-D","T-E","T-F","T-G","T-H","T-I","T-J"]
             seen = set()
+            def id_from_filename(p: Path):
+              n = p.name
+              m = re.match(r'NL(\d+)_results\.xml$', n, re.I)
+              if m:
+                return f"NL-{int(m.group(1))}"
+              m = re.match(r'T([A-J])_results\.xml$', n, re.I)
+              if m:
+                return f"T-{m.group(1).upper()}"
+              return None
+
             for p in Path("reports").glob("*_results.xml"):
               try:
                 r = ET.parse(p).getroot()
               except Exception:
+                continue
+              # Count by filename id primarily; fall back to testcase name if needed
+              fid = id_from_filename(p)
+              if fid in DESIRED:
+                seen.add(fid)
                 continue
               if r.tag == "testcase":
                 name = (r.get("name") or "").strip()
@@ -556,19 +588,31 @@ jobs:
                         tcs = list(froot.findall('.//testcase'))
                 except Exception:
                     txt = Path(frag).read_text(encoding='utf-8', errors='replace')
-                    for m in re.findall(r'<testcase[\s\S]*?</testcase>', txt, flags=re.DOTALL):
+                    # Extract all testcase nodes from raw text
+                    nodes = re.findall(r'<testcase[\s\S]*?</testcase>', txt, flags=re.DOTALL)
+                    for m in nodes:
                         try:
                             tcs.append(ET.fromstring(m))
                         except Exception:
                             pass
+
+                # Guard: keep only the first testcase from each fragment
+                if len(tcs) > 1:
+                    tcs = tcs[:1]
 
                 test_id = id_from_filename(frag)
 
                 for tc in tcs:
                     current_name = tc.get('name') or ''
                     tid = test_id or id_from_system_out(tc)
+                    # Enforce filename-derived ID as prefix; repair names if needed
                     if tid and not re.match(r'^\s*(NL-\d+|T-[A-Z])\b', current_name):
                         title = current_name.strip()
+                        new_name = f'{tid} — {title}' if title else tid
+                        tc.set('name', new_name)
+                    elif tid and not re.match(rf'^\s*{re.escape(tid)}\b', current_name):
+                        # Replace any wrong leading ID with the correct one
+                        title = re.sub(r'^\s*(NL-\d+|T-[A-Z])\s*[—–:\-]\s*', '', current_name).strip()
                         new_name = f'{tid} — {title}' if title else tid
                         tc.set('name', new_name)
                         renamed += 1
