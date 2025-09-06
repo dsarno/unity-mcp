@@ -227,7 +227,7 @@ jobs:
 
             # Fail fast only if container actually died
             st="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' unity-mcp 2>/dev/null || true)"
-            case "$st" in exited*|dead*) docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'; exit 1;; esac
+            case "$st" in exited*|dead*) docker logs unity-mcp --tail 200 | sed -E 's/((email|serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'; exit 1;; esac
 
             # Patterns
             ok_pat='(Bridge|MCP(For)?Unity|AutoConnect).*(listening|ready|started|port|bound)'
@@ -253,14 +253,14 @@ jobs:
               # Only treat license failures as fatal *after* warm-up
               if [ $SECONDS -ge $fatal_after ] && echo "$logs" | grep -qiE "$license_fatal"; then
                 echo "::error::Fatal licensing signal detected after warm-up"
-                echo "$logs" | tail -n 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
+                echo "$logs" | tail -n 200 | sed -E 's/((email|serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
                 exit 1
               fi
 
               # If the container dies mid-wait, bail
               st="$(docker inspect -f '{{.State.Status}}' unity-mcp 2>/dev/null || true)"
               if [[ "$st" != "running" ]]; then
-                echo "::error::Unity container exited during wait"; docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
+                echo "::error::Unity container exited during wait"; docker logs unity-mcp --tail 200 | sed -E 's/((email|serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
                 exit 1
               fi
 
@@ -268,7 +268,7 @@ jobs:
             done
 
             echo "::error::Bridge not ready before deadline"
-            docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
+            docker logs unity-mcp --tail 200 | sed -E 's/((email|serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
             exit 1
 
         # (moved) — return license after Unity is stopped
@@ -800,7 +800,7 @@ jobs:
         - name: Stop Unity
           if: always()
           run: |
-            docker logs --tail 400 unity-mcp | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' || true
+            docker logs --tail 400 unity-mcp | sed -E 's/((email|serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' || true
             docker rm -f unity-mcp || true
 
         - name: Return Pro license (if used)
