@@ -406,7 +406,7 @@ jobs:
               ("NL-0", r"\b(NL-0|Baseline|State\s*Capture)\b"),
               ("NL-1", r"\b(NL-1|Core\s*Method)\b"),
               ("NL-2", r"\b(NL-2|Anchor|Build\s*marker)\b"),
-              ("NL-3", r"\b(NL-3|End[-\s]*of[-\s]*Class|Tail\s*test)\b"),
+              ("NL-3", r"\b(NL-3|End[-\s]*of[-\s]*Class\s*Content|Tail\s*test\s*[ABC])\b"),
               ("NL-4", r"\b(NL-4|Console|Unity\s*console)\b"),
               ("T-A",  r"\b(T-?A|Temporary\s*Helper)\b"),
               ("T-B",  r"\b(T-?B|Method\s*Body\s*Interior)\b"),
@@ -456,10 +456,10 @@ jobs:
               file_id = id_from_filename(frag)
               old = root.get("name") or ""
               # Prefer filename-derived ID; if name doesn't start with it, override
-              if file_id and not re.match(rf'^\s*{re.escape(file_id)}\b', old):
-                # Strip any existing leading ID + separator to form a clean title
-                title_match = re.sub(r'^\s*(NL-\d+|T-[A-Z])\s*[—–:\-]\s*', '', old).strip()
-                new = f"{file_id} — {title_match}" if title_match else file_id
+              if file_id:
+                # Respect file's ID (prevents T-D being renamed to NL-3 by loose patterns)
+                title = re.sub(r'^\s*(NL-\d+|T-[A-Z])\s*[—–:\-]\s*', '', old).strip()
+                new = f"{file_id} — {title}" if title else file_id
               else:
                 new = canon_name(old)
               if new != old and new:
