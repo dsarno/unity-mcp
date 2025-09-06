@@ -218,39 +218,58 @@ jobs:
                 -executeMethod MCPForUnity.Editor.MCPForUnityBridge.StartAutoConnect
   
         # ---------- Wait for Unity bridge ----------
-        - name: Wait for Unity bridge (real readiness & fast fail)
+        - name: Wait for Unity bridge (robust)
           shell: bash
           run: |
-            set -eu
-            timeout 900s bash <<'BASH'
             set -euo pipefail
-            ok_pat='(MCP(For)?Unity|AutoConnect|Bridge).*(listening|ready|started|port|bound)'
-            # Only license-fatal signals should abort the wait:
-            license_err='No valid Unity|License is not active|cannot load ULF|Signature element not found|Token not found|0 entitlement|Entitlement.*(failed|error|denied)|License (activation|return|renewal).*(failed|error|expired|denied)'
-            # If container already exited, fail fast with logs
+            deadline=$((SECONDS+900))          # 15 min max
+            fatal_after=$((SECONDS+120))       # give licensing 2 min to settle
+
+            # Fail fast only if container actually died
             st="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' unity-mcp 2>/dev/null || true)"
-            case "$st" in
-              exited*|dead*)
-                docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
-                exit 1;;
-            esac
-            while :; do
-              l="$(docker logs unity-mcp 2>&1 || true)"
-              if echo "$l" | grep -qiE "$ok_pat"; then exit 0; fi
-              # Alternate readiness: parse unity_port from status JSON and verify host TCP connect
-              port="$(docker exec unity-mcp bash -lc 'shopt -s nullglob; for f in /root/.unity-mcp/unity-mcp-status-*.json; do grep -ho "\"unity_port\"\\s*:\\s*[0-9]\\+" "$f"; done | sed -E "s/.*: *([0-9]+).*/\\1/" | head -n1' 2>/dev/null || true)"
-              if [[ -n "$port" ]] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port"; then
+            case "$st" in exited*|dead*) docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'; exit 1;; esac
+
+            # Patterns
+            ok_pat='(Bridge|MCP(For)?Unity|AutoConnect).*(listening|ready|started|port|bound)'
+            # Only truly fatal signals; allow transient "Licensing::..." chatter
+            license_fatal='No valid Unity|License is not active|cannot load ULF|Signature element not found|Token not found|0 entitlement|Entitlement.*(failed|denied)|License (activation|return|renewal).*(failed|expired|denied)'
+
+            while [ $SECONDS -lt $deadline ]; do
+              logs="$(docker logs unity-mcp 2>&1 || true)"
+
+              # 1) Primary: status JSON exposes TCP port
+              port="$(docker exec unity-mcp bash -lc 'shopt -s nullglob; for f in /root/.unity-mcp/unity-mcp-status-*.json; do grep -ho "\"unity_port\"[[:space:]]*:[[:space:]]*[0-9]\+" "$f"; done | sed -E "s/.*: *([0-9]+).*/\1/" | head -n1' 2>/dev/null || true)"
+              if [[ -n "${port:-}" ]] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port"; then
+                echo "Bridge ready on port $port"
                 exit 0
               fi
-              if echo "$l" | grep -qiE "$license_err"; then
-                echo "License failure matched by wait-gate:" >&2
-                echo "$l" | tail -n 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig' >&2
+
+              # 2) Secondary: log markers
+              if echo "$logs" | grep -qiE "$ok_pat"; then
+                echo "Bridge ready (log markers)"
+                exit 0
+              fi
+
+              # Only treat license failures as fatal *after* warm-up
+              if [ $SECONDS -ge $fatal_after ] && echo "$logs" | grep -qiE "$license_fatal"; then
+                echo "::error::Fatal licensing signal detected after warm-up"
+                echo "$logs" | tail -n 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
                 exit 1
               fi
+
+              # If the container dies mid-wait, bail
+              st="$(docker inspect -f '{{.State.Status}}' unity-mcp 2>/dev/null || true)"
+              if [[ "$st" != "running" ]]; then
+                echo "::error::Unity container exited during wait"; docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
+                exit 1
+              fi
+
               sleep 2
             done
-            BASH
-            docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig' || true
+
+            echo "::error::Bridge not ready before deadline"
+            docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
+            exit 1
 
         - name: Return Pro license (if used)
           if: always() && steps.lic.outputs.use_ebl == 'true' && steps.lic.outputs.has_serial == 'true'
