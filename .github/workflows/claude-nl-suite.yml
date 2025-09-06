@@ -425,8 +425,16 @@ jobs:
               n = name or ""
               for tid, pat in RULES:
                 if re.search(pat, n, flags=re.I):
-                  suffix = re.sub(rf"^\s*{re.escape(tid)}\s*[:.\-–—]?\s*", "", n, flags=re.I)
-                  return f"{tid}" + (f": {suffix}" if suffix.strip() else "")
+                  # If it already starts with the correct format, leave it alone
+                  if re.match(rf'^\s*{re.escape(tid)}\s*[—–-]', n, flags=re.I):
+                    return n.strip()
+                  # If it has a different separator, extract title and reformat
+                  title_match = re.search(rf'{re.escape(tid)}\s*[:.\-–—]\s*(.+)', n, flags=re.I)
+                  if title_match:
+                    title = title_match.group(1).strip()
+                    return f"{tid} — {title}"
+                  # Otherwise, just return the canonical ID
+                  return tid
               return n
 
             for frag in sorted(Path("reports").glob("*_results.xml")):
