@@ -271,14 +271,7 @@ jobs:
             docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
             exit 1
 
-        - name: Return Pro license (if used)
-          if: always() && steps.lic.outputs.use_ebl == 'true' && steps.lic.outputs.has_serial == 'true'
-          uses: game-ci/unity-return-license@v2
-          continue-on-error: true
-          env:
-            UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
-            UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
+        # (moved) — return license after Unity is stopped
   
         # ---------- MCP client config ----------
         - name: Write MCP config (.claude/mcp.json)
@@ -853,4 +846,13 @@ jobs:
           run: |
             docker logs --tail 400 unity-mcp | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' || true
             docker rm -f unity-mcp || true
+
+        - name: Return Pro license (if used)
+          if: always() && steps.lic.outputs.use_ebl == 'true' && steps.lic.outputs.has_serial == 'true'
+          uses: game-ci/unity-return-license@v2
+          continue-on-error: true
+          env:
+            UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+            UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
   
