@@ -218,39 +218,58 @@ jobs:
                 -executeMethod MCPForUnity.Editor.MCPForUnityBridge.StartAutoConnect
   
         # ---------- Wait for Unity bridge ----------
-        - name: Wait for Unity bridge (real readiness & fast fail)
+        - name: Wait for Unity bridge (robust)
           shell: bash
           run: |
-            set -eu
-            timeout 900s bash <<'BASH'
             set -euo pipefail
-            ok_pat='(MCP(For)?Unity|AutoConnect|Bridge).*(listening|ready|started|port|bound)'
-            # Only license-fatal signals should abort the wait:
-            license_err='No valid Unity|License is not active|cannot load ULF|Signature element not found|Token not found|0 entitlement|Entitlement.*(failed|error|denied)|License (activation|return|renewal).*(failed|error|expired|denied)'
-            # If container already exited, fail fast with logs
+            deadline=$((SECONDS+900))          # 15 min max
+            fatal_after=$((SECONDS+120))       # give licensing 2 min to settle
+
+            # Fail fast only if container actually died
             st="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' unity-mcp 2>/dev/null || true)"
-            case "$st" in
-              exited*|dead*)
-                docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
-                exit 1;;
-            esac
-            while :; do
-              l="$(docker logs unity-mcp 2>&1 || true)"
-              if echo "$l" | grep -qiE "$ok_pat"; then exit 0; fi
-              # Alternate readiness: parse unity_port from status JSON and verify host TCP connect
-              port="$(docker exec unity-mcp bash -lc 'shopt -s nullglob; for f in /root/.unity-mcp/unity-mcp-status-*.json; do grep -ho "\"unity_port\"\\s*:\\s*[0-9]\\+" "$f"; done | sed -E "s/.*: *([0-9]+).*/\\1/" | head -n1' 2>/dev/null || true)"
-              if [[ -n "$port" ]] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port"; then
+            case "$st" in exited*|dead*) docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'; exit 1;; esac
+
+            # Patterns
+            ok_pat='(Bridge|MCP(For)?Unity|AutoConnect).*(listening|ready|started|port|bound)'
+            # Only truly fatal signals; allow transient "Licensing::..." chatter
+            license_fatal='No valid Unity|License is not active|cannot load ULF|Signature element not found|Token not found|0 entitlement|Entitlement.*(failed|denied)|License (activation|return|renewal).*(failed|expired|denied)'
+
+            while [ $SECONDS -lt $deadline ]; do
+              logs="$(docker logs unity-mcp 2>&1 || true)"
+
+              # 1) Primary: status JSON exposes TCP port
+              port="$(docker exec unity-mcp bash -lc 'shopt -s nullglob; for f in /root/.unity-mcp/unity-mcp-status-*.json; do grep -ho "\"unity_port\"[[:space:]]*:[[:space:]]*[0-9]\+" "$f"; done | sed -E "s/.*: *([0-9]+).*/\1/" | head -n1' 2>/dev/null || true)"
+              if [[ -n "${port:-}" ]] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port"; then
+                echo "Bridge ready on port $port"
                 exit 0
               fi
-              if echo "$l" | grep -qiE "$license_err"; then
-                echo "License failure matched by wait-gate:" >&2
-                echo "$l" | tail -n 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig' >&2
+
+              # 2) Secondary: log markers
+              if echo "$logs" | grep -qiE "$ok_pat"; then
+                echo "Bridge ready (log markers)"
+                exit 0
+              fi
+
+              # Only treat license failures as fatal *after* warm-up
+              if [ $SECONDS -ge $fatal_after ] && echo "$logs" | grep -qiE "$license_fatal"; then
+                echo "::error::Fatal licensing signal detected after warm-up"
+                echo "$logs" | tail -n 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
                 exit 1
               fi
+
+              # If the container dies mid-wait, bail
+              st="$(docker inspect -f '{{.State.Status}}' unity-mcp 2>/dev/null || true)"
+              if [[ "$st" != "running" ]]; then
+                echo "::error::Unity container exited during wait"; docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
+                exit 1
+              fi
+
               sleep 2
             done
-            BASH
-            docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig' || true
+
+            echo "::error::Bridge not ready before deadline"
+            docker logs unity-mcp --tail 200 | sed -E 's/((serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
+            exit 1
 
         - name: Return Pro license (if used)
           if: always() && steps.lic.outputs.use_ebl == 'true' && steps.lic.outputs.has_serial == 'true'
@@ -375,7 +394,104 @@ jobs:
             model: claude-3-7-sonnet-latest
             timeout_minutes: "30"
             anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-  
+
+        - name: Canonicalize testcase names (NL/T prefixes)
+          if: always()
+          shell: bash
+          run: |
+            python3 - <<'PY'
+            from pathlib import Path
+            import xml.etree.ElementTree as ET, re
+
+            RULES = [
+              ("NL-0", r"\b(NL-0|Baseline|State\s*Capture)\b"),
+              ("NL-1", r"\b(NL-1|Core\s*Method)\b"),
+              ("NL-2", r"\b(NL-2|Anchor|Build\s*marker)\b"),
+              ("NL-3", r"\b(NL-3|End[-\s]*of[-\s]*Class|Tail\s*test)\b"),
+              ("NL-4", r"\b(NL-4|Console|Unity\s*console)\b"),
+              ("T-A",  r"\b(T-?A|Temporary\s*Helper)\b"),
+              ("T-B",  r"\b(T-?B|Method\s*Body\s*Interior)\b"),
+              ("T-C",  r"\b(T-?C|Different\s*Method\s*Interior|ApplyBlend)\b"),
+              ("T-D",  r"\b(T-?D|End[-\s]*of[-\s]*Class\s*Helper|TestHelper)\b"),
+              ("T-E",  r"\b(T-?E|Method\s*Evolution|Counter|IncrementCounter)\b"),
+              ("T-F",  r"\b(T-?F|Atomic\s*Multi[-\s]*Edit)\b"),
+              ("T-G",  r"\b(T-?G|Path\s*Normalization)\b"),
+              ("T-H",  r"\b(T-?H|Validation\s*on\s*Modified)\b"),
+              ("T-I",  r"\b(T-?I|Failure\s*Surface)\b"),
+              ("T-J",  r"\b(T-?J|Idempotenc(y|e))\b"),
+            ]
+
+            def canon_name(name: str) -> str:
+              n = name or ""
+              for tid, pat in RULES:
+                if re.search(pat, n, flags=re.I):
+                  suffix = re.sub(rf"^\s*{re.escape(tid)}\s*[:.\-–—]?\s*", "", n, flags=re.I)
+                  return f"{tid}" + (f": {suffix}" if suffix.strip() else "")
+              return n
+
+            for frag in sorted(Path("reports").glob("*_results.xml")):
+              try:
+                tree = ET.parse(frag); root = tree.getroot()
+              except Exception:
+                continue
+              if root.tag != "testcase":
+                continue
+              old = root.get("name") or ""
+              new = canon_name(old)
+              if new != old and new:
+                root.set("name", new)
+                tree.write(frag, encoding="utf-8", xml_declaration=False)
+                print(f'canon: {frag.name}: "{old}" -> "{new}"')
+            PY
+
+        - name: Backfill missing NL/T tests (fail placeholders)
+          if: always()
+          shell: bash
+          run: |
+            python3 - <<'PY'
+            from pathlib import Path
+            import xml.etree.ElementTree as ET
+
+            DESIRED = ["NL-0","NL-1","NL-2","NL-3","NL-4","T-A","T-B","T-C","T-D","T-E","T-F","T-G","T-H","T-I","T-J"]
+            seen = set()
+            for p in Path("reports").glob("*_results.xml"):
+              try:
+                r = ET.parse(p).getroot()
+              except Exception:
+                continue
+              if r.tag == "testcase":
+                name = (r.get("name") or "").strip()
+                for d in DESIRED:
+                  if name.startswith(d):
+                    seen.add(d)
+                    break
+
+            Path("reports").mkdir(parents=True, exist_ok=True)
+            for d in DESIRED:
+              if d in seen:
+                continue
+              frag = Path(f"reports/{d}_results.xml")
+              tc = ET.Element("testcase", {"classname":"UnityMCP.NL-T", "name": d})
+              fail = ET.SubElement(tc, "failure", {"message":"not produced"})
+              fail.text = "The agent did not emit a fragment for this test."
+              ET.ElementTree(tc).write(frag, encoding="utf-8", xml_declaration=False)
+              print(f"backfill: {d}")
+            PY
+
+        - name: Debug: list testcase names
+          if: always()
+          run: |
+            python3 - <<'PY'
+            from pathlib import Path, xml.etree.ElementTree as ET
+            for p in sorted(Path('reports').glob('*_results.xml')):
+                try:
+                    r = ET.parse(p).getroot()
+                    if r.tag == 'testcase':
+                        print(f"{p.name}: {(r.get('name') or '').strip()}")
+                except Exception:
+                    pass
+            PY
+
         # ---------- Merge testcase fragments into JUnit ----------
         - name: Normalize/assemble JUnit in-place (single file)
           if: always()

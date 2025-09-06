@@ -7,6 +7,15 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__un
 
 ---
 
+## Result emission (STRICT)
+- For each test NL-0..NL-4 and T-A..T-J, write ONE XML file at: reports/<TESTID>_results.xml
+- The file must contain a SINGLE root element: `<testcase classname="UnityMCP.NL-T" name="<TESTID>: <short description>">...</testcase>`
+- `<system-out>` contains evidence; include any key logs.
+- On failure or partial execution, still emit the fragment with a `<failure>` node explaining why.
+- TESTID must be one of: NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J. Use EXACT casing and dash.
+
+---
+
 ## Mission
 1) Pick target file (prefer):
    - `unity://path/Assets/Scripts/LongUnityScriptClaudeTest.cs`
