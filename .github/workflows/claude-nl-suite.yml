@@ -93,7 +93,7 @@ jobs:
           shell: bash
           run: |
             set -eu
-            mkdir -p "$RUNNER_TEMP/unity-license-ulf" "$RUNNER_TEMP/unity-license-xml"
+            mkdir -p "$RUNNER_TEMP/unity-license-ulf" "$RUNNER_TEMP/unity-local/Unity"
             f="$RUNNER_TEMP/unity-license-ulf/Unity_lic.ulf"
             if printf "%s" "$UNITY_LICENSE" | base64 -d - >/dev/null 2>&1; then
               printf "%s" "$UNITY_LICENSE" | base64 -d - > "$f"
@@ -103,9 +103,12 @@ jobs:
             chmod 600 "$f" || true
             # If someone pasted an entitlement XML into UNITY_LICENSE by mistake, re-home it:
             if head -c 100 "$f" | grep -qi '<\?xml'; then
-              mv "$f" "$RUNNER_TEMP/unity-license-xml/UnityEntitlementLicense.xml"
+              mkdir -p "$RUNNER_TEMP/unity-config/Unity/licenses"
+              mv "$f" "$RUNNER_TEMP/unity-config/Unity/licenses/UnityEntitlementLicense.xml"
               echo "ok=false" >> "$GITHUB_OUTPUT"
             elif grep -qi '<Signature>' "$f"; then
+              # provide it in the standard local-share path too
+              cp -f "$f" "$RUNNER_TEMP/unity-local/Unity/Unity_lic.ulf"
               echo "ok=true" >> "$GITHUB_OUTPUT"
             else
               echo "ok=false" >> "$GITHUB_OUTPUT"
@@ -122,14 +125,15 @@ jobs:
             UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
           run: |
             set -euxo pipefail
-            # host dir to receive the entitlement XML
-            mkdir -p "$RUNNER_TEMP/unity-license-xml"
+            # host dirs to receive the full Unity config and local-share
+            mkdir -p "$RUNNER_TEMP/unity-config" "$RUNNER_TEMP/unity-local"
 
             # Try Pro first if serial is present, otherwise named-user EBL.
             docker run --rm --network host \
               -e HOME=/root \
               -e UNITY_EMAIL -e UNITY_PASSWORD -e UNITY_SERIAL \
-              -v "$RUNNER_TEMP/unity-license-xml:/root/.config/unity3d/Unity/licenses" \
+              -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d" \
+              -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d" \
               "$UNITY_IMAGE" bash -lc '
                 set -euxo pipefail
                 if [[ -n "${UNITY_SERIAL:-}" ]]; then
@@ -143,12 +147,35 @@ jobs:
               '
 
             # Verify entitlement written to host mount
-            if ! find "$RUNNER_TEMP/unity-license-xml" -maxdepth 1 -type f \( -iname '*.xml' -o -iname '*.ulf' \) | grep -q .; then
-              echo "Unity EBL activation did not produce an entitlement on host mount: $RUNNER_TEMP/unity-license-xml" >&2
+            if ! find "$RUNNER_TEMP/unity-config" -type f -iname "*.xml" | grep -q .; then
+              echo "Unity EBL activation did not produce an entitlement on host mount: $RUNNER_TEMP/unity-config" >&2
               exit 1
             fi
 
-        # EBL entitlement is already written directly to $RUNNER_TEMP/unity-license-xml by the activation step
+        # EBL entitlement is already written directly to $RUNNER_TEMP/unity-config by the activation step
+
+        # ---------- Warm up project (import Library once) ----------
+        - name: Warm up project (import Library once)
+          if: steps.lic.outputs.use_ulf == 'true' || steps.lic.outputs.use_ebl == 'true'
+          shell: bash
+          env:
+            UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
+            ULF_OK: ${{ steps.ulf.outputs.ok }}
+          run: |
+            set -euxo pipefail
+            manual_args=()
+            if [[ "${ULF_OK:-false}" == "true" ]]; then
+              manual_args=(-manualLicenseFile "/root/.local/share/unity3d/Unity/Unity_lic.ulf")
+            fi
+            docker run --rm --network host \
+              -e HOME=/root \
+              -v "${{ github.workspace }}:/workspace" -w /workspace \
+              -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d:ro" \
+              -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d:ro" \
+              "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
+                -projectPath /workspace/TestProjects/UnityMCPTests \
+                "${manual_args[@]}" \
+                -quit
   
         # ---------- Clean old MCP status ----------
         - name: Clean old MCP status
@@ -178,8 +205,8 @@ jobs:
               -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
               -e UNITY_MCP_BIND_HOST=127.0.0.1 \
               -v "${{ github.workspace }}:/workspace" -w /workspace \
-              -v "$RUNNER_TEMP/unity-license-ulf:/root/.local/share/unity3d/Unity:ro" \
-              -v "$RUNNER_TEMP/unity-license-xml:/root/.config/unity3d/Unity/licenses:ro" \
+              -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d:ro" \
+              -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d:ro" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -stackTraceLogType Full \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
