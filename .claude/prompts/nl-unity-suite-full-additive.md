@@ -31,7 +31,7 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__un
 - If test fails, include: `<failure message="reason"/>`
 - TESTID must be one of: NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J
 5) **NO RESTORATION** - tests build additively on previous state.
-6) **STRICT FRAGMENT EMISSION** - After completing T-D and T-J, immediately emit a clean XML file under `reports/<TESTID>_results.xml` with exactly one `<testcase>` whose `name` begins with the exact test id. No prologue/epilogue or fences.
+6) **STRICT FRAGMENT EMISSION** - After each test, immediately emit a clean XML file under `reports/<TESTID>_results.xml` with exactly one `<testcase>` whose `name` begins with the exact test id. No prologue/epilogue or fences. If the test fails, include a `<failure message="..."/>` and still emit.
 
 ---
 
@@ -52,6 +52,10 @@ CI provides:
   - Allowed ops: `anchor_insert`, `replace_method`, `insert_method`, `delete_method`, `regex_replace`
   - For `anchor_insert`, always set `"position": "before"` or `"after"`.
 - **Precise ranges / atomic batch**: `mcp__unity__apply_text_edits` (non‑overlapping ranges)
+STRICT OP GUARDRAILS
+- Do not use `anchor_replace`. Structured edits must be one of: `anchor_insert`, `replace_method`, `insert_method`, `delete_method`, `regex_replace`.
+- For multi‑spot textual tweaks in one operation, compute non‑overlapping ranges with `mcp__unity__find_in_file` and use `mcp__unity__apply_text_edits`.
+
 - **Hash-only**: `mcp__unity__get_sha` — returns `{sha256,lengthBytes,lastModifiedUtc}` without file body
 - **Validation**: `mcp__unity__validate_script(level:"standard")`
 - **Dynamic targeting**: Use `mcp__unity__find_in_file` to locate current positions of methods/markers
@@ -250,7 +254,8 @@ find_in_file(pattern: "public bool HasTarget\\(\\)")
 1. Verify expected content exists: `find_in_file` for key markers
 2. Check structural integrity: `validate_script(level:"standard")`  
 3. Update SHA tracking for next test's preconditions
-4. Log cumulative changes in test evidence
+4. Emit a per‑test fragment to `reports/<TESTID>_results.xml` immediately. If the test failed, still write a single `<testcase>` with a `<failure message="..."/>` and evidence in `system-out`.
+5. Log cumulative changes in test evidence
 
 **Error Recovery:**
 - If test fails, log current state but continue (don't restore)
@@ -274,3 +279,64 @@ This additive approach produces a more realistic and maintainable test suite tha
 
 BAN ON EXTRA TOOLS AND DIRS
 - Do not use any tools outside `AllowedTools`. Do not create directories; assume `reports/` exists.
+
+---
+
+## XML Fragment Templates (T-F .. T-J)
+
+Use these skeletons verbatim as a starting point. Replace the bracketed placeholders with your evidence and the latest SHA. Ensure each file contains exactly one `<testcase>` element and that the `name` begins with the exact test id.
+
+```xml
+<testcase name="T-F — Atomic Multi-Edit" classname="UnityMCP.NL-T">
+  <system-out><![CDATA[
+Applied 3 non-overlapping edits in one atomic call:
+- HasTarget(): added "// validated access"
+- ApplyBlend(): added "// safe animation"
+- End-of-class: added "// end of test modifications"
+validate_script: OK
+SHA: [sha-here]
+  ]]></system-out>
+</testcase>
+```
+
+```xml
+<testcase name="T-G — Path Normalization Test" classname="UnityMCP.NL-T">
+  <system-out><![CDATA[
+Edit via unity://path/... succeeded.
+Same edit via Assets/... returned stale_file, retried with updated SHA: OK.
+Final SHA: [sha-here]
+  ]]></system-out>
+</testcase>
+```
+
+```xml
+<testcase name="T-H — Validation on Modified File" classname="UnityMCP.NL-T">
+  <system-out><![CDATA[
+validate_script(level:"standard"): OK on the modified file.
+SHA: [sha-here]
+  ]]></system-out>
+</testcase>
+```
+
+```xml
+<testcase name="T-I — Failure Surface Testing" classname="UnityMCP.NL-T">
+  <system-out><![CDATA[
+Overlapping edit: failed cleanly (error captured).
+Stale SHA edit: failed cleanly (error captured).
+File unchanged; final SHA: [sha-here]
+  ]]></system-out>
+</testcase>
+```
+
+```xml
+<testcase name="T-J — Idempotency on Modified File" classname="UnityMCP.NL-T">
+  <system-out><![CDATA[
+Insert marker after "// Tail test C": OK.
+Insert same marker again: no_op: true.
+regex_remove marker: OK.
+regex_remove again: no_op: true.
+validate_script: OK.
+SHA: [sha-here]
+  ]]></system-out>
+</testcase>
+```
