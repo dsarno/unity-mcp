@@ -136,7 +136,7 @@ CI provides:
 **Actions**:
 - Use `find_in_file` to locate current `HasTarget()` method (modified in NL-1)
 - Edit method body interior: change return statement to `return true; /* test modification */`
-- Use `validate: "relaxed"` for interior-only edit
+- Validate with `mcp__unity__validate_script(level:"standard")` for consistency
 - Verify edit succeeded and file remains balanced
 - **Expected final state**: State C + modified HasTarget() body
 

@@ -300,7 +300,7 @@ jobs:
           run: |
             set -eux
             rm -f reports/*.xml reports/*.md || true
-            mkdir -p reports reports/_snapshots scripts
+            mkdir -p reports reports/_snapshots
   
         - name: Create report skeletons
           run: |
@@ -315,51 +315,7 @@ jobs:
             XML
             printf '# Unity NL/T Editing Suite Test Results\n\n' > "$MD_OUT"
   
-        - name: Write safe revert helper (scripts/nlt-revert.sh)
-          shell: bash
-          run: |
-            set -eux
-            cat > scripts/nlt-revert.sh <<'BASH'
-            #!/usr/bin/env bash
-            set -euo pipefail
-            sub="${1:-}"; target_rel="${2:-}"; snap="${3:-}"
-            WS="${GITHUB_WORKSPACE:-$PWD}"
-            ROOT="$WS/TestProjects/UnityMCPTests"
-            t_abs="$(realpath -m "$WS/$target_rel")"
-            s_abs="$(realpath -m "$WS/$snap")"
-            if [[ "$t_abs" != "$ROOT/Assets/"* ]]; then
-              echo "refuse: target outside allowed scope: $t_abs" >&2; exit 2
-            fi
-            mkdir -p "$(dirname "$s_abs")"
-            case "$sub" in
-              snapshot)
-                cp -f "$t_abs" "$s_abs"
-                sha=$(sha256sum "$s_abs" | awk '{print $1}')
-                echo "snapshot_sha=$sha"
-                ;;
-              restore)
-                if [[ ! -f "$s_abs" ]]; then echo "snapshot missing: $s_abs" >&2; exit 3; fi
-                cp -f "$s_abs" "$t_abs"
-                touch "$t_abs"
-                sha=$(sha256sum "$t_abs" | awk '{print $1}')
-                echo "restored_sha=$sha"
-                ;;
-              *)
-                echo "usage: $0 snapshot|restore <target_rel_path> <snapshot_path>" >&2; exit 1
-                ;;
-            esac
-            BASH
-            chmod +x scripts/nlt-revert.sh
-
-        # ---------- Snapshot baseline (pre-agent) ----------
-        - name: Snapshot baseline (pre-agent)
-          if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
-          shell: bash
-          run: |
-            set -euo pipefail
-            TARGET="TestProjects/UnityMCPTests/Assets/Scripts/LongUnityScriptClaudeTest.cs"
-            SNAP="reports/_snapshots/LongUnityScriptClaudeTest.cs.baseline"
-            scripts/nlt-revert.sh snapshot "$TARGET" "$SNAP"
+        # (removed) Revert helper and baseline snapshot are no longer used
   
               
         # ---------- Run suite ----------
