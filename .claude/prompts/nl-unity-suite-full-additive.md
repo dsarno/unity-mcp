@@ -7,22 +7,29 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__list_resources,mcp__un
 
 ---
 
-## Result emission (STRICT)
-- For each test NL-0..NL-4 and T-A..T-J, write ONE XML file at: reports/<TESTID>_results.xml
-- The file must contain a SINGLE root element.
-- When writing a fragment, set `<testcase name="{TESTID} — {Title}" classname="UnityMCP.NL-T">`.
-- `<system-out>` contains evidence; include any key logs.
-- On failure or partial execution, still emit the fragment with a `<failure>` node explaining why.
-- TESTID must be one of: NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J. Use EXACT casing and dash.
-
----
-
 ## Mission
 1) Pick target file (prefer):
    - `unity://path/Assets/Scripts/LongUnityScriptClaudeTest.cs`
 2) Execute **all** NL/T tests in order using minimal, precise edits that **build on each other**.
 3) Validate each edit with `mcp__unity__validate_script(level:"standard")`.
-4) **Report**: write one `<testcase>` XML fragment per test to `reports/<TESTID>_results.xml`. Do **not** read or edit `$JUNIT_OUT`. Do not create directories; assume `reports/` exists and write fragments directly.
+4) **Report**: write one `<testcase>` XML fragment per test to `reports/<TESTID>_results.xml`. Do **not** read or edit `$JUNIT_OUT`.
+
+**CRITICAL XML FORMAT REQUIREMENTS:**
+- Each file must contain EXACTLY one `<testcase>` root element
+- NO prologue, epilogue, code fences, or extra characters
+- NO markdown formatting or explanations outside the XML
+- Use this exact format:
+
+```xml
+<testcase name="T-D — End-of-Class Helper" classname="UnityMCP.NL-T">
+  <system-out><![CDATA[
+(evidence of what was accomplished)
+  ]]></system-out>
+</testcase>
+```
+
+- If test fails, include: `<failure message="reason"/>`
+- TESTID must be one of: NL-0, NL-1, NL-2, NL-3, NL-4, T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J
 5) **NO RESTORATION** - tests build additively on previous state.
 
 ---
@@ -145,6 +152,8 @@ CI provides:
 **Actions**:
 - Use smart anchor matching to find current class-ending brace (after NL-3 tail comments)
 - Insert permanent helper before class brace: `private void TestHelper() { /* placeholder */ }`
+- Validate with `mcp__unity__validate_script(level:"standard")`
+- **IMMEDIATELY** write clean XML fragment to `reports/T-D_results.xml` (no extra text)
 - **Expected final state**: State E + TestHelper() method before class end
 
 ### T-E. Method Evolution Lifecycle (Additive State G)
@@ -199,6 +208,7 @@ CI provides:
 - **Remove (structured)**: `{"op":"regex_replace","pattern":"(?m)^\\s*// idempotency test marker\\r?\\n?","text":""}`
 - **Remove again** (same `regex_replace`) → expect `no_op: true`.
 - `mcp__unity__validate_script(level:"standard")`
+- **IMMEDIATELY** write clean XML fragment to `reports/T-J_results.xml` with evidence of both `no_op: true` outcomes
 - **Expected final state**: State H + verified idempotent behavior
 
 ---
