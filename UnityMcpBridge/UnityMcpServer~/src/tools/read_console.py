@@ -42,8 +42,8 @@ def register_read_console_tools(mcp: FastMCP):
 
         # Set defaults if values are None
         action = action if action is not None else 'get'
-        types = types if types is not None else ['error', 'warning', 'log']
-        format = format if format is not None else 'detailed'
+        types = types if types is not None else ['error']
+        format = format if format is not None else 'json'
         include_stacktrace = include_stacktrace if include_stacktrace is not None else True
 
         # Normalize action if it's a string
@@ -70,4 +70,11 @@ def register_read_console_tools(mcp: FastMCP):
 
         # Use centralized retry helper
         resp = send_command_with_retry("read_console", params_dict)
-        return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)} 
+        if isinstance(resp, dict) and resp.get("success") and not include_stacktrace:
+            lines = resp.get("data", {}).get("lines", [])
+            trimmed = [
+                {"level": l.get("level") or l.get("type"), "message": l.get("message") or l.get("text")}
+                for l in lines
+            ]
+            return {"success": True, "data": {"lines": trimmed}}
+        return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
