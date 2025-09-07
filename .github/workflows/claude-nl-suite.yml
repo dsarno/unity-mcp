@@ -401,10 +401,15 @@ jobs:
             model: claude-3-5-haiku-20241022
             fallback_model: claude-3-7-sonnet-20250219
             append_system_prompt: |
-              You are running the T pass only. Do not run any NL-* tests.
-              Emit only T-A..T-J fragments and stop.
+              You are running the **T pass only**.
+              - You must emit exactly **10 test fragments**, one each for: T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, and T-J.
+              - Write each fragment to its own file in reports/, named `${ID}_results.xml` (e.g., `T-A_results.xml`).
+              - Do not stop after the first test. Continue until **all 10 files exist** and are written.
+              - After writing T-J, you may stop.
+              - Do not emit any NL-* tests.
             timeout_minutes: "30"
             anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
 
         - name: Canonicalize testcase names (NL/T prefixes)
           if: always()
