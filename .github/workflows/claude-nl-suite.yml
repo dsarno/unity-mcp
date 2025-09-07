@@ -202,6 +202,7 @@ jobs:
               manual_args=(-manualLicenseFile "/root/.local/share/unity3d/Unity/Unity_lic.ulf")
             fi
 
+            mkdir -p "$RUNNER_TEMP/unity-status"
             docker rm -f unity-mcp >/dev/null 2>&1 || true
             docker run -d --name unity-mcp --network host \
               -e HOME=/root \
@@ -209,6 +210,7 @@ jobs:
               -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
               -e UNITY_MCP_BIND_HOST=127.0.0.1 \
               -v "${{ github.workspace }}:/workspace" -w /workspace \
+              -v "$RUNNER_TEMP/unity-status:/root/.unity-mcp" \
               -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d:ro" \
               -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d:ro" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
@@ -238,7 +240,7 @@ jobs:
               logs="$(docker logs unity-mcp 2>&1 || true)"
 
               # 1) Primary: status JSON exposes TCP port
-              port="$(docker exec unity-mcp bash -lc 'shopt -s nullglob; for f in /root/.unity-mcp/unity-mcp-status-*.json; do grep -ho "\"unity_port\"[[:space:]]*:[[:space:]]*[0-9]\+" "$f"; done | sed -E "s/.*: *([0-9]+).*/\1/" | head -n1' 2>/dev/null || true)"
+              port="$(jq -r '.unity_port // empty' "$RUNNER_TEMP"/unity-status/unity-mcp-status-*.json 2>/dev/null | head -n1 || true)"
               if [[ -n "${port:-}" ]] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port"; then
                 echo "Bridge ready on port $port"
                 exit 0
@@ -288,9 +290,36 @@ jobs:
                   "env": {
                     "PYTHONUNBUFFERED": "1",
                     "MCP_LOG_LEVEL": "debug",
-                    "UNITY_PROJECT_ROOT": "$GITHUB_WORKSPACE/TestProjects/UnityMCPTests"
+                    "UNITY_PROJECT_ROOT": "$GITHUB_WORKSPACE/TestProjects/UnityMCPTests",
+                    "UNITY_MCP_STATUS_DIR": "$RUNNER_TEMP/unity-status",
+                    "UNITY_MCP_HOST": "127.0.0.1"
                   }
                 }
+              }
+            }
+            JSON
+
+        - name: Pin Claude tool permissions (.claude/settings.json)
+          run: |
+            set -eux
+            mkdir -p .claude
+            cat > .claude/settings.json <<'JSON'
+            {
+              "permissions": {
+                "allow": [
+                  "mcp__unity",
+                  "Edit(reports/**)"
+                ],
+                "deny": [
+                  "Bash",
+                  "MultiEdit",
+                  "WebFetch",
+                  "WebSearch",
+                  "Task",
+                  "TodoWrite",
+                  "NotebookEdit",
+                  "NotebookRead"
+                ]
               }
             }
             JSON
@@ -314,32 +343,65 @@ jobs:
             </testsuite></testsuites>
             XML
             printf '# Unity NL/T Editing Suite Test Results\n\n' > "$MD_OUT"
+
+        - name: Verify Unity bridge status/port
+          run: |
+            set -euxo pipefail
+            ls -la "$RUNNER_TEMP/unity-status" || true
+            jq -r . "$RUNNER_TEMP"/unity-status/unity-mcp-status-*.json | sed -n '1,80p' || true
+
+            shopt -s nullglob
+            status_files=("$RUNNER_TEMP"/unity-status/unity-mcp-status-*.json)
+            if ((${#status_files[@]})); then
+              port="$(grep -hEo '"unity_port"[[:space:]]*:[[:space:]]*[0-9]+' "${status_files[@]}" \
+                | sed -E 's/.*: *([0-9]+).*/\1/' | head -n1 || true)"
+            else
+              port=""
+            fi
+
+            echo "unity_port=$port"
+            if [[ -n "$port" ]]; then
+              timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port" && echo "TCP OK"
+            fi
   
         # (removed) Revert helper and baseline snapshot are no longer used
   
               
-        # ---------- Run suite ----------
-        - name: Run Claude NL suite (single pass)
+        # ---------- Run suite in two passes ----------
+        - name: Run Claude NL pass
           uses: anthropics/claude-code-base-action@beta
           if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
           continue-on-error: true
           with:
             use_node_cache: false
-            prompt_file: .claude/prompts/nl-unity-suite-full-additive.md
+            prompt_file: .claude/prompts/nl-unity-suite-nl.md
             mcp_config: .claude/mcp.json
-            allowed_tools: >-
-              Write,
-              mcp__unity__manage_editor,
-              mcp__unity__list_resources,
-              mcp__unity__read_resource,
-              mcp__unity__apply_text_edits,
-              mcp__unity__script_apply_edits,
-              mcp__unity__validate_script,
-              mcp__unity__find_in_file,
-              mcp__unity__read_console,
-              mcp__unity__get_sha
-            disallowed_tools: TodoWrite,Task,Bash
-            model: claude-3-7-sonnet-latest
+            settings: .claude/settings.json
+            allowed_tools: "mcp__unity,Edit(reports/**)"
+            disallowed_tools: "Bash,MultiEdit,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
+            model: claude-3-7-sonnet-20250219
+            append_system_prompt: |
+              You are running the NL pass only. Do not run any T-* tests.
+              Emit only NL-0..NL-4 fragments and stop.
+            timeout_minutes: "30"
+            anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+        - name: Run Claude T pass
+          uses: anthropics/claude-code-base-action@beta
+          if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
+          continue-on-error: true
+          with:
+            use_node_cache: false
+            prompt_file: .claude/prompts/nl-unity-suite-t.md
+            mcp_config: .claude/mcp.json
+            settings: .claude/settings.json
+            allowed_tools: "mcp__unity,Edit(reports/**)"
+            disallowed_tools: "Bash,MultiEdit,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
+            model: claude-3-5-haiku-20241022
+            fallback_model: claude-3-7-sonnet-20250219
+            append_system_prompt: |
+              You are running the T pass only. Do not run any NL-* tests.
+              Emit only T-A..T-J fragments and stop.
             timeout_minutes: "30"
             anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 

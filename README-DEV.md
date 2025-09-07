@@ -46,6 +46,27 @@ Restores original files from backup.
 2. Allows you to select which backup to restore
 3. Restores both Unity Bridge and Python Server files
 
+### `prune_tool_results.py`
+Compacts large `tool_result` blobs in conversation JSON into concise one-line summaries.
+
+**Usage:**
+```bash
+python3 prune_tool_results.py < reports/claude-execution-output.json > reports/claude-execution-output.pruned.json
+```
+
+The script reads a conversation from `stdin` and writes the pruned version to `stdout`, making logs much easier to inspect or archive.
+
+### Lean Tool Responses
+To keep live conversations small, server tools now emit minimal payloads by default:
+
+* `find_in_file` – first match positions only (`startLine/Col`, `endLine/Col`).
+* `read_console` – full entries by default; pass `include_stacktrace=False` to trim to `{level, message}` (use `count` to limit).
+* `validate_script` – diagnostics summarized as `{warnings, errors}` counts.
+* `get_sha` – `{sha256, lengthBytes}` only.
+* `read_resource` – returns only `metadata.sha256` and byte length unless `include_text` or window arguments are provided.
+
+These defaults dramatically cut token usage without affecting essential information.
+
 ## Finding Unity Package Cache Path
 
 Unity stores Git packages under a version-or-hash folder. Expect something like:
@@ -70,10 +91,12 @@ Note: In recent builds, the Python server sources are also bundled inside the pa
 
 We provide a CI job to run a Natural Language Editing mini-suite against the Unity test project. It spins up a headless Unity container and connects via the MCP bridge.
 
-- Trigger: Workflow dispatch (`Claude NL suite (Unity live)`).
-- Image: `UNITY_IMAGE` (UnityCI) pulled by tag; the job resolves a digest at runtime. Logs are sanitized.
-- Reports: JUnit at `reports/junit-nl-suite.xml`, Markdown at `reports/junit-nl-suite.md`.
-- Publishing: JUnit is normalized to `reports/junit-for-actions.xml` and published; artifacts upload all files under `reports/`.
+ - Trigger: Workflow dispatch (`Claude NL suite (Unity live)`).
+ - Image: `UNITY_IMAGE` (UnityCI) pulled by tag; the job resolves a digest at runtime. Logs are sanitized.
+ - Execution: runs in two passes (NL then T) so each session stays lean.
+ - Tool permissions are pinned via `.claude/settings.json`, allowing Unity MCP tools and edits under `reports/` only.
+ - Reports: JUnit at `reports/junit-nl-suite.xml`, Markdown at `reports/junit-nl-suite.md`.
+ - Publishing: JUnit is normalized to `reports/junit-for-actions.xml` and published; artifacts upload all files under `reports/`.
 
 ### Test target script
 - The repo includes a long, standalone C# script used to exercise larger edits and windows:
@@ -81,7 +104,7 @@ We provide a CI job to run a Natural Language Editing mini-suite against the Uni
   Use this file locally and in CI to validate multi-edit batches, anchor inserts, and windowed reads on a sizable script.
 
 ### Add a new NL test
-- Edit `.claude/prompts/nl-unity-claude-tests-mini.md` (or `nl-unity-suite-full.md` for the larger suite).
+- Edit `.claude/prompts/nl-unity-claude-tests-mini.md` for quick experiments, or `.claude/prompts/nl-unity-suite-nl.md` and `.claude/prompts/nl-unity-suite-t.md` for the full NL and T suites.
 - Follow the conventions: single `<testsuite>` root, one `<testcase>` per sub-test, end system-out with `VERDICT: PASS|FAIL`.
 - Keep edits minimal and reversible; include evidence windows and compact diffs.
 
