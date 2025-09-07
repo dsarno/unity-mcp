@@ -379,7 +379,8 @@ jobs:
             settings: .claude/settings.json
             allowed_tools: "mcp__unity,Edit(reports/**)"
             disallowed_tools: "Bash,MultiEdit,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-            model: claude-3-7-sonnet-20250219
+            model: claude-3-5-haiku-20241022
+            fallback_model: claude-3-7-sonnet-20250219
             append_system_prompt: |
               You are running the NL pass only. Do not run any T-* tests.
               Emit only NL-0..NL-4 fragments and stop.
