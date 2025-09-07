@@ -51,11 +51,11 @@ CI provides:
 - Do not restate tool JSON; summarize in ≤ 2 short lines.
 - Never paste full file contents. For matches, include only the matched line and ±1 line.
 - Prefer `mcp__unity__find_in_file` for targeting; avoid `mcp__unity__read_resource` unless strictly necessary. If needed, limit to `head_bytes ≤ 256` or `tail_lines ≤ 10`.
-- Per‑test `system-out` ≤ 400 chars: brief status + latest SHA only.
-- Console evidence: fetch the last 10 lines and include ≤ 3 lines in the fragment.
+- Per‑test `system-out` ≤ 400 chars: brief status only (no SHA).
+- Console evidence: fetch the last 10 lines with `include_stacktrace:false` and include ≤ 3 lines in the fragment.
 - Avoid quoting multi‑line diffs; reference markers instead.
-— Console scans: perform two reads — last 10 `log/info` lines and up to 3 `error` entries; include ≤ 3 lines total in the fragment; if no errors, state "no errors".
-— Final check is folded into T‑J: perform an errors‑only scan and include a single "no errors" line or up to 3 error lines within the T‑J fragment.
+— Console scans: perform two reads — last 10 `log/info` lines and up to 3 `error` entries (use `include_stacktrace:false`); include ≤ 3 lines total in the fragment; if no errors, state "no errors".
+— Final check is folded into T‑J: perform an errors‑only scan (with `include_stacktrace:false`) and include a single "no errors" line or up to 3 error lines within the T‑J fragment.
 
 ---
 
@@ -85,7 +85,7 @@ STRICT OP GUARDRAILS
 
 **State Tracking:**
 - Track file SHA after each test (`mcp__unity__get_sha`) and use it as a precondition
-  for `apply_text_edits` in T‑F/T‑G/T‑I to exercise `stale_file` semantics.
+  for `apply_text_edits` in T‑F/T‑G/T‑I to exercise `stale_file` semantics. Do not include SHA values in report fragments.
 - Use content signatures (method names, comment markers) to verify expected state
 - Validate structural integrity after each major change
 
@@ -138,7 +138,7 @@ STRICT OP GUARDRAILS
 - Perform a targeted scan for errors/exceptions (type: errors), up to 3 entries
 - Validate no compilation errors from previous operations
 - **Expected final state**: State C (unchanged)
-- **IMMEDIATELY** write clean XML fragment to `reports/NL-4_results.xml` (no extra text). The `<testcase name>` must start with `NL-4`. Include at most 3 lines total across both reads, or simply state "no errors; console OK" (≤ 400 chars), plus the latest SHA.
+- **IMMEDIATELY** write clean XML fragment to `reports/NL-4_results.xml` (no extra text). The `<testcase name>` must start with `NL-4`. Include at most 3 lines total across both reads, or simply state "no errors; console OK" (≤ 400 chars).
 
 ### T-A. Temporary Helper Lifecycle (Returns to State C)
 **Goal**: Test insert → verify → delete cycle for temporary code
@@ -148,6 +148,9 @@ STRICT OP GUARDRAILS
 - Verify helper method exists and compiles
 - Delete helper method via structured delete operation
 - **Expected final state**: Return to State C (helper removed, other changes intact)
+
+### Late-Test Editing Rule
+- When modifying a method body, use `mcp__unity__script_apply_edits`. If the method is expression-bodied (`=>`), convert it to a block or replace the whole method definition. After the edit, run `mcp__unity__validate_script` and rollback on error. Use `//` comments in inserted code.
 
 ### T-B. Method Body Interior Edit (Additive State D)
 **Goal**: Edit method interior without affecting structure, on modified file
@@ -172,7 +175,7 @@ STRICT OP GUARDRAILS
 - Use smart anchor matching to find current class-ending brace (after NL-3 tail comments)
 - Insert permanent helper before class brace: `private void TestHelper() { /* placeholder */ }`
 - Validate with `mcp__unity__validate_script(level:"standard")`
-- **IMMEDIATELY** write clean XML fragment to `reports/T-D_results.xml` (no extra text). The `<testcase name>` must start with `T-D`. Include brief evidence and the latest SHA in `system-out`.
+- **IMMEDIATELY** write clean XML fragment to `reports/T-D_results.xml` (no extra text). The `<testcase name>` must start with `T-D`. Include brief evidence in `system-out`.
 - **Expected final state**: State E + TestHelper() method before class end
 
 ### T-E. Method Evolution Lifecycle (Additive State G)
@@ -193,7 +196,7 @@ STRICT OP GUARDRAILS
   3. Add final class comment: `// end of test modifications`
 - All edits computed from same file snapshot, applied atomically
 - **Expected final state**: State G + three coordinated comments
-- After applying the atomic edits, run `validate_script(level:"standard")` and emit a clean fragment to `reports/T-F_results.xml` with a short summary and the latest SHA.
+- After applying the atomic edits, run `validate_script(level:"standard")` and emit a clean fragment to `reports/T-F_results.xml` with a short summary.
 
 ### T-G. Path Normalization Test (No State Change)
 **Goal**: Verify URI forms work equivalently on modified file
@@ -203,7 +206,7 @@ STRICT OP GUARDRAILS
 - Second should return `stale_file`, retry with updated SHA
 - Verify both URI forms target same file
 - **Expected final state**: State H (no content change, just path testing)
-- Emit `reports/T-G_results.xml` showing evidence of stale SHA handling and final SHA.
+- Emit `reports/T-G_results.xml` showing evidence of stale SHA handling.
 
 ### T-H. Validation on Modified File (No State Change)
 **Goal**: Ensure validation works correctly on heavily modified file
@@ -211,7 +214,7 @@ STRICT OP GUARDRAILS
 - Run `validate_script(level:"standard")` on current state
 - Verify no structural errors despite extensive modifications
 - **Expected final state**: State H (validation only, no edits)
-- Emit `reports/T-H_results.xml` confirming validation OK and including the latest SHA.
+- Emit `reports/T-H_results.xml` confirming validation OK.
 
 ### T-I. Failure Surface Testing (No State Change)
 **Goal**: Test error handling on real modified file
@@ -220,7 +223,7 @@ STRICT OP GUARDRAILS
 - Attempt edit with stale SHA (should fail cleanly) 
 - Verify error responses are informative
 - **Expected final state**: State H (failed operations don't modify file)
-- Emit `reports/T-I_results.xml` capturing error evidence and final SHA; file must contain one `<testcase>`.
+- Emit `reports/T-I_results.xml` capturing error evidence; file must contain one `<testcase>`.
 
 ### T-J. Idempotency on Modified File (Additive State I)
 **Goal**: Verify operations behave predictably when repeated
@@ -232,7 +235,7 @@ STRICT OP GUARDRAILS
 - **Remove again** (same `regex_replace`) → expect `no_op: true`.
 - `mcp__unity__validate_script(level:"standard")`
 - Perform a final console scan for errors/exceptions (errors only, up to 3); include "no errors" if none
-- **IMMEDIATELY** write clean XML fragment to `reports/T-J_results.xml` with evidence of both `no_op: true` outcomes and the console result. The `<testcase name>` must start with `T-J` and include the latest SHA.
+- **IMMEDIATELY** write clean XML fragment to `reports/T-J_results.xml` with evidence of both `no_op: true` outcomes and the console result. The `<testcase name>` must start with `T-J`.
 - **Expected final state**: State H + verified idempotent behavior
 
 ---
@@ -299,7 +302,7 @@ BAN ON EXTRA TOOLS AND DIRS
 
 ## XML Fragment Templates (T-F .. T-J)
 
-Use these skeletons verbatim as a starting point. Replace the bracketed placeholders with your evidence and the latest SHA. Ensure each file contains exactly one `<testcase>` element and that the `name` begins with the exact test id.
+Use these skeletons verbatim as a starting point. Replace the bracketed placeholders with your evidence. Ensure each file contains exactly one `<testcase>` element and that the `name` begins with the exact test id.
 
 ```xml
 <testcase name="T-F — Atomic Multi-Edit" classname="UnityMCP.NL-T">
@@ -309,7 +312,6 @@ Applied 3 non-overlapping edits in one atomic call:
 - ApplyBlend(): added "// safe animation"
 - End-of-class: added "// end of test modifications"
 validate_script: OK
-SHA: [sha-here]
   ]]></system-out>
 </testcase>
 ```
@@ -319,7 +321,6 @@ SHA: [sha-here]
   <system-out><![CDATA[
 Read Unity console (INFO): OK.
 No compilation errors detected.
-SHA: [sha-here]
   ]]></system-out>
 </testcase>
 ```
@@ -328,8 +329,7 @@ SHA: [sha-here]
 <testcase name="T-G — Path Normalization Test" classname="UnityMCP.NL-T">
   <system-out><![CDATA[
 Edit via unity://path/... succeeded.
-Same edit via Assets/... returned stale_file, retried with updated SHA: OK.
-Final SHA: [sha-here]
+Same edit via Assets/... returned stale_file, retried with updated hash: OK.
   ]]></system-out>
 </testcase>
 ```
@@ -338,7 +338,6 @@ Final SHA: [sha-here]
 <testcase name="T-H — Validation on Modified File" classname="UnityMCP.NL-T">
   <system-out><![CDATA[
 validate_script(level:"standard"): OK on the modified file.
-SHA: [sha-here]
   ]]></system-out>
 </testcase>
 ```
@@ -347,8 +346,8 @@ SHA: [sha-here]
 <testcase name="T-I — Failure Surface Testing" classname="UnityMCP.NL-T">
   <system-out><![CDATA[
 Overlapping edit: failed cleanly (error captured).
-Stale SHA edit: failed cleanly (error captured).
-File unchanged; final SHA: [sha-here]
+Stale hash edit: failed cleanly (error captured).
+File unchanged.
   ]]></system-out>
 </testcase>
 ```
@@ -361,7 +360,6 @@ Insert same marker again: no_op: true.
 regex_remove marker: OK.
 regex_remove again: no_op: true.
 validate_script: OK.
-SHA: [sha-here]
   ]]></system-out>
 </testcase>
 ```
