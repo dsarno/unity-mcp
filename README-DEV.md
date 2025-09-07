@@ -46,6 +46,26 @@ Restores original files from backup.
 2. Allows you to select which backup to restore
 3. Restores both Unity Bridge and Python Server files
 
+### `prune_tool_results.py`
+Compacts large `tool_result` blobs in conversation JSON into concise one-line summaries.
+
+**Usage:**
+```bash
+python3 prune_tool_results.py < reports/claude-execution-output.json > reports/claude-execution-output.pruned.json
+```
+
+The script reads a conversation from `stdin` and writes the pruned version to `stdout`, making logs much easier to inspect or archive.
+
+### Lean Tool Responses
+To keep live conversations small, server tools now emit minimal payloads by default:
+
+* `find_in_file` – first match positions only (`startLine/Col`, `endLine/Col`).
+* `read_console` – up to 10 error entries with `{level, message}`.
+* `validate_script` – diagnostics summarized as `{warnings, errors}` counts.
+* `get_sha` – `{sha256, lengthBytes}` only.
+
+These defaults dramatically cut token usage without affecting essential information.
+
 ## Finding Unity Package Cache Path
 
 Unity stores Git packages under a version-or-hash folder. Expect something like:

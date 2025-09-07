@@ -320,10 +320,10 @@ def register_resource_tools(mcp: FastMCP) -> None:
         ctx: Context | None = None,
         ignore_case: bool | None = True,
         project_root: str | None = None,
-        max_results: int | None = 200,
+        max_results: int | None = 1,
     ) -> Dict[str, Any]:
         """
-        Searches a file with a regex pattern and returns line numbers and excerpts.
+        Searches a file with a regex pattern and returns match positions only.
         - uri: unity://path/Assets/... or file path form supported by read_resource
         - pattern: regular expression (Python re)
         - ignore_case: case-insensitive by default
@@ -345,8 +345,17 @@ def register_resource_tools(mcp: FastMCP) -> None:
             results = []
             lines = text.splitlines()
             for i, line in enumerate(lines, start=1):
-                if rx.search(line):
-                    results.append({"line": i, "text": line})
+                m = rx.search(line)
+                if m:
+                    start_col, end_col = m.span()
+                    results.append(
+                        {
+                            "startLine": i,
+                            "startCol": start_col + 1,
+                            "endLine": i,
+                            "endCol": end_col + 1,
+                        }
+                    )
                     if max_results and len(results) >= max_results:
                         break
 
