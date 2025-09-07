@@ -149,6 +149,9 @@ STRICT OP GUARDRAILS
 - Delete helper method via structured delete operation
 - **Expected final state**: Return to State C (helper removed, other changes intact)
 
+### Late-Test Editing Rule
+- When modifying a method body, use `mcp__unity__script_apply_edits`. If the method is expression-bodied (`=>`), convert it to a block or replace the whole method definition. After the edit, run `mcp__unity__validate_script` and rollback on error. Use `//` comments in inserted code.
+
 ### T-B. Method Body Interior Edit (Additive State D)
 **Goal**: Edit method interior without affecting structure, on modified file
 **Actions**:
