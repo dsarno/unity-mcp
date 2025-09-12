@@ -69,13 +69,15 @@ jobs:
             UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
           run: |
             set -euxo pipefail
+            mkdir -p "$HOME/.config/unity3d" "$HOME/.local/share/unity3d" "$HOME/.cache/unity3d"
             docker run --rm --network host \
               -e HOME=/root \
               -e UNITY_EMAIL -e UNITY_PASSWORD \
               -v "$HOME/.config/unity3d:/root/.config/unity3d" \
               -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
+              -v "$HOME/.cache/unity3d:/root/.cache/unity3d" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
-                -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -quit || true
+                -serial -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -quit || true
 
         # ---------- Warm up project (import Library once) ----------
         - name: Warm up project (import Library once)
@@ -85,11 +87,13 @@ jobs:
             UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
           run: |
             set -euxo pipefail
+            mkdir -p "$HOME/.config/unity3d" "$HOME/.local/share/unity3d" "$HOME/.cache/unity3d"
             docker run --rm --network host \
               -e HOME=/root \
               -v "${{ github.workspace }}:/workspace" -w /workspace \
               -v "$HOME/.config/unity3d:/root/.config/unity3d" \
               -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
+              -v "$HOME/.cache/unity3d:/root/.cache/unity3d" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
                 -quit
@@ -111,6 +115,7 @@ jobs:
             set -euxo pipefail
 
             mkdir -p "$RUNNER_TEMP/unity-status"
+            mkdir -p "$HOME/.config/unity3d" "$HOME/.local/share/unity3d" "$HOME/.cache/unity3d"
             docker rm -f unity-mcp >/dev/null 2>&1 || true
             docker run -d --name unity-mcp --network host \
               -e HOME=/root \
@@ -121,6 +126,7 @@ jobs:
               -v "$RUNNER_TEMP/unity-status:/root/.unity-mcp" \
               -v "$HOME/.config/unity3d:/root/.config/unity3d" \
               -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
+              -v "$HOME/.cache/unity3d:/root/.cache/unity3d" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -stackTraceLogType Full \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
