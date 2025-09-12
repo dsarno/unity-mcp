@@ -62,6 +62,7 @@ jobs:
           uses: game-ci/unity-activate@v2
           with:
             unityVersion: 2021.3.45f1
+            image: ${{ env.UNITY_IMAGE }}
           env:
             UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
             UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
