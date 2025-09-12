@@ -25,14 +25,9 @@ jobs:
         # ---------- Secrets check ----------
         - name: Detect secrets (outputs)
           id: detect
-          env:
-            UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
-            UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-            ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           run: |
-            set -e
-            if [ -n "$ANTHROPIC_API_KEY" ]; then echo "anthropic_ok=true" >> "$GITHUB_OUTPUT"; else echo "anthropic_ok=false" >> "$GITHUB_OUTPUT"; fi
-            if [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; then echo "unity_ok=true" >> "$GITHUB_OUTPUT"; else echo "unity_ok=false" >> "$GITHUB_OUTPUT"; fi
+            echo "anthropic_ok=${{ secrets.ANTHROPIC_API_KEY != '' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
+            echo "unity_ok=${{ secrets.UNITY_LICENSE != '' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
   
         - uses: actions/checkout@v4
           with:
@@ -61,37 +56,24 @@ jobs:
               echo "No MCP Python deps found (skipping)"
             fi
 
-        # --- Activate Unity via EBL (email/password only) and write entitlement to host ---
-        - name: Activate Unity (EBL via container - host-mount)
+        # --- Stage Personal entitlement (UNITY_LICENSE) ---
+        - name: Stage Personal entitlement (UNITY_LICENSE)
           if: steps.detect.outputs.unity_ok == 'true'
           shell: bash
           env:
-            UNITY_IMAGE:    ${{ env.UNITY_IMAGE }}
-            UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
-            UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+            UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           run: |
-            set -euxo pipefail
-            # host dirs to receive the full Unity config and local-share
-            mkdir -p "$RUNNER_TEMP/unity-config" "$RUNNER_TEMP/unity-local"
-
-            docker run --rm --network host \
-              -e HOME=/root \
-              -e UNITY_EMAIL -e UNITY_PASSWORD \
-              -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d" \
-              -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d" \
-              "$UNITY_IMAGE" bash -lc '
-                set -euxo pipefail
-                /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
-                  -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -quit || true
-                ls -la /root/.config/unity3d/Unity/licenses || true
-              '
-            # Verify entitlement written to host mount
-            if ! find "$RUNNER_TEMP/unity-config" -type f -iname "*.xml" | grep -q .; then
-              echo "No entitlement produced via EBL; cannot continue." >&2
-              exit 1
+            set -eu
+            mkdir -p "$RUNNER_TEMP/unity-config/Unity/licenses" "$RUNNER_TEMP/unity-local/Unity"
+            f="$RUNNER_TEMP/unity-config/Unity/licenses/UnityEntitlementLicense.xml"
+            if printf "%s" "$UNITY_LICENSE" | base64 -d - >/dev/null 2>&1; then
+              printf "%s" "$UNITY_LICENSE" | base64 -d - > "$f"
+            else
+              printf "%s" "$UNITY_LICENSE" > "$f"
             fi
+            chmod 600 "$f" || true
 
-        # EBL entitlement is already written directly to $RUNNER_TEMP/unity-config by the activation step
+        # Entitlement XML is staged at $RUNNER_TEMP/unity-config/Unity/licenses
 
         # ---------- Warm up project (import Library once) ----------
         - name: Warm up project (import Library once)
