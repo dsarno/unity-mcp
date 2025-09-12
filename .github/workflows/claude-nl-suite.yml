@@ -74,6 +74,24 @@ jobs:
             fi
             chmod 600 "$f" || true
 
+        # --- Refresh login token so LicensingClient has EBL token on CI machine ---
+        - name: Refresh login token (EBL after staging)
+          if: ${{ steps.detect.outputs.have_license == 'true' && steps.detect.outputs.have_ebl == 'true' }}
+          shell: bash
+          env:
+            UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
+            UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+            UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          run: |
+            set -euxo pipefail
+            docker run --rm --network host \
+              -e HOME=/root \
+              -e UNITY_EMAIL -e UNITY_PASSWORD \
+              -v "$HOME/.config/unity3d:/root/.config/unity3d" \
+              -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
+              "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
+                -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -quit || true
+
         # --- Activate Unity using GameCI (EBL) when no UNITY_LICENSE ---
         - name: Activate Unity (GameCI EBL)
           if: ${{ steps.detect.outputs.have_license != 'true' && steps.detect.outputs.have_ebl == 'true' }}
