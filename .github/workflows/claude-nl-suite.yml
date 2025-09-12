@@ -73,11 +73,20 @@ jobs:
             docker run --rm --network host \
               -e HOME=/root \
               -e UNITY_EMAIL -e UNITY_PASSWORD \
+              -v "${{ github.workspace }}:/workspace" -w /workspace \
               -v "$HOME/.config/unity3d:/root/.config/unity3d" \
               -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
               -v "$HOME/.cache/unity3d:/root/.cache/unity3d" \
-              "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
-                -serial -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -quit || true
+              "$UNITY_IMAGE" bash -lc '
+                set -euxo pipefail
+                /opt/unity/Editor/Unity -batchmode -logFile - \
+                  -serial -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -quit || true
+                /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
+                  -projectPath /workspace/TestProjects/UnityMCPTests -quit || true
+                echo "Entitlement file:" || true
+                ls -l /root/.config/unity3d/Unity/licenses/UnityEntitlementLicense.xml || true
+                tail -n 80 /root/.config/unity3d/Unity/Unity.Licensing.Client.log || true
+              '
 
         # ---------- Warm up project (import Library once) ----------
         - name: Warm up project (import Library once)
