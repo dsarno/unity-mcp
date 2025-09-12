@@ -26,19 +26,13 @@ jobs:
         - name: Detect secrets (outputs)
           id: detect
           env:
-            UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
             UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
             UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           run: |
             set -e
             if [ -n "$ANTHROPIC_API_KEY" ]; then echo "anthropic_ok=true" >> "$GITHUB_OUTPUT"; else echo "anthropic_ok=false" >> "$GITHUB_OUTPUT"; fi
-            if [ -n "$UNITY_LICENSE" ] || { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; }; then
-              echo "unity_ok=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "unity_ok=false" >> "$GITHUB_OUTPUT"
-            fi
+            if [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; then echo "unity_ok=true" >> "$GITHUB_OUTPUT"; else echo "unity_ok=false" >> "$GITHUB_OUTPUT"; fi
   
         - uses: actions/checkout@v4
           with:
@@ -67,110 +61,46 @@ jobs:
               echo "No MCP Python deps found (skipping)"
             fi
 
-        # --- Licensing: allow both ULF and EBL when available ---
-        - name: Decide license sources
-          id: lic
-          shell: bash
-          env:
-            UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
-            UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
-            UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
-          run: |
-            set -eu
-            use_ulf=false; use_ebl=false
-            [[ -n "${UNITY_LICENSE:-}" ]] && use_ulf=true
-            [[ -n "${UNITY_EMAIL:-}" && -n "${UNITY_PASSWORD:-}" ]] && use_ebl=true
-            echo "use_ulf=$use_ulf" >> "$GITHUB_OUTPUT"
-            echo "use_ebl=$use_ebl" >> "$GITHUB_OUTPUT"
-            echo "has_serial=$([[ -n "${UNITY_SERIAL:-}" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-
-        - name: Stage Unity .ulf license (from secret)
-          if: steps.lic.outputs.use_ulf == 'true'
-          id: ulf
-          env:
-            UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          shell: bash
-          run: |
-            set -eu
-            mkdir -p "$RUNNER_TEMP/unity-license-ulf" "$RUNNER_TEMP/unity-local/Unity"
-            f="$RUNNER_TEMP/unity-license-ulf/Unity_lic.ulf"
-            if printf "%s" "$UNITY_LICENSE" | base64 -d - >/dev/null 2>&1; then
-              printf "%s" "$UNITY_LICENSE" | base64 -d - > "$f"
-            else
-              printf "%s" "$UNITY_LICENSE" > "$f"
-            fi
-            chmod 600 "$f" || true
-            # If someone pasted an entitlement XML into UNITY_LICENSE by mistake, re-home it:
-            if head -c 100 "$f" | grep -qi '<\?xml'; then
-              mkdir -p "$RUNNER_TEMP/unity-config/Unity/licenses"
-              mv "$f" "$RUNNER_TEMP/unity-config/Unity/licenses/UnityEntitlementLicense.xml"
-              echo "ok=false" >> "$GITHUB_OUTPUT"
-            elif grep -qi '<Signature>' "$f"; then
-              # provide it in the standard local-share path too
-              cp -f "$f" "$RUNNER_TEMP/unity-local/Unity/Unity_lic.ulf"
-              echo "ok=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "ok=false" >> "$GITHUB_OUTPUT"
-            fi
-
-        # --- Activate via EBL inside the same Unity image (writes host-side entitlement) ---
+        # --- Activate Unity via EBL (email/password only) and write entitlement to host ---
         - name: Activate Unity (EBL via container - host-mount)
-          if: steps.lic.outputs.use_ebl == 'true'
+          if: steps.detect.outputs.unity_ok == 'true'
           shell: bash
           env:
             UNITY_IMAGE:    ${{ env.UNITY_IMAGE }}
             UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
             UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
           run: |
             set -euxo pipefail
             # host dirs to receive the full Unity config and local-share
             mkdir -p "$RUNNER_TEMP/unity-config" "$RUNNER_TEMP/unity-local"
 
-            # Try Pro first if serial is present, otherwise named-user EBL.
             docker run --rm --network host \
               -e HOME=/root \
-              -e UNITY_EMAIL -e UNITY_PASSWORD -e UNITY_SERIAL \
+              -e UNITY_EMAIL -e UNITY_PASSWORD \
               -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d" \
               -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d" \
               "$UNITY_IMAGE" bash -lc '
                 set -euxo pipefail
-                if [[ -n "${UNITY_SERIAL:-}" ]]; then
-                  /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
-                    -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -serial "$UNITY_SERIAL" -quit || true
-                else
-                  /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
-                    -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -quit || true
-                fi
+                /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
+                  -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -quit || true
                 ls -la /root/.config/unity3d/Unity/licenses || true
               '
-
-            # Verify entitlement written to host mount; allow ULF-only runs to proceed
+            # Verify entitlement written to host mount
             if ! find "$RUNNER_TEMP/unity-config" -type f -iname "*.xml" | grep -q .; then
-              if [[ "${{ steps.ulf.outputs.ok }}" == "true" ]]; then
-                echo "EBL entitlement not found; proceeding with ULF-only (ok=true)."
-              else
-                echo "No entitlement produced and no valid ULF; cannot continue." >&2
-                exit 1
-              fi
+              echo "No entitlement produced via EBL; cannot continue." >&2
+              exit 1
             fi
 
         # EBL entitlement is already written directly to $RUNNER_TEMP/unity-config by the activation step
 
         # ---------- Warm up project (import Library once) ----------
         - name: Warm up project (import Library once)
-          if: steps.lic.outputs.use_ulf == 'true' || steps.lic.outputs.use_ebl == 'true'
+          if: steps.detect.outputs.unity_ok == 'true'
           shell: bash
           env:
             UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
-            ULF_OK: ${{ steps.ulf.outputs.ok }}
           run: |
             set -euxo pipefail
-            manual_args=()
-            if [[ "${ULF_OK:-false}" == "true" ]]; then
-              manual_args=(-manualLicenseFile "/root/.local/share/unity3d/Unity/Unity_lic.ulf")
-            fi
             docker run --rm --network host \
               -e HOME=/root \
               -v "${{ github.workspace }}:/workspace" -w /workspace \
@@ -178,7 +108,6 @@ jobs:
               -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
-                "${manual_args[@]}" \
                 -quit
   
         # ---------- Clean old MCP status ----------
@@ -190,17 +119,12 @@ jobs:
   
         # ---------- Start headless Unity (persistent bridge) ----------
         - name: Start Unity (persistent bridge)
-          if: steps.lic.outputs.use_ulf == 'true' || steps.lic.outputs.use_ebl == 'true'
+          if: steps.detect.outputs.unity_ok == 'true'
           shell: bash
           env:
             UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
-            ULF_OK: ${{ steps.ulf.outputs.ok }}
           run: |
             set -euxo pipefail
-            manual_args=()
-            if [[ "${ULF_OK:-false}" == "true" ]]; then
-              manual_args=(-manualLicenseFile "/root/.local/share/unity3d/Unity/Unity_lic.ulf")
-            fi
 
             mkdir -p "$RUNNER_TEMP/unity-status"
             docker rm -f unity-mcp >/dev/null 2>&1 || true
@@ -216,7 +140,6 @@ jobs:
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -stackTraceLogType Full \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
-                "${manual_args[@]}" \
                 -executeMethod MCPForUnity.Editor.MCPForUnityBridge.StartAutoConnect
   
         # ---------- Wait for Unity bridge ----------
