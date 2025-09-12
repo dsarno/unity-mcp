@@ -27,7 +27,8 @@ jobs:
           id: detect
           run: |
             echo "anthropic_ok=${{ secrets.ANTHROPIC_API_KEY != '' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
-            echo "unity_ok=${{ (secrets.UNITY_LICENSE != '' || (secrets.UNITY_EMAIL != '' && secrets.UNITY_PASSWORD != '')) && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
+            echo "have_license=${{ secrets.UNITY_LICENSE != '' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
+            echo "have_ebl=${{ (secrets.UNITY_EMAIL != '' && secrets.UNITY_PASSWORD != '') && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
   
         - uses: actions/checkout@v4
           with:
@@ -58,21 +59,24 @@ jobs:
 
         # --- Stage entitlement if UNITY_LICENSE provided ---
         - name: Stage Personal entitlement (UNITY_LICENSE)
-          if: ${{ secrets.UNITY_LICENSE != '' }}
+          if: ${{ steps.detect.outputs.have_license == 'true' }}
+          shell: bash
+          env:
+            UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           run: |
             set -eu
             mkdir -p "$HOME/.config/unity3d/Unity/licenses" "$HOME/.local/share/unity3d/Unity"
             f="$HOME/.config/unity3d/Unity/licenses/UnityEntitlementLicense.xml"
-            if printf "%s" "${{ secrets.UNITY_LICENSE }}" | base64 -d - >/dev/null 2>&1; then
-              printf "%s" "${{ secrets.UNITY_LICENSE }}" | base64 -d - > "$f"
+            if printf "%s" "$UNITY_LICENSE" | base64 -d - >/dev/null 2>&1; then
+              printf "%s" "$UNITY_LICENSE" | base64 -d - > "$f"
             else
-              printf "%s" "${{ secrets.UNITY_LICENSE }}" > "$f"
+              printf "%s" "$UNITY_LICENSE" > "$f"
             fi
             chmod 600 "$f" || true
 
         # --- Activate Unity using GameCI (EBL) when no UNITY_LICENSE ---
         - name: Activate Unity (GameCI EBL)
-          if: ${{ secrets.UNITY_LICENSE == '' && secrets.UNITY_EMAIL != '' && secrets.UNITY_PASSWORD != '' }}
+          if: ${{ steps.detect.outputs.have_license != 'true' && steps.detect.outputs.have_ebl == 'true' }}
           uses: game-ci/unity-activate@v2
           with:
             unityVersion: 2021.3.44f1
@@ -82,7 +86,7 @@ jobs:
 
         # ---------- Warm up project (import Library once) ----------
         - name: Warm up project (import Library once)
-          if: steps.detect.outputs.unity_ok == 'true'
+          if: ${{ steps.detect.outputs.have_license == 'true' || steps.detect.outputs.have_ebl == 'true' }}
           shell: bash
           env:
             UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
@@ -106,7 +110,7 @@ jobs:
   
         # ---------- Start headless Unity (persistent bridge) ----------
         - name: Start Unity (persistent bridge)
-          if: steps.detect.outputs.unity_ok == 'true'
+          if: ${{ steps.detect.outputs.have_license == 'true' || steps.detect.outputs.have_ebl == 'true' }}
           shell: bash
           env:
             UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
