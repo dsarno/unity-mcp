@@ -27,7 +27,7 @@ jobs:
           id: detect
           run: |
             echo "anthropic_ok=${{ secrets.ANTHROPIC_API_KEY != '' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
-            echo "unity_ok=${{ secrets.UNITY_LICENSE != '' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
+            echo "unity_ok=${{ (secrets.UNITY_EMAIL != '' && secrets.UNITY_PASSWORD != '') && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
   
         - uses: actions/checkout@v4
           with:
@@ -56,24 +56,15 @@ jobs:
               echo "No MCP Python deps found (skipping)"
             fi
 
-        # --- Stage Personal entitlement (UNITY_LICENSE) ---
-        - name: Stage Personal entitlement (UNITY_LICENSE)
+        # --- Activate Unity using GameCI (EBL) ---
+        - name: Activate Unity (GameCI EBL)
           if: steps.detect.outputs.unity_ok == 'true'
-          shell: bash
+          uses: game-ci/unity-activate@v3
+          with:
+            unityVersion: 2021.3.45f1
           env:
-            UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          run: |
-            set -eu
-            mkdir -p "$RUNNER_TEMP/unity-config/Unity/licenses" "$RUNNER_TEMP/unity-local/Unity"
-            f="$RUNNER_TEMP/unity-config/Unity/licenses/UnityEntitlementLicense.xml"
-            if printf "%s" "$UNITY_LICENSE" | base64 -d - >/dev/null 2>&1; then
-              printf "%s" "$UNITY_LICENSE" | base64 -d - > "$f"
-            else
-              printf "%s" "$UNITY_LICENSE" > "$f"
-            fi
-            chmod 600 "$f" || true
-
-        # Entitlement XML is staged at $RUNNER_TEMP/unity-config/Unity/licenses
+            UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+            UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
 
         # ---------- Warm up project (import Library once) ----------
         - name: Warm up project (import Library once)
@@ -86,8 +77,8 @@ jobs:
             docker run --rm --network host \
               -e HOME=/root \
               -v "${{ github.workspace }}:/workspace" -w /workspace \
-              -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d" \
-              -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d" \
+              -v "$HOME/.config/unity3d:/root/.config/unity3d:ro" \
+              -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d:ro" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
                 -quit
@@ -117,8 +108,8 @@ jobs:
               -e UNITY_MCP_BIND_HOST=127.0.0.1 \
               -v "${{ github.workspace }}:/workspace" -w /workspace \
               -v "$RUNNER_TEMP/unity-status:/root/.unity-mcp" \
-              -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d:ro" \
-              -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d:ro" \
+              -v "$HOME/.config/unity3d:/root/.config/unity3d:ro" \
+              -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d:ro" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -stackTraceLogType Full \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
@@ -862,13 +853,4 @@ jobs:
           run: |
             docker logs --tail 400 unity-mcp | sed -E 's/((email|serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' || true
             docker rm -f unity-mcp || true
-
-        - name: Return Pro license (if used)
-          if: always() && steps.lic.outputs.use_ebl == 'true' && steps.lic.outputs.has_serial == 'true'
-          uses: game-ci/unity-return-license@v2
-          continue-on-error: true
-          env:
-            UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
-            UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-            UNITY_SERIAL:   ${{ secrets.UNITY_SERIAL }}
   
