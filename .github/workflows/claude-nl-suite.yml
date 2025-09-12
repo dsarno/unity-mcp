@@ -113,8 +113,8 @@ jobs:
             docker run --rm --network host \
               -e HOME=/root \
               -v "${{ github.workspace }}:/workspace" -w /workspace \
-              -v "$HOME/.config/unity3d:/root/.config/unity3d:ro" \
-              -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d:ro" \
+              -v "$HOME/.config/unity3d:/root/.config/unity3d" \
+              -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
                 -quit
@@ -144,8 +144,8 @@ jobs:
               -e UNITY_MCP_BIND_HOST=127.0.0.1 \
               -v "${{ github.workspace }}:/workspace" -w /workspace \
               -v "$RUNNER_TEMP/unity-status:/root/.unity-mcp" \
-              -v "$HOME/.config/unity3d:/root/.config/unity3d:ro" \
-              -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d:ro" \
+              -v "$HOME/.config/unity3d:/root/.config/unity3d" \
+              -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
               "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
                 -stackTraceLogType Full \
                 -projectPath /workspace/TestProjects/UnityMCPTests \
