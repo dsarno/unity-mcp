@@ -27,8 +27,8 @@ jobs:
           id: detect
           run: |
             echo "anthropic_ok=${{ secrets.ANTHROPIC_API_KEY != '' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
-            echo "have_license=${{ secrets.UNITY_LICENSE != '' && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
             echo "have_ebl=${{ (secrets.UNITY_EMAIL != '' && secrets.UNITY_PASSWORD != '') && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
+            echo "unity_ok=${{ (secrets.UNITY_EMAIL != '' && secrets.UNITY_PASSWORD != '') && 'true' || 'false' }}" >> "$GITHUB_OUTPUT"
   
         - uses: actions/checkout@v4
           with:
@@ -57,44 +57,11 @@ jobs:
               echo "No MCP Python deps found (skipping)"
             fi
 
-        # --- Stage entitlement if UNITY_LICENSE provided ---
-        - name: Stage Personal entitlement (UNITY_LICENSE)
-          if: ${{ steps.detect.outputs.have_license == 'true' }}
-          shell: bash
-          env:
-            UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          run: |
-            set -eu
-            mkdir -p "$HOME/.config/unity3d/Unity/licenses" "$HOME/.local/share/unity3d/Unity"
-            f="$HOME/.config/unity3d/Unity/licenses/UnityEntitlementLicense.xml"
-            if printf "%s" "$UNITY_LICENSE" | base64 -d - >/dev/null 2>&1; then
-              printf "%s" "$UNITY_LICENSE" | base64 -d - > "$f"
-            else
-              printf "%s" "$UNITY_LICENSE" > "$f"
-            fi
-            chmod 600 "$f" || true
-
-        # --- Refresh login token so LicensingClient has EBL token on CI machine ---
-        - name: Refresh login token (EBL after staging)
-          if: ${{ steps.detect.outputs.have_license == 'true' && steps.detect.outputs.have_ebl == 'true' }}
-          shell: bash
-          env:
-            UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
-            UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-            UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          run: |
-            set -euxo pipefail
-            docker run --rm --network host \
-              -e HOME=/root \
-              -e UNITY_EMAIL -e UNITY_PASSWORD \
-              -v "$HOME/.config/unity3d:/root/.config/unity3d" \
-              -v "$HOME/.local/share/unity3d:/root/.local/share/unity3d" \
-              "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
-                -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" -quit || true
+        # (removed) No local entitlement staging; EBL-only activation
 
         # --- Activate Unity using GameCI (EBL) when no UNITY_LICENSE ---
         - name: Activate Unity (GameCI EBL)
-          if: ${{ steps.detect.outputs.have_license != 'true' && steps.detect.outputs.have_ebl == 'true' }}
+          if: ${{ steps.detect.outputs.have_ebl == 'true' }}
           uses: game-ci/unity-activate@v2
           with:
             unityVersion: 2021.3.44f1
@@ -104,7 +71,7 @@ jobs:
 
         # ---------- Warm up project (import Library once) ----------
         - name: Warm up project (import Library once)
-          if: ${{ steps.detect.outputs.have_license == 'true' || steps.detect.outputs.have_ebl == 'true' }}
+          if: ${{ steps.detect.outputs.have_ebl == 'true' }}
           shell: bash
           env:
             UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
@@ -128,7 +95,7 @@ jobs:
   
         # ---------- Start headless Unity (persistent bridge) ----------
         - name: Start Unity (persistent bridge)
-          if: ${{ steps.detect.outputs.have_license == 'true' || steps.detect.outputs.have_ebl == 'true' }}
+          if: ${{ steps.detect.outputs.have_ebl == 'true' }}
           shell: bash
           env:
             UNITY_IMAGE: ${{ env.UNITY_IMAGE }}
