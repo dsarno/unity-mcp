@@ -43,15 +43,84 @@ namespace MCPForUnity.Editor.Helpers
         public static string BuildCodexServerBlock(string uvPath, string serverSrc)
         {
             string argsArray = FormatTomlStringArray(new[] { "run", "--directory", serverSrc, "server.py" });
-            return $"[mcp_servers.unityMCP]{Environment.NewLine}" +
-                   $"command = \"{EscapeTomlString(uvPath)}\"{Environment.NewLine}" +
-                   $"args = {argsArray}";
+
+            var sb = new StringBuilder();
+            sb.AppendLine("[mcp_servers.unityMCP]");
+            sb.AppendLine($"command = \"{EscapeTomlString(uvPath)}\"");
+            sb.AppendLine($"args = {argsArray}");
+            sb.AppendLine($"startup_timeout_sec = 30");
+
+            // Windows-specific environment block to help Codex locate needed paths
+            try
+            {
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                {
+                    string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? string.Empty;
+                    string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) ?? string.Empty; // Roaming
+                    string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) ?? string.Empty;
+                    string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) ?? string.Empty;
+                    string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) ?? string.Empty;
+                    string systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? (Path.GetPathRoot(userProfile)?.TrimEnd('\\', '/') ?? "C:");
+                    string systemRoot = Environment.GetEnvironmentVariable("SystemRoot") ?? Path.Combine(systemDrive + "\\", "Windows");
+                    string comspec = Environment.GetEnvironmentVariable("COMSPEC") ?? Path.Combine(Environment.SystemDirectory ?? (systemRoot + "\\System32"), "cmd.exe");
+                    string homeDrive = Environment.GetEnvironmentVariable("HOMEDRIVE");
+                    string homePath = Environment.GetEnvironmentVariable("HOMEPATH");
+                    if (string.IsNullOrEmpty(homeDrive))
+                    {
+                        homeDrive = systemDrive;
+                    }
+                    if (string.IsNullOrEmpty(homePath) && !string.IsNullOrEmpty(userProfile))
+                    {
+                        // Derive HOMEPATH from USERPROFILE (e.g., C:\\Users\\name -> \\Users\\name)
+                        if (userProfile.StartsWith(homeDrive + "\\", StringComparison.OrdinalIgnoreCase))
+                        {
+                            homePath = userProfile.Substring(homeDrive.Length);
+                        }
+                        else
+                        {
+                            try
+                            {
+                                var root = Path.GetPathRoot(userProfile) ?? string.Empty; // e.g., C:\\
+                                homePath = userProfile.Substring(root.Length - 1); // keep leading backslash
+                            }
+                            catch { homePath = "\\"; }
+                        }
+                    }
+
+                    string powershell = Path.Combine(Environment.SystemDirectory ?? (systemRoot + "\\System32"), "WindowsPowerShell\\v1.0\\powershell.exe");
+                    string pwsh = Path.Combine(programFiles, "PowerShell\\7\\pwsh.exe");
+
+                    string tempDir = Path.Combine(localAppData, "Temp");
+
+                    sb.AppendLine();
+                    sb.AppendLine("[mcp_servers.unityMCP.env]");
+                    sb.AppendLine($"SystemRoot = \"{EscapeTomlString(systemRoot)}\"");
+                    sb.AppendLine($"APPDATA = \"{EscapeTomlString(appData)}\"");
+                    sb.AppendLine($"COMSPEC = \"{EscapeTomlString(comspec)}\"");
+                    sb.AppendLine($"HOMEDRIVE = \"{EscapeTomlString(homeDrive?.TrimEnd('\\') ?? string.Empty)}\"");
+                    sb.AppendLine($"HOMEPATH = \"{EscapeTomlString(homePath ?? string.Empty)}\"");
+                    sb.AppendLine($"LOCALAPPDATA = \"{EscapeTomlString(localAppData)}\"");
+                    sb.AppendLine($"POWERSHELL = \"{EscapeTomlString(powershell)}\"");
+                    sb.AppendLine($"PROGRAMDATA = \"{EscapeTomlString(programData)}\"");
+                    sb.AppendLine($"PROGRAMFILES = \"{EscapeTomlString(programFiles)}\"");
+                    sb.AppendLine($"PWSH = \"{EscapeTomlString(pwsh)}\"");
+                    sb.AppendLine($"SYSTEMDRIVE = \"{EscapeTomlString(systemDrive)}\"");
+                    sb.AppendLine($"SYSTEMROOT = \"{EscapeTomlString(systemRoot)}\"");
+                    sb.AppendLine($"TEMP = \"{EscapeTomlString(tempDir)}\"");
+                    sb.AppendLine($"TMP = \"{EscapeTomlString(tempDir)}\"");
+                    sb.AppendLine($"USERPROFILE = \"{EscapeTomlString(userProfile)}\"");
+                }
+            }
+            catch { /* best effort */ }
+
+            return sb.ToString();
         }
 
         public static string UpsertCodexServerBlock(string existingToml, string newBlock)
         {
             if (string.IsNullOrWhiteSpace(existingToml))
             {
+                // Default to snake_case section when creating new files
                 return newBlock.TrimEnd() + Environment.NewLine;
             }
 
@@ -60,25 +129,62 @@ namespace MCPForUnity.Editor.Helpers
             string line;
             bool inTarget = false;
             bool replaced = false;
+
+            // Support both TOML section casings and nested subtables (e.g., env)
+            // Prefer the casing already present in the user's file; fall back to snake_case
+            bool hasCamelSection = existingToml.IndexOf("[mcpServers.unityMCP]", StringComparison.OrdinalIgnoreCase) >= 0
+                                   || existingToml.IndexOf("[mcpServers.unityMCP.", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool hasSnakeSection = existingToml.IndexOf("[mcp_servers.unityMCP]", StringComparison.OrdinalIgnoreCase) >= 0
+                                   || existingToml.IndexOf("[mcp_servers.unityMCP.", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool preferCamel = hasCamelSection || (!hasSnakeSection && existingToml.IndexOf("[mcpServers]", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            // Prepare block variants matching the chosen casing, including nested tables
+            string newBlockCamel = newBlock
+                .Replace("[mcp_servers.unityMCP.env]", "[mcpServers.unityMCP.env]")
+                .Replace("[mcp_servers.unityMCP]", "[mcpServers.unityMCP]");
+            string newBlockEffective = preferCamel ? newBlockCamel : newBlock;
+
+            static bool IsSection(string s)
+            {
+                string t = s.Trim();
+                return t.StartsWith("[") && t.EndsWith("]") && !t.StartsWith("[[");
+            }
+
+            static string SectionName(string header)
+            {
+                string t = header.Trim();
+                if (t.StartsWith("[") && t.EndsWith("]")) t = t.Substring(1, t.Length - 2);
+                return t;
+            }
+
+            bool TargetOrChild(string section)
+            {
+                // Compare case-insensitively; accept both snake and camel as the same logical table
+                string name = SectionName(section);
+                return name.StartsWith("mcp_servers.unityMCP", StringComparison.OrdinalIgnoreCase)
+                       || name.StartsWith("mcpServers.unityMCP", StringComparison.OrdinalIgnoreCase);
+            }
+
             while ((line = reader.ReadLine()) != null)
             {
                 string trimmed = line.Trim();
-                bool isSection = trimmed.StartsWith("[") && trimmed.EndsWith("]") && !trimmed.StartsWith("[[");
+                bool isSection = IsSection(trimmed);
                 if (isSection)
                 {
-                    bool isTarget = string.Equals(trimmed, "[mcp_servers.unityMCP]", StringComparison.OrdinalIgnoreCase);
-                    if (isTarget)
+                    // If we encounter the target section or any of its nested tables, mark/keep in-target
+                    if (TargetOrChild(trimmed))
                     {
                         if (!replaced)
                         {
                             if (sb.Length > 0 && sb[^1] != '\n') sb.AppendLine();
-                            sb.AppendLine(newBlock.TrimEnd());
+                            sb.AppendLine(newBlockEffective.TrimEnd());
                             replaced = true;
                         }
                         inTarget = true;
                         continue;
                     }
 
+                    // A new unrelated section ends the target region
                     if (inTarget)
                     {
                         inTarget = false;
@@ -96,7 +202,7 @@ namespace MCPForUnity.Editor.Helpers
             if (!replaced)
             {
                 if (sb.Length > 0 && sb[^1] != '\n') sb.AppendLine();
-                sb.AppendLine(newBlock.TrimEnd());
+                sb.AppendLine(newBlockEffective.TrimEnd());
             }
 
             return sb.ToString().TrimEnd() + Environment.NewLine;

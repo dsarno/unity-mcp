@@ -45,7 +45,7 @@ MCP for Unity 作为桥梁，允许 AI 助手（如 Claude、Cursor）通过本�
   * `manage_asset`: 执行资源操作（导入、创建、修改、删除等）。
   * `manage_shader`: 执行着色器 CRUD 操作（创建、读取、修改、删除）。
   * `manage_gameobject`: 管理游戏对象：创建、修改、删除、查找和组件操作。
-  * `manage_menu_item`: 列出 Unity 编辑器菜单项；检查其存在性或执行它们（例如，执行"File/Save Project"）。
+  * `execute_menu_item`: 执行 Unity 编辑器菜单项（例如，执行"File/Save Project"）。
   * `apply_text_edits`: 具有前置条件哈希和原子多编辑批次的精确文本编辑。
   * `script_apply_edits`: 结构化 C# 方法/类编辑（插入/替换/删除），具有更安全的边界。
   * `validate_script`: 快速验证（基本/标准）以在写入前后捕获语法/结构问题。
@@ -114,7 +114,7 @@ MCP for Unity 使用两个组件连接您的工具：
 3. 点击 `+` -> `Add package from git URL...`。
 4. 输入：
     ```
-    https://github.com/CoplayDev/unity-mcp.git?path=/UnityMcpBridge
+    https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity
     ```
 5. 点击 `Add`。
 6. MCP 服务器在首次运行时或通过自动设置由包自动安装。如果失败，请使用手动配置（如下）。
@@ -270,7 +270,11 @@ claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Local/Microsoft/WinGet/Lin
 
 ## 开发和贡献 🛠️
 
-### 开发者
+### 添加自定义工具
+
+MCP for Unity 使用与 Unity 的 C# 脚本绑定的 Python MCP 服务器来实现工具功能。如果您想使用自己的工具扩展功能，请参阅 **[CUSTOM_TOOLS.md](docs/CUSTOM_TOOLS.md)** 了解如何操作。
+
+### 贡献项目
 
 如果您正在为 MCP for Unity 做贡献或想要测试核心更改，我们有开发工具来简化您的工作流程：
 
@@ -278,7 +282,7 @@ claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Local/Microsoft/WinGet/Lin
 - **自动备份系统**：具有简单回滚功能的安全测试
 - **热重载工作流程**：核心开发的快速迭代周期
 
-📖 **查看 [README-DEV.md](README-DEV.md)** 获取完整的开发设置和工作流程文档。
+📖 **查看 [README-DEV.md](docs/README-DEV.md)** 获取完整的开发设置和工作流程文档。
 
 ### 贡献 🤝
 
@@ -295,11 +299,11 @@ claude mcp add UnityMCP -- "C:/Users/USERNAME/AppData/Local/Microsoft/WinGet/Lin
 
 ## 📊 遥测和隐私
 
-Unity MCP 包含**注重隐私的匿名遥测**来帮助我们改进产品。我们收集使用分析和性能数据，但**绝不**收集您的代码、项目名称或个人信息。
+MCP for Unity 包含**注重隐私的匿名遥测**来帮助我们改进产品。我们收集使用分析和性能数据，但**绝不**收集您的代码、项目名称或个人信息。
 
 - **🔒 匿名**：仅随机 UUID，无个人数据
 - **🚫 轻松退出**：设置 `DISABLE_TELEMETRY=true` 环境变量
-- **📖 透明**：查看 [TELEMETRY.md](TELEMETRY.md) 获取完整详情
+- **📖 透明**：查看 [TELEMETRY.md](docs/TELEMETRY.md) 获取完整详情
 
 您的隐私对我们很重要。所有遥测都是可选的，旨在尊重您的工作流程。
 

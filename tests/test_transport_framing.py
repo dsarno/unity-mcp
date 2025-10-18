@@ -1,3 +1,4 @@
+from unity_connection import UnityConnection
 import sys
 import json
 import struct
@@ -12,19 +13,17 @@ import pytest
 # locate server src dynamically to avoid hardcoded layout assumptions
 ROOT = Path(__file__).resolve().parents[1]
 candidates = [
-    ROOT / "UnityMcpBridge" / "UnityMcpServer~" / "src",
+    ROOT / "MCPForUnity" / "UnityMcpServer~" / "src",
     ROOT / "UnityMcpServer~" / "src",
 ]
 SRC = next((p for p in candidates if p.exists()), None)
 if SRC is None:
     searched = "\n".join(str(p) for p in candidates)
     pytest.skip(
-        "Unity MCP server source not found. Tried:\n" + searched,
+        "MCP for Unity server source not found. Tried:\n" + searched,
         allow_module_level=True,
     )
 sys.path.insert(0, str(SRC))
-
-from unity_connection import UnityConnection
 
 
 def start_dummy_server(greeting: bytes, respond_ping: bool = False):
@@ -159,7 +158,10 @@ def test_unframed_data_disconnect():
 
 def test_zero_length_payload_heartbeat():
     # Server that sends handshake and a zero-length heartbeat frame followed by a pong payload
-    import socket, struct, threading, time
+    import socket
+    import struct
+    import threading
+    import time
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("127.0.0.1", 0))
@@ -181,8 +183,10 @@ def test_zero_length_payload_heartbeat():
             conn.sendall(struct.pack(">Q", len(payload)) + payload)
             time.sleep(0.02)
         finally:
-            try: conn.close()
-            except Exception: pass
+            try:
+                conn.close()
+            except Exception:
+                pass
             sock.close()
 
     threading.Thread(target=_run, daemon=True).start()

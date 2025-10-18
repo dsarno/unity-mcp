@@ -3,16 +3,16 @@
 | [English](README.md) | [简体中文](README-zh.md) |
 |----------------------|---------------------------------|
 
-#### Proudly sponsored and maintained by [Coplay](https://www.coplay.dev/?ref=unity-mcp) -- the best AI assistant for Unity. [Read the backstory here.](https://www.coplay.dev/blog/coplay-and-open-source-unity-mcp-join-forces)
+#### Proudly sponsored and maintained by [Coplay](https://www.coplay.dev/?ref=unity-mcp) -- the best AI assistant for Unity.
 
 [![Discord](https://img.shields.io/badge/discord-join-red.svg?logo=discord&logoColor=white)](https://discord.gg/y4p8KfzrN4)
+[![](https://img.shields.io/badge/Website-Visit-purple)](https://www.coplay.dev/?ref=unity-mcp)
 [![](https://img.shields.io/badge/Unity-000000?style=flat&logo=unity&logoColor=blue 'Unity')](https://unity.com/releases/editor/archive)
 [![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![](https://badge.mcpx.dev?status=on 'MCP Enabled')](https://modelcontextprotocol.io/introduction)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/CoplayDev/unity-mcp)
 ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/CoplayDev/unity-mcp)
 [![](https://img.shields.io/badge/License-MIT-red.svg 'MIT License')](https://opensource.org/licenses/MIT)
-[![](https://img.shields.io/badge/Sponsor-Coplay-red.svg 'Coplay')](https://www.coplay.dev/?ref=unity-mcp)
 
 **Create your Unity apps with LLMs!**
 
@@ -45,7 +45,7 @@ MCP for Unity acts as a bridge, allowing AI assistants (like Claude, Cursor) to 
   *   `manage_asset`: Performs asset operations (import, create, modify, delete, etc.).
   *   `manage_shader`: Performs shader CRUD operations (create, read, modify, delete).
   *   `manage_gameobject`: Manages GameObjects: create, modify, delete, find, and component operations.
-  *   `manage_menu_item`: List Unity Editor menu items; and check for their existence or execute them (e.g., execute "File/Save Project").
+  *   `execute_menu_item`: Executes Unity Editor menu items (e.g., "File/Save Project").
   *   `apply_text_edits`: Precise text edits with precondition hashes and atomic multi-edit batches.
   *   `script_apply_edits`: Structured C# method/class edits (insert/replace/delete) with safer boundaries.
   *   `validate_script`: Fast validation (basic/standard) to catch syntax/structure issues before/after writes.
@@ -115,7 +115,7 @@ MCP for Unity connects your tools using two components:
 3.  Click `+` -> `Add package from git URL...`.
 4.  Enter:
     ```
-    https://github.com/CoplayDev/unity-mcp.git?path=/UnityMcpBridge
+    https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity
     ```
 5.  Click `Add`.
 6. The MCP server is installed automatically by the package on first run or via Auto-Setup. If that fails, use Manual Configuration (below).
@@ -273,7 +273,11 @@ On Windows, set `command` to the absolute shim, e.g. `C:\\Users\\YOU\\AppData\\L
 
 ## Development & Contributing 🛠️
 
-### For Developers
+### Adding Custom Tools
+
+MCP for Unity uses a Python MCP Server tied with Unity's C# scripts for tools. If you'd like to extend the functionality with your own tools, learn how to do so in **[CUSTOM_TOOLS.md](docs/CUSTOM_TOOLS.md)**.
+
+### Contributing to the Project
 
 If you're contributing to MCP for Unity or want to test core changes, we have development tools to streamline your workflow:
 
@@ -281,7 +285,7 @@ If you're contributing to MCP for Unity or want to test core changes, we have de
 - **Automatic Backup System**: Safe testing with easy rollback capabilities  
 - **Hot Reload Workflow**: Fast iteration cycle for core development
 
-📖 **See [README-DEV.md](README-DEV.md)** for complete development setup and workflow documentation.
+📖 **See [README-DEV.md](docs/README-DEV.md)** for complete development setup and workflow documentation.
 
 ### Contributing 🤝
 
@@ -298,11 +302,11 @@ Help make MCP for Unity better!
 
 ## 📊 Telemetry & Privacy
 
-Unity MCP includes **privacy-focused, anonymous telemetry** to help us improve the product. We collect usage analytics and performance data, but **never** your code, project names, or personal information.
+MCP for Unity includes **privacy-focused, anonymous telemetry** to help us improve the product. We collect usage analytics and performance data, but **never** your code, project names, or personal information.
 
 - **🔒 Anonymous**: Random UUIDs only, no personal data
 - **🚫 Easy opt-out**: Set `DISABLE_TELEMETRY=true` environment variable
-- **📖 Transparent**: See [TELEMETRY.md](TELEMETRY.md) for full details
+- **📖 Transparent**: See [TELEMETRY.md](docs/TELEMETRY.md) for full details
 
 Your privacy matters to us. All telemetry is optional and designed to respect your workflow.
 
@@ -347,10 +351,14 @@ MIT License. See [LICENSE](LICENSE) file.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=CoplayDev/unity-mcp&type=Date)](https://www.star-history.com/#CoplayDev/unity-mcp&Date)
 
-## Sponsor
+## Unity AI Tools by Coplay
 
-<p align="center">
-  <a href="https://www.coplay.dev/?ref=unity-mcp" target="_blank" rel="noopener noreferrer">
-    <img src="logo.png" alt="Coplay Logo" width="100%">
-  </a>
-</p>
+Coplay offers 2 AI tools for Unity
+- **MCP for Unity** is available freely under the MIT license.
+- **Coplay** is a premium Unity AI assistant that sits within Unity and is more than the MCP for Unity.
+
+(These tools have different tech stacks. See this blog post [comparing Coplay to MCP for Unity](https://www.coplay.dev/blog/comparing-coplay-and-unity-mcp).)
+
+## Disclaimer
+
+This project is a free and open-source tool for the Unity Editor, and is not affiliated with Unity Technologies.
