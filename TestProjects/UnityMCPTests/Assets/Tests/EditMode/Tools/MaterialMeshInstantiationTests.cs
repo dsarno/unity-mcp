@@ -30,7 +30,9 @@ namespace MCPForUnityTests.Editor.Tools
             testMaterial = new Material(Shader.Find("Standard"));
             testMaterial.name = "TestMaterial";
             
-            testMesh = GameObject.CreatePrimitive(PrimitiveType.Cube).GetComponent<MeshFilter>().sharedMesh;
+            var temp = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            testMesh = temp.GetComponent<MeshFilter>().sharedMesh;
+            UnityEngine.Object.DestroyImmediate(temp);
             testMesh.name = "TestMesh";
         }
 
@@ -59,9 +61,9 @@ namespace MCPForUnityTests.Editor.Tools
             int afterId = meshRenderer.sharedMaterial != null ? meshRenderer.sharedMaterial.GetInstanceID() : 0;
             Assert.AreEqual(beforeId, afterId, "sharedMaterial instanceID must not change during edit-mode serialization (no instantiation)");
             Assert.IsNotNull(result, "GetComponentData should return a result");
-            var resultType = result.GetType();
-            var propertiesField = resultType.GetField("properties");
-            var propsObj = propertiesField?.GetValue(result) as Dictionary<string, object>;
+            var propsObj = (result as Dictionary<string, object>) != null && ((Dictionary<string, object>)result).TryGetValue("properties", out var p)
+                ? p as Dictionary<string, object>
+                : null;
             if (propsObj != null)
             {
                 long? foundInstanceId = null;
@@ -99,9 +101,9 @@ namespace MCPForUnityTests.Editor.Tools
             int afterId = meshFilter.sharedMesh != null ? meshFilter.sharedMesh.GetInstanceID() : 0;
             Assert.AreEqual(beforeId, afterId, "sharedMesh instanceID must not change during edit-mode serialization (no instantiation)");
             Assert.IsNotNull(result, "GetComponentData should return a result");
-            var resultType = result.GetType();
-            var propertiesField = resultType.GetField("properties");
-            var propsObj = propertiesField?.GetValue(result) as Dictionary<string, object>;
+            var propsObj = (result as Dictionary<string, object>) != null && ((Dictionary<string, object>)result).TryGetValue("properties", out var p)
+                ? p as Dictionary<string, object>
+                : null;
             if (propsObj != null)
             {
                 long? foundInstanceId = null;

@@ -367,7 +367,9 @@ namespace MCPForUnityTests.Editor.Tools
             
             // Create a simple material and mesh for testing
             var testMaterial = new Material(Shader.Find("Standard"));
-            var testMesh = GameObject.CreatePrimitive(PrimitiveType.Cube).GetComponent<MeshFilter>().sharedMesh;
+            var tempCube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            var testMesh = tempCube.GetComponent<MeshFilter>().sharedMesh;
+            UnityEngine.Object.DestroyImmediate(tempCube);
             
             // Set the shared material and mesh (these should be used in edit mode)
             meshRenderer.sharedMaterial = testMaterial;
@@ -388,17 +390,12 @@ namespace MCPForUnityTests.Editor.Tools
             
             // Assert - Basic success and shape tolerance
             Assert.IsNotNull(result, "GetComponentData should return a result");
-            var resultType = result.GetType();
-            var propertiesField = resultType.GetField("properties");
-            if (propertiesField != null)
+            if (result is Dictionary<string, object> dict &&
+                dict.TryGetValue("properties", out var propsObj) &&
+                propsObj is Dictionary<string, object> properties)
             {
-                var properties = propertiesField.GetValue(result) as Dictionary<string, object>;
-                // If properties are present and dictionary-shaped, ensure a reasonable key exists
-                if (properties != null)
-                {
-                    Assert.IsTrue(properties.ContainsKey("material") || properties.ContainsKey("sharedMaterial") || properties.ContainsKey("materials") || properties.ContainsKey("sharedMaterials"),
-                        "Serialized data should include a material-related key when present.");
-                }
+                Assert.IsTrue(properties.ContainsKey("material") || properties.ContainsKey("sharedMaterial") || properties.ContainsKey("materials") || properties.ContainsKey("sharedMaterials"),
+                    "Serialized data should include a material-related key when present.");
             }
             
             // Clean up
@@ -414,7 +411,9 @@ namespace MCPForUnityTests.Editor.Tools
             var meshFilter = testObject.AddComponent<MeshFilter>();
             
             // Create a simple mesh for testing
-            var testMesh = GameObject.CreatePrimitive(PrimitiveType.Sphere).GetComponent<MeshFilter>().sharedMesh;
+            var tempSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            var testMesh = tempSphere.GetComponent<MeshFilter>().sharedMesh;
+            UnityEngine.Object.DestroyImmediate(tempSphere);
             meshFilter.sharedMesh = testMesh;
             
             // Act - Get component data which should trigger mesh property access
@@ -432,16 +431,12 @@ namespace MCPForUnityTests.Editor.Tools
             
             // Assert - Basic success and shape tolerance
             Assert.IsNotNull(result, "GetComponentData should return a result");
-            var resultType = result.GetType();
-            var propertiesField = resultType.GetField("properties");
-            if (propertiesField != null)
+            if (result is Dictionary<string, object> dict2 &&
+                dict2.TryGetValue("properties", out var propsObj2) &&
+                propsObj2 is Dictionary<string, object> properties2)
             {
-                var properties = propertiesField.GetValue(result) as Dictionary<string, object>;
-                if (properties != null)
-                {
-                    Assert.IsTrue(properties.ContainsKey("mesh") || properties.ContainsKey("sharedMesh"),
-                        "Serialized data should include a mesh-related key when present.");
-                }
+                Assert.IsTrue(properties2.ContainsKey("mesh") || properties2.ContainsKey("sharedMesh"),
+                    "Serialized data should include a mesh-related key when present.");
             }
             
             // Clean up
