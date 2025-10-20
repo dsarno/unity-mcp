@@ -461,19 +461,13 @@ namespace MCPForUnityTests.Editor.Tools
             // Assert - Verify that the material property was accessed without instantiation
             Assert.IsNotNull(result, "GetComponentData should return a result");
             
-            // Tolerate varying shapes - if properties exist and are a dictionary, ensure keys are reasonable
-            var resultType = result.GetType();
-            var propertiesField = resultType.GetField("properties");
-            if (propertiesField != null)
+            // Check that result is a dictionary with properties key
+            if (result is Dictionary<string, object> resultDict && 
+                resultDict.TryGetValue("properties", out var propertiesObj) &&
+                propertiesObj is Dictionary<string, object> properties)
             {
-                var properties = propertiesField.GetValue(result);
-                Assert.IsNotNull(properties, "properties should not be null when present");
-                var dict = properties as Dictionary<string, object>;
-                if (dict != null)
-                {
-                    Assert.IsTrue(dict.ContainsKey("material") || dict.ContainsKey("sharedMaterial"),
-                        "Serialized data should include 'material' or 'sharedMaterial' when present.");
-                }
+                Assert.IsTrue(properties.ContainsKey("material") || properties.ContainsKey("sharedMaterial"),
+                    "Serialized data should include 'material' or 'sharedMaterial' when present.");
             }
             
             // Clean up
@@ -501,19 +495,13 @@ namespace MCPForUnityTests.Editor.Tools
             // Assert - Verify that the mesh property was accessed without instantiation
             Assert.IsNotNull(result, "GetComponentData should return a result");
             
-            // Tolerate varying shapes - if properties exist and are a dictionary, ensure keys are reasonable
-            var resultType = result.GetType();
-            var propertiesField = resultType.GetField("properties");
-            if (propertiesField != null)
+            // Check that result is a dictionary with properties key
+            if (result is Dictionary<string, object> resultDict && 
+                resultDict.TryGetValue("properties", out var propertiesObj) &&
+                propertiesObj is Dictionary<string, object> properties)
             {
-                var properties = propertiesField.GetValue(result);
-                Assert.IsNotNull(properties, "properties should not be null when present");
-                var dict = properties as Dictionary<string, object>;
-                if (dict != null)
-                {
-                    Assert.IsTrue(dict.ContainsKey("mesh") || dict.ContainsKey("sharedMesh"),
-                        "Serialized data should include 'mesh' or 'sharedMesh' when present.");
-                }
+                Assert.IsTrue(properties.ContainsKey("mesh") || properties.ContainsKey("sharedMesh"),
+                    "Serialized data should include 'mesh' or 'sharedMesh' when present.");
             }
             
             // Clean up
