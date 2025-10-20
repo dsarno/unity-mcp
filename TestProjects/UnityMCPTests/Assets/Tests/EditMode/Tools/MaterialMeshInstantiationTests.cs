@@ -120,6 +120,9 @@ namespace MCPForUnityTests.Editor.Tools
                     Assert.AreEqual(beforeId, (int)foundInstanceId.Value, "Serialized mesh must reference the sharedMesh instance");
                 }
             }
+            
+            // Clean up the instantiated mesh
+            UnityEngine.Object.DestroyImmediate(uniqueMesh);
         }
  
         // (The two strong tests above replace the prior lighter-weight versions.)

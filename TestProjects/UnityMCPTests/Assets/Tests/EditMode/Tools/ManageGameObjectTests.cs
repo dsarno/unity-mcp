@@ -489,7 +489,9 @@ namespace MCPForUnityTests.Editor.Tools
             var meshFilter = testObject.AddComponent<MeshFilter>();
             
             // Create a test mesh
-            var testMesh = GameObject.CreatePrimitive(PrimitiveType.Cylinder).GetComponent<MeshFilter>().sharedMesh;
+            var tempCylinder = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            var testMesh = tempCylinder.GetComponent<MeshFilter>().sharedMesh;
+            UnityEngine.Object.DestroyImmediate(tempCylinder);
             testMesh.name = "TestMesh";
             meshFilter.sharedMesh = testMesh;
             
