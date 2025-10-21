@@ -11,6 +11,12 @@ dependencies = [
  "tomli>=2.3.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-anyio>=0.6.0",
+]
+
 [build-system]
 requires = ["setuptools>=64.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
