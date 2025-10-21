@@ -8,7 +8,8 @@ def _get_decorator_module():
     import types
     ROOT = pathlib.Path(__file__).resolve().parents[1]
     SRC = ROOT / "MCPForUnity" / "UnityMcpServer~" / "src"
-    sys.path.insert(0, str(SRC))
+    if str(SRC) not in sys.path:
+        sys.path.insert(0, str(SRC))
     # Remove any previously stubbed module to force real import
     sys.modules.pop("telemetry_decorator", None)
     # Preload a minimal telemetry stub to satisfy telemetry_decorator imports
@@ -26,6 +27,8 @@ def _get_decorator_module():
     tel.get_package_version = lambda: "0.0.0"
     sys.modules.setdefault("telemetry", tel)
     mod = importlib.import_module("telemetry_decorator")
+    # Drop stub to avoid bleed-through into other tests
+    sys.modules.pop("telemetry", None)
     # Ensure attributes exist for monkeypatch targets even if not exported
     if not hasattr(mod, "record_tool_usage"):
         def _noop_record_tool_usage(*a, **k):

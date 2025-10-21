@@ -17,11 +17,12 @@ collect_ignore_glob = [
     "MCPForUnity/UnityMcpServer~/src/*",
 ]
 
-def pytest_ignore_collect(path, config):
+def pytest_ignore_collect(path):
     p = str(path)
+    norm = p.replace("\\", "/")
     return (
-        "/UnityMcpBridge/UnityMcpServer~/src/" in p
-        or "/MCPForUnity/UnityMcpServer~/src/" in p
-        or p.endswith("UnityMcpBridge/UnityMcpServer~/src")
-        or p.endswith("MCPForUnity/UnityMcpServer~/src")
+        "/UnityMcpBridge/UnityMcpServer~/src/" in norm
+        or "/MCPForUnity/UnityMcpServer~/src/" in norm
+        or norm.endswith("UnityMcpBridge/UnityMcpServer~/src")
+        or norm.endswith("MCPForUnity/UnityMcpServer~/src")
     )

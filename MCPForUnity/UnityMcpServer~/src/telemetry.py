@@ -122,7 +122,8 @@ class TelemetryConfig:
         if env_ep is not None and env_ep != "":
             self.endpoint = self._validated_endpoint(env_ep, default_ep)
         else:
-            self.endpoint = default_ep
+            # Validate config-provided default as well to enforce scheme/host rules
+            self.endpoint = self._validated_endpoint(default_ep, default_ep)
         try:
             logger.info(
                 "Telemetry configured: endpoint=%s (default=%s), timeout_env=%s",

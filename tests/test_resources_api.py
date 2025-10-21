@@ -22,7 +22,7 @@ telemetry.get_package_version = lambda: "0.0.0"
 sys.modules.setdefault("telemetry", telemetry)
 
 telemetry_decorator = types.ModuleType("telemetry_decorator")
-def telemetry_tool(*dargs, **dkwargs):
+def telemetry_tool(*_args, **_kwargs):
     def _wrap(fn):
         return fn
     return _wrap

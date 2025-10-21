@@ -3,6 +3,8 @@ import pathlib
 import importlib.util
 import types
 
+from tests.test_helpers import DummyContext
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "MCPForUnity" / "UnityMcpServer~" / "src"
@@ -73,7 +75,6 @@ def setup_tools():
         if any(k in name for k in ['script', 'apply_text', 'create_script', 'delete_script', 'validate_script', 'get_sha']):
             mcp.tools[name] = tool_info['func']
     return mcp.tools
-from tests.test_helpers import DummyContext
 
 
 def test_explicit_zero_based_normalized_warning(monkeypatch):
