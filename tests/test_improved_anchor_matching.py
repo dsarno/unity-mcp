@@ -39,7 +39,7 @@ def load_module(path, name):
 
 
 manage_script_edits_module = load_module(
-    SRC / "tools" / "manage_script_edits.py", "manage_script_edits_module")
+    SRC / "tools" / "script_apply_edits.py", "script_apply_edits_module")
 
 
 def test_improved_anchor_matching():

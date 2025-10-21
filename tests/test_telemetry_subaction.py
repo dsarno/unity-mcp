@@ -3,8 +3,13 @@ import importlib
 
 def _get_decorator_module():
     # Import the telemetry_decorator module from the MCP for Unity server src
-    mod = importlib.import_module(
-        "MCPForUnity.UnityMcpServer~.src.telemetry_decorator")
+    import sys
+    import pathlib
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+    SRC = ROOT / "MCPForUnity" / "UnityMcpServer~" / "src"
+    sys.path.insert(0, str(SRC))
+    
+    mod = importlib.import_module("telemetry_decorator")
     return mod
 
 
