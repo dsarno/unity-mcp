@@ -426,7 +426,7 @@ def validate_script(
         "path": directory,
         "level": level,
     }
-    resp = send_command_with_retry("manage_script", params)
+    resp = unity_connection.send_command_with_retry("manage_script", params)
     if isinstance(resp, dict) and resp.get("success"):
         diags = resp.get("data", {}).get("diagnostics", []) or []
         warnings = sum(1 for d in diags if str(

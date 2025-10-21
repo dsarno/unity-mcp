@@ -1,4 +1,4 @@
-import tools.manage_script as manage_script  # type: ignore
+# import triggers registration elsewhere; no direct use here
 import sys
 import types
 from pathlib import Path
@@ -54,8 +54,7 @@ class DummyMCP:
         return _decorator
 
 
-class DummyCtx:  # FastMCP Context placeholder
-    pass
+# (removed unused DummyCtx)
 
 
 class DummyContext:
@@ -73,7 +72,7 @@ class DummyContext:
 def _register_tools():
     mcp = DummyMCP()
     # Import the tools module to trigger decorator registration
-    import tools.manage_script as manage_script_module
+    import tools.manage_script  # trigger decorator registration
     # Get the registered tools from the registry
     from registry import get_registered_tools
     registered_tools = get_registered_tools()
@@ -125,8 +124,8 @@ def test_split_uri_file_urls(monkeypatch, uri, expected_name, expected_path):
     test_tools = _register_tools()
     captured = {}
 
-    def fake_send(cmd, params):
-        captured['cmd'] = cmd
+    def fake_send(_cmd, params):
+        captured['cmd'] = _cmd
         captured['params'] = params
         return {"success": True, "message": "ok"}
 
@@ -147,7 +146,7 @@ def test_split_uri_plain_path(monkeypatch):
     test_tools = _register_tools()
     captured = {}
 
-    def fake_send(cmd, params):
+    def fake_send(_cmd, params):
         captured['params'] = params
         return {"success": True, "message": "ok"}
 
