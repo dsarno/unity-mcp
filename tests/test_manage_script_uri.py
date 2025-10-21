@@ -57,16 +57,7 @@ class DummyMCP:
 # (removed unused DummyCtx)
 
 
-class DummyContext:
-    """Mock context object for testing"""
-    def info(self, message):
-        pass
-    
-    def warning(self, message):
-        pass
-    
-    def error(self, message):
-        pass
+from tests.test_helpers import DummyContext
 
 
 def _register_tools():

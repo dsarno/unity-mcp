@@ -49,16 +49,7 @@ class DummyMCP:
         return deco
 
 
-class DummyContext:
-    """Mock context object for testing"""
-    def info(self, message):
-        pass
-    
-    def warning(self, message):
-        pass
-    
-    def error(self, message):
-        pass
+from tests.test_helpers import DummyContext
 
 
 def setup_tools():
