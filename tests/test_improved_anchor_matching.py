@@ -38,7 +38,7 @@ def load_module(path, name):
     return module
 
 
-manage_script_edits_module = load_module(
+script_apply_edits_module = load_module(
     SRC / "tools" / "script_apply_edits.py", "script_apply_edits_module")
 
 
@@ -67,7 +67,7 @@ public class TestClass : MonoBehaviour
     flags = re.MULTILINE
 
     # Test our improved function
-    best_match = manage_script_edits_module._find_best_anchor_match(
+    best_match = script_apply_edits_module._find_best_anchor_match(
         anchor_pattern, test_code, flags, prefer_last=True
     )
 
@@ -116,7 +116,7 @@ public class TestClass : MonoBehaviour
         '\n') + 1 if old_match else None
 
     # New behavior (improved matching)
-    new_match = manage_script_edits_module._find_best_anchor_match(
+    new_match = script_apply_edits_module._find_best_anchor_match(
         anchor_pattern, test_code, flags, prefer_last=True
     )
     new_line = test_code[:new_match.start()].count(
@@ -152,7 +152,7 @@ public class TestClass : MonoBehaviour
         "text": "\n    public void NewMethod() { Debug.Log(\"Added at class end\"); }\n"
     }]
 
-    result = manage_script_edits_module._apply_edits_locally(
+    result = script_apply_edits_module._apply_edits_locally(
         original_code, edits)
     lines = result.split('\n')
     try:

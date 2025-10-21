@@ -8,6 +8,27 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "MCPForUnity" / "UnityMcpServer~" / "src"
 sys.path.insert(0, str(SRC))
 
+# Stub telemetry modules to avoid file I/O during import of tools package
+telemetry = types.ModuleType("telemetry")
+def _noop(*args, **kwargs):
+    pass
+class MilestoneType:
+    pass
+telemetry.record_resource_usage = _noop
+telemetry.record_tool_usage = _noop
+telemetry.record_milestone = _noop
+telemetry.MilestoneType = MilestoneType
+telemetry.get_package_version = lambda: "0.0.0"
+sys.modules.setdefault("telemetry", telemetry)
+
+telemetry_decorator = types.ModuleType("telemetry_decorator")
+def telemetry_tool(*dargs, **dkwargs):
+    def _wrap(fn):
+        return fn
+    return _wrap
+telemetry_decorator.telemetry_tool = telemetry_tool
+sys.modules.setdefault("telemetry_decorator", telemetry_decorator)
+
 # stub mcp.server.fastmcp
 mcp_pkg = types.ModuleType("mcp")
 server_pkg = types.ModuleType("mcp.server")
@@ -55,14 +76,7 @@ def setup_tools():
         if any(k in name for k in ['script', 'apply_text', 'create_script', 'delete_script', 'validate_script', 'get_sha']):
             mcp.tools[name] = tool_info['func']
     return mcp.tools
-class DummyContext:
-    def info(self, *args, **kwargs):
-        pass
-    def warning(self, *args, **kwargs):
-        pass
-    def error(self, *args, **kwargs):
-        pass
-
+from tests.test_helpers import DummyContext
 
 
 def test_explicit_zero_based_normalized_warning(monkeypatch):
