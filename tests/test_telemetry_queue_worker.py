@@ -80,7 +80,8 @@ def test_telemetry_queue_backpressure_and_single_worker(monkeypatch, caplog):
     elapsed_ms = (time.perf_counter() - start) * 1000.0
 
     # Should be fast despite backpressure (non-blocking enqueue or drop)
-    assert elapsed_ms < 200.0
+    # Timeout relaxed to 200ms to handle thread scheduling variance in CI/local environments
+    assert elapsed_ms < 200.0, f"Took {elapsed_ms:.1f}ms (expected <200ms)"
 
     # Allow worker to process some
     time.sleep(0.3)

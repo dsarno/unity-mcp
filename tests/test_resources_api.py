@@ -80,14 +80,10 @@ def test_resource_list_filters_and_rejects_traversal(resource_tools, tmp_path, m
     list_resources = resource_tools["list_resources"]
     # Only .cs under Assets should be listed
     import asyncio
-    loop = asyncio.new_event_loop()
-    try:
-        resp = loop.run_until_complete(
-            list_resources(ctx=DummyContext(), pattern="*.cs", under="Assets",
-                           limit=50, project_root=str(proj))
-        )
-    finally:
-        loop.close()
+    resp = asyncio.run(
+        list_resources(ctx=DummyContext(), pattern="*.cs", under="Assets",
+                       limit=50, project_root=str(proj))
+    )
     assert resp["success"] is True
     uris = resp["data"]["uris"]
     assert any(u.endswith("Assets/Scripts/A.cs") for u in uris)
@@ -100,14 +96,10 @@ def test_resource_list_rejects_outside_paths(resource_tools, tmp_path):
     # under points outside Assets
     list_resources = resource_tools["list_resources"]
     import asyncio
-    loop = asyncio.new_event_loop()
-    try:
-        resp = loop.run_until_complete(
-            list_resources(ctx=DummyContext(), pattern="*.cs", under="..",
-                           limit=10, project_root=str(proj))
-        )
-    finally:
-        loop.close()
+    resp = asyncio.run(
+        list_resources(ctx=DummyContext(), pattern="*.cs", under="..",
+                       limit=10, project_root=str(proj))
+    )
     assert resp["success"] is False
     assert "Assets" in resp.get(
         "error", "") or "under project root" in resp.get("error", "")
