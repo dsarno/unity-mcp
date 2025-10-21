@@ -1,7 +1,3 @@
-# Fixed import - using decorator-based registration instead
-import pytest
-
-
 import sys
 from pathlib import Path
 import pytest

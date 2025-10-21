@@ -1,6 +1,7 @@
 import sys
 import pathlib
 import importlib.util
+import os
 import types
 import threading
 import time
@@ -29,6 +30,11 @@ sys.modules.setdefault("mcp", mcp_pkg)
 sys.modules.setdefault("mcp.server", server_pkg)
 sys.modules.setdefault("mcp.server.fastmcp", fastmcp_pkg)
 
+# Ensure telemetry module has get_package_version stub before importing
+telemetry_stub = types.ModuleType("telemetry")
+telemetry_stub.get_package_version = lambda: "0.0.0"
+sys.modules.setdefault("telemetry", telemetry_stub)
+
 
 def _load_module(path: pathlib.Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -37,7 +43,13 @@ def _load_module(path: pathlib.Path, name: str):
     return mod
 
 
-telemetry = _load_module(SRC / "telemetry.py", "telemetry_mod")
+# Load real telemetry on top of stub (it will reuse stubbed helpers)
+_prev_cwd = os.getcwd()
+os.chdir(str(SRC))
+try:
+    telemetry = _load_module(SRC / "telemetry.py", "telemetry_mod")
+finally:
+    os.chdir(_prev_cwd)
 
 
 def test_telemetry_queue_backpressure_and_single_worker(monkeypatch, caplog):

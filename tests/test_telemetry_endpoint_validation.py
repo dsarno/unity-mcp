@@ -14,6 +14,7 @@ def test_endpoint_rejects_non_http(tmp_path, monkeypatch):
     SRC = ROOT / "MCPForUnity" / "UnityMcpServer~" / "src"
     sys.path.insert(0, str(SRC))
     
+    monkeypatch.chdir(str(SRC))
     telemetry = importlib.import_module("telemetry")
     importlib.reload(telemetry)
 
@@ -39,14 +40,17 @@ def test_config_preferred_then_env_override(tmp_path, monkeypatch):
     old_endpoint = cfg_mod.config.telemetry_endpoint
     cfg_mod.config.telemetry_endpoint = "https://example.com/telemetry"
     try:
+        monkeypatch.chdir(str(SRC))
         telemetry = importlib.import_module("telemetry")
         importlib.reload(telemetry)
         tc = telemetry.TelemetryCollector()
+        # When no env override is set, config endpoint is preferred
         assert tc.config.endpoint == "https://example.com/telemetry"
 
         # Env should override config
         monkeypatch.setenv("UNITY_MCP_TELEMETRY_ENDPOINT",
                            "https://override.example/ep")
+        monkeypatch.chdir(str(SRC))
         importlib.reload(telemetry)
         tc2 = telemetry.TelemetryCollector()
         assert tc2.config.endpoint == "https://override.example/ep"
@@ -64,6 +68,7 @@ def test_uuid_preserved_on_malformed_milestones(tmp_path, monkeypatch):
     SRC = ROOT / "MCPForUnity" / "UnityMcpServer~" / "src"
     sys.path.insert(0, str(SRC))
     
+    monkeypatch.chdir(str(SRC))
     telemetry = importlib.import_module("telemetry")
     importlib.reload(telemetry)
 

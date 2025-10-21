@@ -55,9 +55,6 @@ def _load(path: pathlib.Path, name: str):
     return mod
 
 
-manage_script = _load(SRC / "tools" / "manage_script.py", "manage_script_mod3")
-
-
 class DummyMCP:
     def __init__(self): self.tools = {}
 
