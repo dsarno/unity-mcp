@@ -44,6 +44,9 @@ def _load_module(path: pathlib.Path, name: str):
 
 
 # Load real telemetry on top of stub (it will reuse stubbed helpers)
+# Note: CWD change required because telemetry.py calls get_package_version() 
+# at module load time, which reads pyproject.toml using a relative path.
+# This is fragile but necessary given current telemetry module design.
 _prev_cwd = os.getcwd()
 os.chdir(str(SRC))
 try:
