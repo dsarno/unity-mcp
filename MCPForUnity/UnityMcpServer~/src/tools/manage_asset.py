@@ -29,8 +29,8 @@ async def manage_asset(
     filter_type: Annotated[str, "Filter type for search"] | None = None,
     filter_date_after: Annotated[str,
                                  "Date after which to filter"] | None = None,
-    page_size: Annotated[int, "Page size for pagination"] | None = None,
-    page_number: Annotated[int, "Page number for pagination"] | None = None
+    page_size: Annotated[int | float | str, "Page size for pagination"] | None = None,
+    page_number: Annotated[int | float | str, "Page number for pagination"] | None = None
 ) -> dict[str, Any]:
     ctx.info(f"Processing manage_asset: {action}")
     # Ensure properties is a dict if None

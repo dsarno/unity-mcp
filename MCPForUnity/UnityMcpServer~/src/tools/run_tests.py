@@ -43,7 +43,7 @@ async def run_tests(
     ctx: Context,
     mode: Annotated[Literal["edit", "play"], Field(
         description="Unity test mode to run")] = "edit",
-    timeout_seconds: Annotated[int, Field(
+    timeout_seconds: Annotated[int | float | str, Field(
         description="Optional timeout in seconds for the Unity test run")] | None = None,
 ) -> RunTestsResponse:
     await ctx.info(f"Processing run_tests: mode={mode}")
