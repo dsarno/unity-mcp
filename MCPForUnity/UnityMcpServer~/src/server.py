@@ -1,5 +1,5 @@
 from telemetry import record_telemetry, record_milestone, RecordType, MilestoneType
-from fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP
 import logging
 from logging.handlers import RotatingFileHandler
 import os

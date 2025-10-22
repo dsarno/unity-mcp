@@ -9,14 +9,14 @@ from unity_connection import send_command_with_retry
 
 
 @mcp_for_unity_tool(
-    description="Gets messages from or clears the Unity Editor console."
+    description="Gets messages from or clears the Unity Editor console. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5')."
 )
 def read_console(
     ctx: Context,
     action: Annotated[Literal['get', 'clear'], "Get or clear the Unity Editor console."] | None = None,
     types: Annotated[list[Literal['error', 'warning',
                                   'log', 'all']], "Message types to get"] | None = None,
-    count: Annotated[int, "Max messages to return"] | None = None,
+    count: Annotated[str, "Max messages to return (pass as quoted string, e.g., '5')"] | None = None,
     filter_text: Annotated[str, "Text filter for messages"] | None = None,
     since_timestamp: Annotated[str,
                                "Get messages after this timestamp (ISO 8601)"] | None = None,
