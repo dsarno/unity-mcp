@@ -1,6 +1,6 @@
 from typing import Annotated, Any, Literal
 
-from mcp.server.fastmcp import Context
+from fastmcp import Context
 from registry import mcp_for_unity_tool
 from telemetry import is_telemetry_enabled, record_tool_usage
 from unity_connection import send_command_with_retry

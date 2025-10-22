@@ -4,7 +4,7 @@ Defines the manage_asset tool for interacting with Unity assets.
 import asyncio
 from typing import Annotated, Any, Literal
 
-from mcp.server.fastmcp import Context
+from fastmcp import Context
 from registry import mcp_for_unity_tool
 from unity_connection import async_send_command_with_retry
 

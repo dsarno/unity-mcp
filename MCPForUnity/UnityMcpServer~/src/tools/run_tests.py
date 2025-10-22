@@ -1,7 +1,7 @@
 """Tool for executing Unity Test Runner suites."""
 from typing import Annotated, Literal, Any
 
-from mcp.server.fastmcp import Context
+from fastmcp import Context
 from pydantic import BaseModel, Field
 
 from models import MCPResponse

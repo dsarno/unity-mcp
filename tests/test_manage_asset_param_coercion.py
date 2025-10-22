@@ -1,0 +1,76 @@
+import sys
+import pathlib
+import importlib.util
+import types
+import asyncio
+import os
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+SRC = ROOT / "MCPForUnity" / "UnityMcpServer~" / "src"
+sys.path.insert(0, str(SRC))
+
+
+def _load_module(path: pathlib.Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# Ensure tools package can import without real MCP deps
+mcp_pkg = types.ModuleType("mcp")
+server_pkg = types.ModuleType("mcp.server")
+fastmcp_pkg = types.ModuleType("mcp.server.fastmcp")
+
+
+class _Dummy:
+    pass
+
+
+fastmcp_pkg.FastMCP = _Dummy
+fastmcp_pkg.Context = _Dummy
+server_pkg.fastmcp = fastmcp_pkg
+mcp_pkg.server = server_pkg
+sys.modules.setdefault("mcp", mcp_pkg)
+sys.modules.setdefault("mcp.server", server_pkg)
+sys.modules.setdefault("mcp.server.fastmcp", fastmcp_pkg)
+
+
+from tests.test_helpers import DummyContext
+
+
+def test_manage_asset_pagination_coercion(monkeypatch):
+    # Import with SRC as CWD to satisfy telemetry import side effects
+    _prev = os.getcwd()
+    os.chdir(str(SRC))
+    try:
+        manage_asset_mod = _load_module(SRC / "tools" / "manage_asset.py", "manage_asset_mod")
+    finally:
+        os.chdir(_prev)
+
+    captured = {}
+
+    async def fake_async_send(cmd, params, loop=None):
+        captured["params"] = params
+        return {"success": True, "data": {}}
+
+    monkeypatch.setattr(manage_asset_mod, "async_send_command_with_retry", fake_async_send)
+
+    result = asyncio.run(
+        manage_asset_mod.manage_asset(
+            ctx=DummyContext(),
+            action="search",
+            path="Assets",
+            page_size="50",
+            page_number="2",
+        )
+    )
+
+    assert result == {"success": True, "data": {}}
+    assert captured["params"]["pageSize"] == 50
+    assert captured["params"]["pageNumber"] == 2
+
+
+
+
+
