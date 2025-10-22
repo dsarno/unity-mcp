@@ -351,7 +351,7 @@ async def find_in_file(
     ctx: Context,
     uri: Annotated[str, "The resource URI to search under Assets/ or file path form supported by read_resource"],
     pattern: Annotated[str, "The regex pattern to search for"],
-    ignore_case: Annotated[bool, "Case-insensitive search"] | None = True,
+    ignore_case: Annotated[bool | str, "Case-insensitive search (accepts true/false or 'true'/'false')"] | None = True,
     project_root: Annotated[str,
                             "The project root directory"] | None = None,
     max_results: Annotated[int,
@@ -365,6 +365,20 @@ async def find_in_file(
             return {"success": False, "error": f"Resource not found: {uri}"}
 
         text = p.read_text(encoding="utf-8")
+        # Tolerant boolean coercion for clients that stringify booleans
+        def _coerce_bool(val, default=None):
+            if val is None:
+                return default
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, str):
+                v = val.strip().lower()
+                if v in ("true", "1", "yes", "on"):
+                    return True
+                if v in ("false", "0", "no", "off"):
+                    return False
+            return bool(val)
+        ignore_case = _coerce_bool(ignore_case, default=True)
         flags = re.MULTILINE
         if ignore_case:
             flags |= re.IGNORECASE

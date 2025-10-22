@@ -22,15 +22,29 @@ def read_console(
                                "Get messages after this timestamp (ISO 8601)"] | None = None,
     format: Annotated[Literal['plain', 'detailed',
                               'json'], "Output format"] | None = None,
-    include_stacktrace: Annotated[bool,
-                                  "Include stack traces in output"] | None = None
+    include_stacktrace: Annotated[bool | str,
+                                  "Include stack traces in output (accepts true/false or 'true'/'false')"] | None = None
 ) -> dict[str, Any]:
     ctx.info(f"Processing read_console: {action}")
     # Set defaults if values are None
     action = action if action is not None else 'get'
     types = types if types is not None else ['error', 'warning', 'log']
     format = format if format is not None else 'detailed'
-    include_stacktrace = include_stacktrace if include_stacktrace is not None else True
+    # Coerce booleans defensively (strings like 'true'/'false')
+    def _coerce_bool(value, default=None):
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            v = value.strip().lower()
+            if v in ("true", "1", "yes", "on"):
+                return True
+            if v in ("false", "0", "no", "off"):
+                return False
+        return bool(value)
+
+    include_stacktrace = _coerce_bool(include_stacktrace, True)
 
     # Normalize action if it's a string
     if isinstance(action, str):
