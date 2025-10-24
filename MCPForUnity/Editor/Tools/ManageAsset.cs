@@ -89,7 +89,7 @@ namespace MCPForUnity.Editor.Tools
                         return CreateAsset(@params);
                     case "modify":
                         var properties = @params["properties"] as JObject;
-                        Debug.Log($"[ManageAsset] Modify properties type: {@params["properties"]?.GetType()}, value: {@params["properties"]}");
+                        return ModifyAsset(path, properties);
                         return ModifyAsset(path, properties);
                     case "delete":
                         return DeleteAsset(path);
