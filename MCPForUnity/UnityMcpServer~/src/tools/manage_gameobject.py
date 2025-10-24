@@ -119,8 +119,11 @@ def manage_gameobject(
         try:
             component_properties = json.loads(component_properties)
             ctx.info("manage_gameobject: coerced component_properties from JSON string to dict")
-        except Exception as e:
-            ctx.warn(f"manage_gameobject: failed to parse component_properties JSON string: {e}")
+        except json.JSONDecodeError as e:
+            return {"success": False, "message": f"Invalid JSON in component_properties: {e}"}
+    # Ensure final type is a dict (object) if provided
+    if component_properties is not None and not isinstance(component_properties, dict):
+        return {"success": False, "message": "component_properties must be a JSON object (dict)."}
     try:
         # Map tag to search_term when search_method is by_tag for backward compatibility
         if action == "find" and search_method == "by_tag" and tag is not None and search_term is None:
