@@ -990,31 +990,68 @@ namespace MCPForUnity.Editor.Tools
                     }
                 }
             }
-            // Example: Set texture property
-            if (properties["texture"] is JObject texProps)
+            // Example: Set texture property (case-insensitive key and subkeys)
             {
-                string propName = texProps["name"]?.ToString() ?? "_MainTex"; // Default main texture
-                string texPath = texProps["path"]?.ToString();
+                JObject texProps = null;
+                var direct = properties.Property("texture");
+                if (direct != null && direct.Value is JObject t0) texProps = t0;
+                if (texProps == null)
+                {
+                    var ci = properties.Properties().FirstOrDefault(p => string.Equals(p.Name, "texture", StringComparison.OrdinalIgnoreCase));
+                    if (ci != null && ci.Value is JObject t1) texProps = t1;
+                }
+                if (texProps == null) goto AfterTexture;
+
+                string propName = (texProps["name"] ?? texProps["Name"])?.ToString();
+                string texPath = (texProps["path"] ?? texProps["Path"])?.ToString();
                 if (!string.IsNullOrEmpty(texPath))
                 {
                     Texture newTex = AssetDatabase.LoadAssetAtPath<Texture>(
                         AssetPathUtility.SanitizeAssetPath(texPath)
                     );
-                    if (
-                        newTex != null
-                        && mat.HasProperty(propName)
-                        && mat.GetTexture(propName) != newTex
-                    )
-                    {
-                        mat.SetTexture(propName, newTex);
-                        modified = true;
-                    }
-                    else if (newTex == null)
+                    if (newTex == null)
                     {
                         Debug.LogWarning($"Texture not found at path: {texPath}");
                     }
+                    else
+                    {
+                        // Resolve candidate property names across pipelines
+                        string[] candidates;
+                        string lower = (propName ?? string.Empty).ToLowerInvariant();
+                        if (string.IsNullOrEmpty(propName))
+                        {
+                            candidates = new[] { "_BaseMap", "_MainTex" };
+                        }
+                        else if (lower == "_maintex")
+                        {
+                            candidates = new[] { "_MainTex", "_BaseMap" };
+                        }
+                        else if (lower == "_basemap")
+                        {
+                            candidates = new[] { "_BaseMap", "_MainTex" };
+                        }
+                        else
+                        {
+                            candidates = new[] { propName };
+                        }
+
+                        foreach (var candidate in candidates)
+                        {
+                            if (mat.HasProperty(candidate))
+                            {
+                                if (mat.GetTexture(candidate) != newTex)
+                                {
+                                    mat.SetTexture(candidate, newTex);
+                                    modified = true;
+                                }
+                                // Stop after first applicable candidate
+                                break;
+                            }
+                        }
+                    }
                 }
             }
+AfterTexture:
 
 			// --- Flexible direct property assignment ---
 			// Allow payloads like: { "_Color": [r,g,b,a] }, { "_Glossiness": 0.5 }, { "_MainTex": "Assets/.." }
