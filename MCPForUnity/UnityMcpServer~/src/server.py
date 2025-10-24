@@ -1,5 +1,5 @@
 from telemetry import record_telemetry, record_milestone, RecordType, MilestoneType
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -189,6 +189,11 @@ def asset_creation_strategy() -> str:
     )
 
 
+def main():
+    """Entry point for uvx and console scripts."""
+    mcp.run(transport='stdio')
+
+
 # Run the server
 if __name__ == "__main__":
-    mcp.run(transport='stdio')
+    main()
