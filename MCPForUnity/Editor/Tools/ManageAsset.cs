@@ -997,61 +997,39 @@ namespace MCPForUnity.Editor.Tools
                 if (direct != null && direct.Value is JObject t0) texProps = t0;
                 if (texProps == null)
                 {
-                    var ci = properties.Properties().FirstOrDefault(p => string.Equals(p.Name, "texture", StringComparison.OrdinalIgnoreCase));
+                    var ci = properties.Properties().FirstOrDefault(
+                        p => string.Equals(p.Name, "texture", StringComparison.OrdinalIgnoreCase));
                     if (ci != null && ci.Value is JObject t1) texProps = t1;
                 }
-                if (texProps == null) goto AfterTexture;
-
-                string propName = (texProps["name"] ?? texProps["Name"])?.ToString();
-                string texPath = (texProps["path"] ?? texProps["Path"])?.ToString();
-                if (!string.IsNullOrEmpty(texPath))
+                if (texProps != null)
                 {
-                    Texture newTex = AssetDatabase.LoadAssetAtPath<Texture>(
-                        AssetPathUtility.SanitizeAssetPath(texPath)
-                    );
-                    if (newTex == null)
+                    string rawName = (texProps["name"] ?? texProps["Name"])?.ToString();
+                    string texPath = (texProps["path"] ?? texProps["Path"])?.ToString();
+                    if (!string.IsNullOrEmpty(texPath))
                     {
-                        Debug.LogWarning($"Texture not found at path: {texPath}");
-                    }
-                    else
-                    {
-                        // Resolve candidate property names across pipelines
-                        string[] candidates;
-                        string lower = (propName ?? string.Empty).ToLowerInvariant();
-                        if (string.IsNullOrEmpty(propName))
+                        var newTex = AssetDatabase.LoadAssetAtPath<Texture>(
+                            AssetPathUtility.SanitizeAssetPath(texPath));
+                        if (newTex == null)
                         {
-                            candidates = new[] { "_BaseMap", "_MainTex" };
-                        }
-                        else if (lower == "_maintex")
-                        {
-                            candidates = new[] { "_MainTex", "_BaseMap" };
-                        }
-                        else if (lower == "_basemap")
-                        {
-                            candidates = new[] { "_BaseMap", "_MainTex" };
+                            Debug.LogWarning($"Texture not found at path: {texPath}");
                         }
                         else
                         {
-                            candidates = new[] { propName };
-                        }
-
-                        foreach (var candidate in candidates)
-                        {
-                            if (mat.HasProperty(candidate))
+                            // Reuse alias resolver so friendly names like 'albedo' work here too
+                            string candidateName = string.IsNullOrEmpty(rawName) ? "_BaseMap" : rawName;
+                            string targetProp = ResolvePropertyName(candidateName);
+                            if (!string.IsNullOrEmpty(targetProp) && mat.HasProperty(targetProp))
                             {
-                                if (mat.GetTexture(candidate) != newTex)
+                                if (mat.GetTexture(targetProp) != newTex)
                                 {
-                                    mat.SetTexture(candidate, newTex);
+                                    mat.SetTexture(targetProp, newTex);
                                     modified = true;
                                 }
-                                // Stop after first applicable candidate
-                                break;
                             }
                         }
                     }
                 }
             }
-AfterTexture:
 
 			// --- Flexible direct property assignment ---
 			// Allow payloads like: { "_Color": [r,g,b,a] }, { "_Glossiness": 0.5 }, { "_MainTex": "Assets/.." }

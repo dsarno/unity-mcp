@@ -68,6 +68,7 @@ class TestManageAssetJsonParsing:
         # Verify warning was logged
         ctx.warning.assert_called()
         assert "failed to parse properties JSON string" in str(ctx.warning.call_args)
+        assert result.get("success") is True
     
     @pytest.mark.asyncio
     async def test_properties_dict_unchanged(self):
