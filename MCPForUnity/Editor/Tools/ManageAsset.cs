@@ -88,7 +88,9 @@ namespace MCPForUnity.Editor.Tools
                     case "create":
                         return CreateAsset(@params);
                     case "modify":
-                        return ModifyAsset(path, @params["properties"] as JObject);
+                        var properties = @params["properties"] as JObject;
+                        Debug.Log($"[ManageAsset] Modify properties type: {@params["properties"]?.GetType()}, value: {@params["properties"]}");
+                        return ModifyAsset(path, properties);
                     case "delete":
                         return DeleteAsset(path);
                     case "duplicate":
@@ -1026,15 +1028,20 @@ namespace MCPForUnity.Editor.Tools
 			{
 				if (string.IsNullOrEmpty(name)) return name;
 				string[] candidates;
-				switch (name)
+				var lower = name.ToLowerInvariant();
+				switch (lower)
 				{
-					case "_Color": candidates = new[] { "_Color", "_BaseColor" }; break;
-					case "_BaseColor": candidates = new[] { "_BaseColor", "_Color" }; break;
-					case "_MainTex": candidates = new[] { "_MainTex", "_BaseMap" }; break;
-					case "_BaseMap": candidates = new[] { "_BaseMap", "_MainTex" }; break;
-					case "_Glossiness": candidates = new[] { "_Glossiness", "_Smoothness" }; break;
-					case "_Smoothness": candidates = new[] { "_Smoothness", "_Glossiness" }; break;
-					default: candidates = new[] { name }; break;
+					case "_color": candidates = new[] { "_Color", "_BaseColor" }; break;
+					case "_basecolor": candidates = new[] { "_BaseColor", "_Color" }; break;
+					case "_maintex": candidates = new[] { "_MainTex", "_BaseMap" }; break;
+					case "_basemap": candidates = new[] { "_BaseMap", "_MainTex" }; break;
+					case "_glossiness": candidates = new[] { "_Glossiness", "_Smoothness" }; break;
+					case "_smoothness": candidates = new[] { "_Smoothness", "_Glossiness" }; break;
+					// Friendly names → shader property names
+					case "metallic": candidates = new[] { "_Metallic" }; break;
+					case "smoothness": candidates = new[] { "_Smoothness", "_Glossiness" }; break;
+					case "albedo": candidates = new[] { "_BaseMap", "_MainTex" }; break;
+					default: candidates = new[] { name }; break; // keep original as-is
 				}
 				foreach (var candidate in candidates)
 				{
