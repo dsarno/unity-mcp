@@ -90,7 +90,6 @@ namespace MCPForUnity.Editor.Tools
                     case "modify":
                         var properties = @params["properties"] as JObject;
                         return ModifyAsset(path, properties);
-                        return ModifyAsset(path, properties);
                     case "delete":
                         return DeleteAsset(path);
                     case "duplicate":
