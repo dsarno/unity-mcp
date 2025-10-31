@@ -468,7 +468,9 @@ class UnityConnectionPool:
                 logger.debug(f"Using default instance: {instance_identifier}")
             else:
                 # Use the most recently active instance
-                sorted_instances = sorted(instances, key=lambda i: i.last_heartbeat or time.time(), reverse=True)
+                # Instances with no heartbeat (None) should be sorted last (use epoch as sentinel)
+                from datetime import datetime
+                sorted_instances = sorted(instances, key=lambda i: i.last_heartbeat or datetime.fromtimestamp(0), reverse=True)
                 logger.info(f"No instance specified, using most recent: {sorted_instances[0].id}")
                 return sorted_instances[0]
 
@@ -592,8 +594,8 @@ class UnityConnectionPool:
                 try:
                     logger.info(f"Disconnecting from Unity instance: {instance_id}")
                     conn.disconnect()
-                except Exception as e:
-                    logger.error(f"Error disconnecting from {instance_id}: {e}")
+                except Exception:
+                    logger.exception(f"Error disconnecting from {instance_id}")
             self._connections.clear()
 
 
