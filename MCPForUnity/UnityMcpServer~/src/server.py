@@ -3,6 +3,7 @@ from fastmcp import FastMCP
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import argparse
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Any
 from config import config
@@ -199,6 +200,38 @@ register_all_resources(mcp)
 
 def main():
     """Entry point for uvx and console scripts."""
+    parser = argparse.ArgumentParser(
+        description="MCP for Unity Server",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Environment Variables:
+  UNITY_MCP_DEFAULT_INSTANCE   Default Unity instance to target (project name, hash, or 'Name@hash')
+  UNITY_MCP_SKIP_STARTUP_CONNECT   Skip initial Unity connection attempt (set to 1/true/yes/on)
+  UNITY_MCP_TELEMETRY_ENABLED   Enable telemetry (set to 1/true/yes/on)
+
+Examples:
+  # Use specific Unity project as default
+  python -m src.server --default-instance "MyProject"
+
+  # Or use environment variable
+  UNITY_MCP_DEFAULT_INSTANCE="MyProject" python -m src.server
+        """
+    )
+    parser.add_argument(
+        "--default-instance",
+        type=str,
+        metavar="INSTANCE",
+        help="Default Unity instance to target (project name, hash, or 'Name@hash'). "
+             "Overrides UNITY_MCP_DEFAULT_INSTANCE environment variable."
+    )
+
+    args = parser.parse_args()
+
+    # Set environment variable if --default-instance is provided
+    if args.default_instance:
+        os.environ["UNITY_MCP_DEFAULT_INSTANCE"] = args.default_instance
+        logger.info(f"Using default Unity instance from command-line: {args.default_instance}")
+
     mcp.run(transport='stdio')
 
 

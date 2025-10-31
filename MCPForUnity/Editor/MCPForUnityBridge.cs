@@ -489,6 +489,22 @@ namespace MCPForUnity.Editor
             try { AssemblyReloadEvents.afterAssemblyReload -= OnAfterAssemblyReload; } catch { }
             try { EditorApplication.quitting -= Stop; } catch { }
 
+            // Clean up status file when Unity stops
+            try
+            {
+                string statusDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".unity-mcp");
+                string statusFile = Path.Combine(statusDir, $"unity-mcp-status-{ComputeProjectHash(Application.dataPath)}.json");
+                if (File.Exists(statusFile))
+                {
+                    File.Delete(statusFile);
+                    if (IsDebugEnabled()) McpLog.Info($"Deleted status file: {statusFile}");
+                }
+            }
+            catch (Exception ex)
+            {
+                if (IsDebugEnabled()) McpLog.Warn($"Failed to delete status file: {ex.Message}");
+            }
+
             if (IsDebugEnabled()) McpLog.Info("MCPForUnityBridge stopped.");
         }
 
@@ -1199,6 +1215,29 @@ namespace MCPForUnity.Editor
                 }
                 Directory.CreateDirectory(dir);
                 string filePath = Path.Combine(dir, $"unity-mcp-status-{ComputeProjectHash(Application.dataPath)}.json");
+
+                // Extract project name from path
+                string projectName = "Unknown";
+                try
+                {
+                    string projectPath = Application.dataPath;
+                    if (!string.IsNullOrEmpty(projectPath))
+                    {
+                        // Remove trailing /Assets or \Assets
+                        projectPath = projectPath.TrimEnd('/', '\\');
+                        if (projectPath.EndsWith("Assets", StringComparison.OrdinalIgnoreCase))
+                        {
+                            projectPath = projectPath.Substring(0, projectPath.Length - 6).TrimEnd('/', '\\');
+                        }
+                        projectName = Path.GetFileName(projectPath);
+                        if (string.IsNullOrEmpty(projectName))
+                        {
+                            projectName = "Unknown";
+                        }
+                    }
+                }
+                catch { }
+
                 var payload = new
                 {
                     unity_port = currentUnityPort,
@@ -1206,6 +1245,8 @@ namespace MCPForUnity.Editor
                     reason = reason ?? (reloading ? "reloading" : "ready"),
                     seq = heartbeatSeq,
                     project_path = Application.dataPath,
+                    project_name = projectName,
+                    unity_version = Application.unityVersion,
                     last_heartbeat = DateTime.UtcNow.ToString("O")
                 };
                 File.WriteAllText(filePath, JsonConvert.SerializeObject(payload), new System.Text.UTF8Encoding(false));
