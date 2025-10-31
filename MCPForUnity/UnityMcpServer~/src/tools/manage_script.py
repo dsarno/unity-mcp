@@ -450,6 +450,8 @@ def manage_script(
     script_type: Annotated[str, "Script type (e.g., 'C#')",
                            "Type hint (e.g., 'MonoBehaviour')"] | None = None,
     namespace: Annotated[str, "Namespace for the script"] | None = None,
+    unity_instance: Annotated[str,
+                             "Target Unity instance (project name, hash, or 'Name@hash'). If not specified, uses default instance."] | None = None,
 ) -> dict[str, Any]:
     ctx.info(f"Processing manage_script: {action}")
     try:
@@ -473,7 +475,7 @@ def manage_script(
 
         params = {k: v for k, v in params.items() if v is not None}
 
-        response = unity_connection.send_command_with_retry("manage_script", params)
+        response = unity_connection.send_command_with_retry("manage_script", params, instance_id=unity_instance)
 
         if isinstance(response, dict):
             if response.get("success"):

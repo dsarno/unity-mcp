@@ -362,7 +362,22 @@ namespace MCPForUnity.Editor
                         }
                         catch (SocketException se) when (se.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt >= maxImmediateRetries)
                         {
+                            // Port is occupied by another instance, get a new available port
+                            int oldPort = currentUnityPort;
                             currentUnityPort = PortManager.GetPortWithFallback();
+
+                            // Safety check: ensure we got a different port
+                            if (currentUnityPort == oldPort)
+                            {
+                                McpLog.Error($"Port {oldPort} is occupied and no alternative port available");
+                                throw;
+                            }
+
+                            if (IsDebugEnabled())
+                            {
+                                McpLog.Info($"Port {oldPort} occupied, switching to port {currentUnityPort}");
+                            }
+
                             listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
                             listener.Server.SetSocketOption(
                                 SocketOptionLevel.Socket,

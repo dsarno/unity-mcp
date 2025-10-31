@@ -15,6 +15,7 @@ import glob
 import json
 import logging
 import os
+import struct
 from datetime import datetime
 from pathlib import Path
 import socket
@@ -60,22 +61,43 @@ class PortDiscovery:
     @staticmethod
     def _try_probe_unity_mcp(port: int) -> bool:
         """Quickly check if a MCP for Unity listener is on this port.
-        Tries a short TCP connect, sends 'ping', expects Unity bridge welcome message.
+        Uses Unity's framed protocol: receives handshake, sends framed ping, expects framed pong.
         """
         try:
             with socket.create_connection(("127.0.0.1", port), PortDiscovery.CONNECT_TIMEOUT) as s:
                 s.settimeout(PortDiscovery.CONNECT_TIMEOUT)
                 try:
-                    s.sendall(b"ping")
-                    data = s.recv(512)
-                    # Check for Unity bridge welcome message format
-                    if data and (b"WELCOME UNITY-MCP" in data or b'"message":"pong"' in data):
-                        return True
-                except Exception:
+                    # 1. Receive handshake from Unity
+                    handshake = s.recv(512)
+                    if not handshake or b"FRAMING=1" not in handshake:
+                        # Try legacy mode as fallback
+                        s.sendall(b"ping")
+                        data = s.recv(512)
+                        return data and b'"message":"pong"' in data
+
+                    # 2. Send framed ping command
+                    # Frame format: 8-byte length header (big-endian uint64) + payload
+                    payload = b"ping"
+                    header = struct.pack('>Q', len(payload))
+                    s.sendall(header + payload)
+
+                    # 3. Receive framed response
+                    response_header = s.recv(8)
+                    if len(response_header) != 8:
+                        return False
+
+                    response_length = struct.unpack('>Q', response_header)[0]
+                    if response_length > 10000:  # Sanity check
+                        return False
+
+                    response = s.recv(response_length)
+                    return b'"message":"pong"' in response
+                except Exception as e:
+                    logger.debug(f"Port probe failed for {port}: {e}")
                     return False
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Connection failed for port {port}: {e}")
             return False
-        return False
 
     @staticmethod
     def _read_latest_status() -> Optional[dict]:

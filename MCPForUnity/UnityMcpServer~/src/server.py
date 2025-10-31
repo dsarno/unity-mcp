@@ -8,7 +8,7 @@ from typing import AsyncIterator, Dict, Any
 from config import config
 from tools import register_all_tools
 from resources import register_all_resources
-from unity_connection import get_unity_connection, UnityConnection
+from unity_connection import get_unity_connection_pool, UnityConnectionPool
 import time
 
 # Configure logging using settings from config
@@ -61,14 +61,14 @@ try:
 except Exception:
     pass
 
-# Global connection state
-_unity_connection: UnityConnection = None
+# Global connection pool
+_unity_connection_pool: UnityConnectionPool = None
 
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     """Handle server startup and shutdown."""
-    global _unity_connection
+    global _unity_connection_pool
     logger.info("MCP for Unity Server starting up")
 
     # Record server startup telemetry
@@ -101,22 +101,35 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
             logger.info(
                 "Skipping Unity connection on startup (UNITY_MCP_SKIP_STARTUP_CONNECT=1)")
         else:
-            _unity_connection = get_unity_connection()
-            logger.info("Connected to Unity on startup")
+            # Initialize connection pool and discover instances
+            _unity_connection_pool = get_unity_connection_pool()
+            instances = _unity_connection_pool.discover_all_instances()
 
-            # Record successful Unity connection (deferred)
-            import threading as _t
-            _t.Timer(1.0, lambda: record_telemetry(
-                RecordType.UNITY_CONNECTION,
-                {
-                    "status": "connected",
-                    "connection_time_ms": (time.perf_counter() - start_clk) * 1000,
-                }
-            )).start()
+            if instances:
+                logger.info(f"Discovered {len(instances)} Unity instance(s): {[i.id for i in instances]}")
+
+                # Try to connect to default instance
+                try:
+                    default_conn = _unity_connection_pool.get_connection()
+                    logger.info("Connected to default Unity instance on startup")
+
+                    # Record successful Unity connection (deferred)
+                    import threading as _t
+                    _t.Timer(1.0, lambda: record_telemetry(
+                        RecordType.UNITY_CONNECTION,
+                        {
+                            "status": "connected",
+                            "connection_time_ms": (time.perf_counter() - start_clk) * 1000,
+                            "instance_count": len(instances)
+                        }
+                    )).start()
+                except Exception as e:
+                    logger.warning("Could not connect to default Unity instance: %s", e)
+            else:
+                logger.warning("No Unity instances found on startup")
 
     except ConnectionError as e:
         logger.warning("Could not connect to Unity on startup: %s", e)
-        _unity_connection = None
 
         # Record connection failure (deferred)
         import threading as _t
@@ -132,7 +145,6 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     except Exception as e:
         logger.warning(
             "Unexpected error connecting to Unity on startup: %s", e)
-        _unity_connection = None
         import threading as _t
         _err_msg = str(e)[:200]
         _t.Timer(1.0, lambda: record_telemetry(
@@ -145,13 +157,12 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
         )).start()
 
     try:
-        # Yield the connection object so it can be attached to the context
-        # The key 'bridge' matches how tools like read_console expect to access it (ctx.bridge)
-        yield {"bridge": _unity_connection}
+        # Yield the connection pool so it can be attached to the context
+        # Note: Tools will use get_unity_connection_pool() directly
+        yield {"pool": _unity_connection_pool}
     finally:
-        if _unity_connection:
-            _unity_connection.disconnect()
-            _unity_connection = None
+        if _unity_connection_pool:
+            _unity_connection_pool.disconnect_all()
         logger.info("MCP for Unity Server shut down")
 
 # Initialize MCP server

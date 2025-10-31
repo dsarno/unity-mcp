@@ -31,7 +31,9 @@ async def manage_asset(
     filter_date_after: Annotated[str,
                                  "Date after which to filter"] | None = None,
     page_size: Annotated[int | float | str, "Page size for pagination"] | None = None,
-    page_number: Annotated[int | float | str, "Page number for pagination"] | None = None
+    page_number: Annotated[int | float | str, "Page number for pagination"] | None = None,
+    unity_instance: Annotated[str,
+                             "Target Unity instance (project name, hash, or 'Name@hash'). If not specified, uses default instance."] | None = None
 ) -> dict[str, Any]:
     ctx.info(f"Processing manage_asset: {action}")
     # Coerce 'properties' from JSON string to dict for client compatibility
@@ -86,7 +88,7 @@ async def manage_asset(
     # Get the current asyncio event loop
     loop = asyncio.get_running_loop()
 
-    # Use centralized async retry helper to avoid blocking the event loop
-    result = await async_send_command_with_retry("manage_asset", params_dict, loop=loop)
+    # Use centralized async retry helper with instance routing
+    result = await async_send_command_with_retry("manage_asset", params_dict, instance_id=unity_instance, loop=loop)
     # Return the result obtained from Unity
     return result if isinstance(result, dict) else {"success": False, "message": str(result)}
