@@ -14,9 +14,13 @@ What changed and why:
 import glob
 import json
 import logging
+import os
+from datetime import datetime
 from pathlib import Path
 import socket
 from typing import Optional, List
+
+from models import UnityInstanceInfo
 
 logger = logging.getLogger("mcp-for-unity-server")
 
@@ -158,3 +162,94 @@ class PortDiscovery:
                 logger.warning(
                     f"Could not read port configuration {path}: {e}")
         return None
+
+    @staticmethod
+    def _extract_project_name(project_path: str) -> str:
+        """Extract project name from Assets path.
+
+        Examples:
+            /Users/sakura/Projects/MyGame/Assets -> MyGame
+            C:\\Projects\\TestProject\\Assets -> TestProject
+        """
+        if not project_path:
+            return "Unknown"
+
+        try:
+            # Remove trailing /Assets or \Assets
+            path = project_path.rstrip('/\\')
+            if path.endswith('Assets'):
+                path = path[:-6].rstrip('/\\')
+
+            # Get the last directory name
+            name = os.path.basename(path)
+            return name if name else "Unknown"
+        except Exception:
+            return "Unknown"
+
+    @staticmethod
+    def discover_all_unity_instances() -> List[UnityInstanceInfo]:
+        """
+        Discover all running Unity Editor instances by scanning status files.
+
+        Returns:
+            List of UnityInstanceInfo objects for all discovered instances
+        """
+        instances = []
+        base = PortDiscovery.get_registry_dir()
+
+        # Scan all status files
+        status_pattern = str(base / "unity-mcp-status-*.json")
+        status_files = glob.glob(status_pattern)
+
+        for status_file_path in status_files:
+            try:
+                with open(status_file_path, 'r') as f:
+                    data = json.load(f)
+
+                # Extract hash from filename: unity-mcp-status-{hash}.json
+                filename = os.path.basename(status_file_path)
+                hash_value = filename.replace('unity-mcp-status-', '').replace('.json', '')
+
+                # Extract information
+                project_path = data.get('project_path', '')
+                project_name = PortDiscovery._extract_project_name(project_path)
+                port = data.get('unity_port')
+                is_reloading = data.get('reloading', False)
+
+                # Parse last_heartbeat
+                last_heartbeat = None
+                heartbeat_str = data.get('last_heartbeat')
+                if heartbeat_str:
+                    try:
+                        last_heartbeat = datetime.fromisoformat(heartbeat_str.replace('Z', '+00:00'))
+                    except Exception:
+                        pass
+
+                # Verify port is actually responding
+                is_alive = PortDiscovery._try_probe_unity_mcp(port) if isinstance(port, int) else False
+
+                if not is_alive:
+                    logger.debug(f"Instance {project_name}@{hash_value} has heartbeat but port {port} not responding")
+                    continue
+
+                # Create instance info
+                instance = UnityInstanceInfo(
+                    id=f"{project_name}@{hash_value}",
+                    name=project_name,
+                    path=project_path,
+                    hash=hash_value,
+                    port=port,
+                    status="reloading" if is_reloading else "running",
+                    last_heartbeat=last_heartbeat,
+                    unity_version=data.get('unity_version')  # May not be available in current version
+                )
+
+                instances.append(instance)
+                logger.debug(f"Discovered Unity instance: {instance.id} on port {instance.port}")
+
+            except Exception as e:
+                logger.debug(f"Failed to parse status file {status_file_path}: {e}")
+                continue
+
+        logger.info(f"Discovered {len(instances)} Unity instances")
+        return instances
