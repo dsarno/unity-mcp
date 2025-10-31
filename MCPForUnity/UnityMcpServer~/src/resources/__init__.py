@@ -21,16 +21,24 @@ __all__ = ['register_all_resources']
 def _create_fixed_wrapper(original_func, has_other_params):
     """
     Factory function to create a wrapper that calls original_func with unity_instance=None.
-    This avoids closure issues in loops.
+    This avoids closure issues in loops and preserves sync/async nature of the original function.
     """
+    is_async = inspect.iscoroutinefunction(original_func)
+
     if has_other_params:
-        # Has other parameters (like mode)
-        async def fixed_wrapper(*args, **kwargs):
-            return await original_func(*args, **kwargs, unity_instance=None)
+        if is_async:
+            async def fixed_wrapper(*args, **kwargs):
+                return await original_func(*args, **kwargs, unity_instance=None)
+        else:
+            def fixed_wrapper(*args, **kwargs):
+                return original_func(*args, **kwargs, unity_instance=None)
     else:
-        # No other parameters, just unity_instance
-        async def fixed_wrapper():
-            return await original_func(unity_instance=None)
+        if is_async:
+            async def fixed_wrapper():
+                return await original_func(unity_instance=None)
+        else:
+            def fixed_wrapper():
+                return original_func(unity_instance=None)
 
     return fixed_wrapper
 

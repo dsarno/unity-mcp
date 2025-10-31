@@ -111,7 +111,7 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
 
                 # Try to connect to default instance
                 try:
-                    default_conn = _unity_connection_pool.get_connection()
+                    _unity_connection_pool.get_connection()
                     logger.info("Connected to default Unity instance on startup")
 
                     # Record successful Unity connection (deferred)

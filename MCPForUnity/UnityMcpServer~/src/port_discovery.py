@@ -82,15 +82,27 @@ class PortDiscovery:
                     s.sendall(header + payload)
 
                     # 3. Receive framed response
-                    response_header = s.recv(8)
-                    if len(response_header) != 8:
+                    # Helper to receive exact number of bytes
+                    def _recv_exact(expected: int) -> bytes | None:
+                        chunks = bytearray()
+                        while len(chunks) < expected:
+                            chunk = s.recv(expected - len(chunks))
+                            if not chunk:
+                                return None
+                            chunks.extend(chunk)
+                        return bytes(chunks)
+
+                    response_header = _recv_exact(8)
+                    if response_header is None:
                         return False
 
                     response_length = struct.unpack('>Q', response_header)[0]
                     if response_length > 10000:  # Sanity check
                         return False
 
-                    response = s.recv(response_length)
+                    response = _recv_exact(response_length)
+                    if response is None:
+                        return False
                     return b'"message":"pong"' in response
                 except Exception as e:
                     logger.debug(f"Port probe failed for {port}: {e}")

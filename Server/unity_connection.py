@@ -38,6 +38,7 @@ class UnityConnection:
     port: int = None  # Will be set dynamically
     sock: socket.socket = None  # Socket for Unity communication
     use_framing: bool = False  # Negotiated per-connection
+    instance_id: str | None = None  # Instance identifier for reconnection
 
     def __post_init__(self):
         """Set port from discovery if not explicitly provided"""
@@ -329,9 +330,24 @@ class UnityConnection:
                 finally:
                     self.sock = None
 
-                # Re-discover port each time
+                # Re-discover the port for this specific instance
                 try:
-                    new_port = PortDiscovery.discover_unity_port()
+                    new_port: int | None = None
+                    if self.instance_id:
+                        # Try to rediscover the specific instance
+                        pool = get_unity_connection_pool()
+                        refreshed = pool.discover_all_instances(force_refresh=True)
+                        match = next((inst for inst in refreshed if inst.id == self.instance_id), None)
+                        if match:
+                            new_port = match.port
+                            logger.debug(f"Rediscovered instance {self.instance_id} on port {new_port}")
+                        else:
+                            logger.warning(f"Instance {self.instance_id} not found during reconnection")
+
+                    # Fallback to generic port discovery if instance-specific discovery failed
+                    if new_port is None:
+                        new_port = PortDiscovery.discover_unity_port()
+
                     if new_port != self.port:
                         logger.info(
                             f"Unity port changed {self.port} -> {new_port}")
@@ -547,7 +563,7 @@ class UnityConnectionPool:
         with self._pool_lock:
             if target.id not in self._connections:
                 logger.info(f"Creating new connection to Unity instance: {target.id} (port {target.port})")
-                conn = UnityConnection(port=target.port)
+                conn = UnityConnection(port=target.port, instance_id=target.id)
                 if not conn.connect():
                     raise ConnectionError(
                         f"Failed to connect to Unity instance '{target.id}' on port {target.port}. "
@@ -555,6 +571,12 @@ class UnityConnectionPool:
                     )
                 self._connections[target.id] = conn
             else:
+                # Update existing connection with instance_id and port if changed
+                conn = self._connections[target.id]
+                conn.instance_id = target.id
+                if conn.port != target.port:
+                    logger.info(f"Updating cached port for {target.id}: {conn.port} -> {target.port}")
+                    conn.port = target.port
                 logger.debug(f"Reusing existing connection to: {target.id}")
 
             return self._connections[target.id]

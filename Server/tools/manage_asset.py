@@ -35,7 +35,7 @@ async def manage_asset(
     unity_instance: Annotated[str,
                              "Target Unity instance (project name, hash, or 'Name@hash'). If not specified, uses default instance."] | None = None
 ) -> dict[str, Any]:
-    ctx.info(f"Processing manage_asset: {action}")
+    ctx.info(f"Processing manage_asset: {action} (unity_instance={unity_instance or 'default'})")
     # Coerce 'properties' from JSON string to dict for client compatibility
     if isinstance(properties, str):
         try:
