@@ -48,10 +48,6 @@ namespace MCPForUnity.Editor.Windows
         private VisualElement healthIndicator;
         private Label healthStatusLabel;
         private Button testConnectionButton;
-        private VisualElement serverStatusBanner;
-        private Label serverStatusMessage;
-        private Button downloadServerButton;
-        private Button rebuildServerButton;
 
         // Client UI Elements
         private DropdownField clientDropdown;
@@ -128,7 +124,6 @@ namespace MCPForUnity.Editor.Windows
 
             // Initial update
             UpdateConnectionStatus();
-            UpdateServerStatusBanner();
             UpdateClientStatus();
             UpdatePathOverrides();
             // Technically not required to connect, but if we don't do this, the UI will be blank
@@ -216,10 +211,6 @@ namespace MCPForUnity.Editor.Windows
             healthIndicator = rootVisualElement.Q<VisualElement>("health-indicator");
             healthStatusLabel = rootVisualElement.Q<Label>("health-status");
             testConnectionButton = rootVisualElement.Q<Button>("test-connection-button");
-            serverStatusBanner = rootVisualElement.Q<VisualElement>("server-status-banner");
-            serverStatusMessage = rootVisualElement.Q<Label>("server-status-message");
-            downloadServerButton = rootVisualElement.Q<Button>("download-server-button");
-            rebuildServerButton = rootVisualElement.Q<Button>("rebuild-server-button");
 
             // Client
             clientDropdown = rootVisualElement.Q<DropdownField>("client-dropdown");
@@ -300,8 +291,6 @@ namespace MCPForUnity.Editor.Windows
             // Connection callbacks
             connectionToggleButton.clicked += OnConnectionToggleClicked;
             testConnectionButton.clicked += OnTestConnectionClicked;
-            downloadServerButton.clicked += OnDownloadServerClicked;
-            rebuildServerButton.clicked += OnRebuildServerClicked;
 
             // Client callbacks
             clientDropdown.RegisterValueChangedCallback(evt =>
@@ -376,7 +365,7 @@ namespace MCPForUnity.Editor.Windows
             MCPServiceLocator.Client.CheckClientStatus(client);
 
             clientStatusLabel.text = client.GetStatusDisplayString();
-            
+
             // Reset inline color style (clear error state from OnConfigureClicked)
             clientStatusLabel.style.color = StyleKeyword.Null;
 
@@ -583,85 +572,6 @@ namespace MCPForUnity.Editor.Windows
                 healthStatusLabel.text = "Unhealthy";
                 healthIndicator.AddToClassList("warning");
                 McpLog.Error($"Bridge verification failed: {result.Message}");
-            }
-        }
-
-        private void OnDownloadServerClicked()
-        {
-            if (ServerInstaller.DownloadAndInstallServer())
-            {
-                UpdateServerStatusBanner();
-                UpdatePathOverrides();
-                EditorUtility.DisplayDialog(
-                    "Download Complete",
-                    "Server installed successfully! Start your connection and configure your MCP clients to begin.",
-                    "OK"
-                );
-            }
-        }
-
-        private void OnRebuildServerClicked()
-        {
-            try
-            {
-                bool success = ServerInstaller.RebuildMcpServer();
-                if (success)
-                {
-                    EditorUtility.DisplayDialog("MCP For Unity", "Server rebuilt successfully.", "OK");
-                    UpdateServerStatusBanner();
-                    UpdatePathOverrides();
-                }
-                else
-                {
-                    EditorUtility.DisplayDialog("MCP For Unity", "Rebuild failed. Please check Console for details.", "OK");
-                }
-            }
-            catch (Exception ex)
-            {
-                McpLog.Error($"Failed to rebuild server: {ex.Message}");
-                EditorUtility.DisplayDialog("MCP For Unity", $"Rebuild failed: {ex.Message}", "OK");
-            }
-        }
-
-        private void UpdateServerStatusBanner()
-        {
-            bool hasEmbedded = ServerInstaller.HasEmbeddedServer();
-            string installedVer = ServerInstaller.GetInstalledServerVersion();
-            string packageVer = AssetPathUtility.GetPackageVersion();
-
-            // Show/hide download vs rebuild buttons
-            if (hasEmbedded)
-            {
-                downloadServerButton.style.display = DisplayStyle.None;
-                rebuildServerButton.style.display = DisplayStyle.Flex;
-            }
-            else
-            {
-                downloadServerButton.style.display = DisplayStyle.Flex;
-                rebuildServerButton.style.display = DisplayStyle.None;
-            }
-
-            // Check for installation errors first
-            string installError = PackageLifecycleManager.GetLastInstallError();
-            if (!string.IsNullOrEmpty(installError))
-            {
-                serverStatusMessage.text = $"\u274C Server installation failed: {installError}. Click 'Rebuild Server' to retry.";
-                serverStatusBanner.style.display = DisplayStyle.Flex;
-            }
-            // Update banner
-            else if (!hasEmbedded && string.IsNullOrEmpty(installedVer))
-            {
-                serverStatusMessage.text = "\u26A0 Server not installed. Click 'Download & Install Server' to get started.";
-                serverStatusBanner.style.display = DisplayStyle.Flex;
-            }
-            else if (!hasEmbedded && !string.IsNullOrEmpty(installedVer) && installedVer != packageVer)
-            {
-                serverStatusMessage.text = $"\u26A0 Server update available (v{installedVer} \u2192 v{packageVer}). Update recommended.";
-                serverStatusBanner.style.display = DisplayStyle.Flex;
-            }
-            else
-            {
-                serverStatusBanner.style.display = DisplayStyle.None;
             }
         }
 
