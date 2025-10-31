@@ -69,6 +69,7 @@ _unity_connection: UnityConnection = None
 
 # Global shutdown coordination
 _shutdown_flag = threading.Event()
+_exit_timer_scheduled = threading.Event()
 
 
 @asynccontextmanager
@@ -194,16 +195,15 @@ register_all_resources(mcp)
 
 def _force_exit(code: int = 0):
     """Force process exit, bypassing any background threads that might linger."""
-    try:
-        sys.exit(code)
-    except SystemExit:
-        os._exit(code)
+    os._exit(code)
 
 
 def _signal_handler(signum, frame):
     logger.info(f"Received signal {signum}, initiating shutdown...")
     _shutdown_flag.set()
-    threading.Timer(1.0, _force_exit, args=(0,)).start()
+    if not _exit_timer_scheduled.is_set():
+        _exit_timer_scheduled.set()
+        threading.Timer(1.0, _force_exit, args=(0,)).start()
 
 
 def _monitor_stdin():
@@ -217,6 +217,9 @@ def _monitor_stdin():
             if parent_pid is not None:
                 try:
                     os.kill(parent_pid, 0)
+                except ValueError:
+                    # Signal 0 unsupported on this platform (e.g., Windows); disable parent probing
+                    parent_pid = None
                 except (ProcessLookupError, OSError):
                     logger.info(f"Parent process {parent_pid} no longer exists; shutting down")
                     break
@@ -239,7 +242,9 @@ def _monitor_stdin():
         if not _shutdown_flag.is_set():
             logger.info("Client disconnected (stdin or parent), initiating shutdown...")
             _shutdown_flag.set()
-            threading.Timer(0.5, _force_exit, args=(0,)).start()
+            if not _exit_timer_scheduled.is_set():
+                _exit_timer_scheduled.set()
+                threading.Timer(0.5, _force_exit, args=(0,)).start()
     except Exception:
         # Never let monitor thread crash the process
         pass
@@ -277,7 +282,9 @@ def main():
     finally:
         _shutdown_flag.set()
         logger.info("Server main loop exited")
-        threading.Timer(0.5, _force_exit, args=(0,)).start()
+        if not _exit_timer_scheduled.is_set():
+            _exit_timer_scheduled.set()
+            threading.Timer(0.5, _force_exit, args=(0,)).start()
 
 
 # Run the server

@@ -1,10 +1,22 @@
 import importlib
 import sys
 from pathlib import Path
+import pytest
 
 # Allow importing telemetry from Server
 SERVER_DIR = Path(__file__).resolve().parents[1] / "Server"
 sys.path.insert(0, str(SERVER_DIR))
+
+@pytest.fixture(autouse=True)
+def _cwd(monkeypatch):
+    # Ensure telemetry package can locate pyproject.toml via cwd-relative lookup
+    src_dir = Path(__file__).resolve().parents[1] / "MCPForUnity" / "UnityMcpServer~" / "src"
+    if not src_dir.exists():
+        # Fallback to UnityMcpBridge layout if MCPForUnity path not present
+        fallback = Path(__file__).resolve().parents[1] / "UnityMcpBridge" / "UnityMcpServer~" / "src"
+        if fallback.exists():
+            src_dir = fallback
+    monkeypatch.chdir(src_dir)
 
 
 def test_telemetry_basic():
