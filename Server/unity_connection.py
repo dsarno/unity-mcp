@@ -346,6 +346,10 @@ class UnityConnection:
 
                     # Fallback to generic port discovery if instance-specific discovery failed
                     if new_port is None:
+                        if self.instance_id:
+                            raise ConnectionError(
+                                f"Unity instance '{self.instance_id}' could not be rediscovered"
+                            ) from e
                         new_port = PortDiscovery.discover_unity_port()
 
                     if new_port != self.port:

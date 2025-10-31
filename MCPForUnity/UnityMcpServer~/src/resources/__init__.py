@@ -4,7 +4,6 @@ MCP Resources package - Auto-discovers and registers all resources in this direc
 import logging
 import inspect
 from pathlib import Path
-from typing import get_type_hints
 
 from fastmcp import FastMCP
 from telemetry_decorator import telemetry_resource
@@ -105,13 +104,13 @@ def register_all_resources(mcp: FastMCP):
             if has_other_params:
                 fixed_wrapper.__signature__ = sig.replace(parameters=fixed_params)
                 fixed_wrapper.__annotations__ = {
-                    k: v for k, v in func.__annotations__.items()
+                    k: v for k, v in getattr(func, '__annotations__', {}).items()
                     if k != 'unity_instance'
                 }
             else:
                 fixed_wrapper.__signature__ = inspect.Signature(parameters=[])
                 fixed_wrapper.__annotations__ = {
-                    k: v for k, v in func.__annotations__.items()
+                    k: v for k, v in getattr(func, '__annotations__', {}).items()
                     if k == 'return'
                 }
 
