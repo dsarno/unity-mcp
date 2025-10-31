@@ -237,7 +237,7 @@ def _monitor_stdin():
                 break
             except Exception:
                 # Ignore transient errors
-                pass
+                logger.debug("Transient error checking stdin", exc_info=True)
 
         if not _shutdown_flag.is_set():
             logger.info("Client disconnected (stdin or parent), initiating shutdown...")
@@ -247,7 +247,7 @@ def _monitor_stdin():
                 threading.Timer(0.5, _force_exit, args=(0,)).start()
     except Exception:
         # Never let monitor thread crash the process
-        pass
+        logger.debug("Monitor thread error", exc_info=True)
 
 
 def main():
