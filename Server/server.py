@@ -192,18 +192,18 @@ register_all_tools(mcp)
 register_all_resources(mcp)
 
 
-def _force_exit():
+def _force_exit(code: int = 0):
     """Force process exit, bypassing any background threads that might linger."""
     try:
-        sys.exit(0)
+        sys.exit(code)
     except SystemExit:
-        os._exit(0)
+        os._exit(code)
 
 
 def _signal_handler(signum, frame):
     logger.info(f"Received signal {signum}, initiating shutdown...")
     _shutdown_flag.set()
-    threading.Timer(1.0, _force_exit).start()
+    threading.Timer(1.0, _force_exit, args=(0,)).start()
 
 
 def _monitor_stdin():
@@ -239,7 +239,10 @@ def _monitor_stdin():
         if not _shutdown_flag.is_set():
             logger.info("Client disconnected (stdin or parent), initiating shutdown...")
             _shutdown_flag.set()
-            threading.Timer(0.5, _force_exit).start()
+            if not _shutdown_flag.is_set():
+                threading.Timer(0.5, _force_exit, args=(0,)).start()
+            else:
+                threading.Timer(0.5, _force_exit, args=(0,)).start()
     except Exception:
         # Never let monitor thread crash the process
         pass
@@ -270,14 +273,15 @@ def main():
     except BrokenPipeError:
         logger.info("Broken pipe; shutting down")
         _shutdown_flag.set()
-        _force_exit()
+        # rely on finally to schedule exit for consistency
     except Exception as e:
         logger.error(f"Server error: {e}", exc_info=True)
         _shutdown_flag.set()
+        _force_exit(1)
     finally:
         _shutdown_flag.set()
         logger.info("Server main loop exited")
-        threading.Timer(0.5, _force_exit).start()
+        threading.Timer(0.5, _force_exit, args=(0,)).start()
 
 
 # Run the server
