@@ -634,7 +634,7 @@ wheels = [
 
 [[package]]
 name = "mcpforunityserver"
-version = "6.2.5"
+version = "6.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
