@@ -6,6 +6,7 @@ using UnityEditor;
 using Newtonsoft.Json.Linq;
 using MCPForUnity.Editor.Tools;
 using System;
+using System.IO;
 using System.Text.RegularExpressions;
 
 namespace Tests.EditMode
@@ -19,6 +20,9 @@ namespace Tests.EditMode
     /// </summary>
     public class MCPToolParameterTests
     {
+        private const string TempDir = "Assets/Temp/MCPToolParameterTests";
+        private const string TempLiveDir = "Assets/Temp/LiveTests";
+
 		private static void AssertShaderIsSupported(Shader s)
 		{
 			Assert.IsNotNull(s, "Shader should not be null");
@@ -30,21 +34,46 @@ namespace Tests.EditMode
 				|| name == "Unlit/Color";
 			Assert.IsTrue(ok, $"Unexpected shader: {name}");
 		}
+
+        [TearDown]
+        public void TearDown()
+        {
+            // Clean up temp directories after each test
+            if (AssetDatabase.IsValidFolder(TempDir))
+            {
+                AssetDatabase.DeleteAsset(TempDir);
+            }
+            
+            if (AssetDatabase.IsValidFolder(TempLiveDir))
+            {
+                AssetDatabase.DeleteAsset(TempLiveDir);
+            }
+            
+            // Clean up parent Temp folder if it's empty
+            if (AssetDatabase.IsValidFolder("Assets/Temp"))
+            {
+                var remainingDirs = Directory.GetDirectories("Assets/Temp");
+                var remainingFiles = Directory.GetFiles("Assets/Temp");
+                if (remainingDirs.Length == 0 && remainingFiles.Length == 0)
+                {
+                    AssetDatabase.DeleteAsset("Assets/Temp");
+                }
+            }
+        }
         [Test]
         public void Test_ManageAsset_ShouldAcceptJSONProperties()
         {
             // Arrange: create temp folder
-            const string tempDir = "Assets/Temp/MCPToolParameterTests";
             if (!AssetDatabase.IsValidFolder("Assets/Temp"))
             {
                 AssetDatabase.CreateFolder("Assets", "Temp");
             }
-            if (!AssetDatabase.IsValidFolder(tempDir))
+            if (!AssetDatabase.IsValidFolder(TempDir))
             {
                 AssetDatabase.CreateFolder("Assets/Temp", "MCPToolParameterTests");
             }
 
-            var matPath = $"{tempDir}/JsonMat_{Guid.NewGuid().ToString("N")}.mat";
+            var matPath = $"{TempDir}/JsonMat_{Guid.NewGuid().ToString("N")}.mat";
 
             // Build params with properties as a JSON string (to be coerced)
             var p = new JObject
