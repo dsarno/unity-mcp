@@ -30,15 +30,15 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
             try
             {
                 // Use existing UV detection from ServerInstaller
-                string uvPath = MCPServiceLocator.Paths.GetUvPath(verifyPath: false);
-                if (!string.IsNullOrEmpty(uvPath))
+                string uvxPath = MCPServiceLocator.Paths.GetUvxPath(verifyPath: false);
+                if (!string.IsNullOrEmpty(uvxPath))
                 {
-                    if (TryValidateUV(uvPath, out string version))
+                    if (TryValidateUvx(uvxPath, out string version))
                     {
                         status.IsAvailable = true;
                         status.Version = version;
-                        status.Path = uvPath;
-                        status.Details = $"Found UV {version} at {uvPath}";
+                        status.Path = uvxPath;
+                        status.Details = $"Found UV {version} at {uvxPath}";
                         return status;
                     }
                 }
@@ -54,7 +54,7 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
             return status;
         }
 
-        protected bool TryValidateUV(string uvPath, out string version)
+        protected bool TryValidateUvx(string uvxPath, out string version)
         {
             version = null;
 
@@ -62,7 +62,7 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = uvPath,
+                    FileName = uvxPath,
                     Arguments = "--version",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,

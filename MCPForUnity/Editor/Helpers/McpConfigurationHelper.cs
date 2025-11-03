@@ -26,7 +26,7 @@ namespace MCPForUnity.Editor.Helpers
         /// Writes MCP configuration to the specified path using sophisticated logic
         /// that preserves existing configuration and only writes when necessary
         /// </summary>
-        public static string WriteMcpConfiguration(string pythonDir, string configPath, McpClient mcpClient = null)
+        public static string WriteMcpConfiguration(string configPath, McpClient mcpClient = null)
         {
             // 0) Respect explicit lock (hidden pref or UI toggle)
             try
@@ -95,8 +95,8 @@ namespace MCPForUnity.Editor.Helpers
             catch { }
 
             // 1) Start from existing, only fill gaps (prefer trusted resolver)
-            string uvPath = MCPServiceLocator.Paths.GetUvPath(verifyPath: true);
-            if (uvPath == null) return "UV package manager not found. Please install UV first.";
+            string uvxPath = MCPServiceLocator.Paths.GetUvxPath(verifyPath: true);
+            if (uvxPath == null) return "UV package manager not found. Please install UV first.";
 
             // Ensure containers exist and write back configuration
             JObject existingRoot;
@@ -105,7 +105,7 @@ namespace MCPForUnity.Editor.Helpers
             else
                 existingRoot = JObject.FromObject(existingConfig);
 
-            existingRoot = ConfigJsonBuilder.ApplyUnityServerToExistingConfig(existingRoot, uvPath, mcpClient);
+            existingRoot = ConfigJsonBuilder.ApplyUnityServerToExistingConfig(existingRoot, uvxPath, mcpClient);
 
             string mergedJson = JsonConvert.SerializeObject(existingRoot, jsonSettings);
 
@@ -114,7 +114,7 @@ namespace MCPForUnity.Editor.Helpers
 
             try
             {
-                if (File.Exists(uvPath)) EditorPrefs.SetString("MCPForUnity.UvPath", uvPath);
+                if (File.Exists(uvxPath)) EditorPrefs.SetString("MCPForUnity.UvxPath", uvxPath);
             }
             catch { }
 
@@ -124,7 +124,7 @@ namespace MCPForUnity.Editor.Helpers
         /// <summary>
         /// Configures a Codex client with sophisticated TOML handling
         /// </summary>
-        public static string ConfigureCodexClient(string pythonDir, string configPath, McpClient mcpClient)
+        public static string ConfigureCodexClient(string configPath, McpClient mcpClient)
         {
             try
             {
@@ -154,20 +154,20 @@ namespace MCPForUnity.Editor.Helpers
                 CodexConfigHelper.TryParseCodexServer(existingToml, out existingCommand, out existingArgs);
             }
 
-            string uvPath = MCPServiceLocator.Paths.GetUvPath();
-            if (uvPath == null)
+            string uvxPath = MCPServiceLocator.Paths.GetUvxPath();
+            if (uvxPath == null)
             {
                 return "UV package manager not found. Please install UV first.";
             }
 
-            string updatedToml = CodexConfigHelper.UpsertCodexServerBlock(existingToml, uvPath);
+            string updatedToml = CodexConfigHelper.UpsertCodexServerBlock(existingToml, uvxPath);
 
             EnsureConfigDirectoryExists(configPath);
             WriteAtomicFile(configPath, updatedToml);
 
             try
             {
-                if (File.Exists(uvPath)) EditorPrefs.SetString("MCPForUnity.UvPath", uvPath);
+                if (File.Exists(uvxPath)) EditorPrefs.SetString("MCPForUnity.UvxPath", uvxPath);
             }
             catch { }
 
@@ -207,12 +207,12 @@ namespace MCPForUnity.Editor.Helpers
             Directory.CreateDirectory(Path.GetDirectoryName(configPath));
         }
 
-        public static string ExtractDirectoryArg(string[] args)
+        public static string ExtractUvxUrl(string[] args)
         {
             if (args == null) return null;
             for (int i = 0; i < args.Length - 1; i++)
             {
-                if (string.Equals(args[i], "--directory", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(args[i], "--from", StringComparison.OrdinalIgnoreCase))
                 {
                     return args[i + 1];
                 }

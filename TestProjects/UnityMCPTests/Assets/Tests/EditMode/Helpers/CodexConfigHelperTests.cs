@@ -126,7 +126,7 @@ namespace MCPForUnityTests.Editor.Helpers
         public void BuildCodexServerBlock_OnWindows_IncludesSystemRootEnv()
         {
             // This test verifies the fix for https://github.com/CoplayDev/unity-mcp/issues/315
-            // On Windows, Codex requires SystemRoot environment variable to be set
+            // Ensures Windows-specific env configuration is included
 
             // Mock Windows platform
             MCPServiceLocator.Register<IPlatformService>(new MockPlatformService(isWindows: true, systemRoot: "C:\\Windows"));
@@ -160,11 +160,17 @@ namespace MCPForUnityTests.Editor.Helpers
             var command = (commandNode as TomlString).Value;
             Assert.IsTrue(command.Contains("uvx"), "Command should contain uvx");
 
-            // Verify args contains mcp-for-unity
+            // Verify args contains the proper uvx command structure
             var args = argsNode as TomlArray;
-            Assert.IsTrue(args.ChildrenCount > 0, "Args should not be empty");
+            Assert.IsTrue(args.ChildrenCount >= 3, "Args should contain --from, git URL, and package name");
+            
             var firstArg = (args[0] as TomlString).Value;
-            Assert.AreEqual("mcp-for-unity", firstArg, "First arg should be mcp-for-unity");
+            var secondArg = (args[1] as TomlString).Value;
+            var thirdArg = (args[2] as TomlString).Value;
+            
+            Assert.AreEqual("--from", firstArg, "First arg should be --from");
+            Assert.IsTrue(secondArg.Contains("git+https://github.com/CoplayDev/unity-mcp"), "Second arg should be git URL");
+            Assert.AreEqual("mcp-for-unity", thirdArg, "Third arg should be mcp-for-unity");
 
             // Verify env.SystemRoot is present on Windows
             bool hasEnv = unityMcp.TryGetNode("env", out var envNode);
@@ -216,11 +222,17 @@ namespace MCPForUnityTests.Editor.Helpers
             var command = (commandNode as TomlString).Value;
             Assert.IsTrue(command.Contains("uvx"), "Command should contain uvx");
 
-            // Verify args contains mcp-for-unity
+            // Verify args contains the proper uvx command structure
             var args = argsNode as TomlArray;
-            Assert.IsTrue(args.ChildrenCount > 0, "Args should not be empty");
+            Assert.IsTrue(args.ChildrenCount >= 3, "Args should contain --from, git URL, and package name");
+            
             var firstArg = (args[0] as TomlString).Value;
-            Assert.AreEqual("mcp-for-unity", firstArg, "First arg should be mcp-for-unity");
+            var secondArg = (args[1] as TomlString).Value;
+            var thirdArg = (args[2] as TomlString).Value;
+            
+            Assert.AreEqual("--from", firstArg, "First arg should be --from");
+            Assert.IsTrue(secondArg.Contains("git+https://github.com/CoplayDev/unity-mcp"), "Second arg should be git URL");
+            Assert.AreEqual("mcp-for-unity", thirdArg, "Third arg should be mcp-for-unity");
 
             // Verify env is NOT present on non-Windows platforms
             bool hasEnv = unityMcp.TryGetNode("env", out _);
@@ -274,11 +286,17 @@ namespace MCPForUnityTests.Editor.Helpers
             var command = (commandNode as TomlString).Value;
             Assert.IsTrue(command.Contains("uvx"), "Command should contain uvx");
 
-            // Verify args contains mcp-for-unity
+            // Verify args contains the proper uvx command structure
             var args = argsNode as TomlArray;
-            Assert.IsTrue(args.ChildrenCount > 0, "Args should not be empty");
+            Assert.IsTrue(args.ChildrenCount >= 3, "Args should contain --from, git URL, and package name");
+            
             var firstArg = (args[0] as TomlString).Value;
-            Assert.AreEqual("mcp-for-unity", firstArg, "First arg should be mcp-for-unity");
+            var secondArg = (args[1] as TomlString).Value;
+            var thirdArg = (args[2] as TomlString).Value;
+            
+            Assert.AreEqual("--from", firstArg, "First arg should be --from");
+            Assert.IsTrue(secondArg.Contains("git+https://github.com/CoplayDev/unity-mcp"), "Second arg should be git URL");
+            Assert.AreEqual("mcp-for-unity", thirdArg, "Third arg should be mcp-for-unity");
 
             // Verify env.SystemRoot is present on Windows
             bool hasEnv = unityMcp.TryGetNode("env", out var envNode);
@@ -339,11 +357,17 @@ namespace MCPForUnityTests.Editor.Helpers
             var command = (commandNode as TomlString).Value;
             Assert.IsTrue(command.Contains("uvx"), "Command should contain uvx");
 
-            // Verify args contains mcp-for-unity
+            // Verify args contains the proper uvx command structure
             var args = argsNode as TomlArray;
-            Assert.IsTrue(args.ChildrenCount > 0, "Args should not be empty");
+            Assert.IsTrue(args.ChildrenCount >= 3, "Args should contain --from, git URL, and package name");
+            
             var firstArg = (args[0] as TomlString).Value;
-            Assert.AreEqual("mcp-for-unity", firstArg, "First arg should be mcp-for-unity");
+            var secondArg = (args[1] as TomlString).Value;
+            var thirdArg = (args[2] as TomlString).Value;
+            
+            Assert.AreEqual("--from", firstArg, "First arg should be --from");
+            Assert.IsTrue(secondArg.Contains("git+https://github.com/CoplayDev/unity-mcp"), "Second arg should be git URL");
+            Assert.AreEqual("mcp-for-unity", thirdArg, "Third arg should be mcp-for-unity");
 
             // Verify env is NOT present on non-Windows platforms
             bool hasEnv = unityMcp.TryGetNode("env", out _);

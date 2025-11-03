@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using PackageInfo = UnityEditor.PackageManager.PackageInfo;
+using MCPForUnity.Editor.Services;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -148,6 +149,34 @@ namespace MCPForUnity.Editor.Helpers
             }
             
             return $"uvx --from git+https://github.com/CoplayDev/unity-mcp@v{version}#subdirectory=Server";
+        }
+
+        /// <summary>
+        /// Gets just the git URL part for the MCP server package
+        /// </summary>
+        /// <returns>Git URL string, or empty string if version is unknown</returns>
+        public static string GetMcpServerGitUrl()
+        {
+            string version = GetPackageVersion();
+            if (version == "unknown")
+            {
+                return "";
+            }
+            
+            return $"git+https://github.com/CoplayDev/unity-mcp@v{version}#subdirectory=Server";
+        }
+
+        /// <summary>
+        /// Gets structured uvx command parts for different client configurations
+        /// </summary>
+        /// <returns>Tuple containing (uvxPath, fromUrl, packageName)</returns>
+        public static (string uvxPath, string fromUrl, string packageName) GetUvxCommandParts()
+        {
+            string uvxPath = MCPServiceLocator.Paths.GetUvxPath() ?? "uvx";
+            string fromUrl = GetMcpServerGitUrl();
+            string packageName = "mcp-for-unity";
+            
+            return (uvxPath, fromUrl, packageName);
         }
 
         /// <summary>

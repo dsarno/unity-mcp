@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Helpers;
@@ -50,11 +51,19 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         private static void PopulateUnityNode(JObject unity, string uvPath, McpClient client, bool isVSCode)
         {
-            // Use uvx command with the package version
-            string uvxCommand = AssetPathUtility.GetUvxCommand();
-            unity["command"] = uvxCommand;
-
-            unity["args"] = JArray.FromObject(new[] { "mcp-for-unity" });
+            // Use structured uvx command parts for proper formatting
+            var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+            
+            // For JSON config clients (Cursor, VSCode, etc.), separate command and args properly
+            unity["command"] = uvxPath;
+            
+            var args = new List<string> { packageName };
+            if (!string.IsNullOrEmpty(fromUrl))
+            {
+                args.Insert(0, fromUrl);
+                args.Insert(0, "--from");
+            }
+            unity["args"] = JArray.FromObject(args.ToArray());
 
             if (isVSCode)
             {

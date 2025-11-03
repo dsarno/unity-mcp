@@ -29,10 +29,10 @@ namespace MCPForUnity.Editor.Windows
         private EnumField validationLevelField;
         private Label validationDescription;
         private Foldout advancedSettingsFoldout;
-        private TextField uvPathOverride;
-        private Button browseUvButton;
-        private Button clearUvButton;
-        private VisualElement uvPathStatus;
+        private TextField uvxPathOverride;
+        private Button browseUvxButton;
+        private Button clearUvxButton;
+        private VisualElement uvxPathStatus;
 
         // Connection UI Elements
         private EnumField protocolDropdown;
@@ -188,10 +188,10 @@ namespace MCPForUnity.Editor.Windows
             validationLevelField = rootVisualElement.Q<EnumField>("validation-level");
             validationDescription = rootVisualElement.Q<Label>("validation-description");
             advancedSettingsFoldout = rootVisualElement.Q<Foldout>("advanced-settings-foldout");
-            uvPathOverride = rootVisualElement.Q<TextField>("uv-path-override");
-            browseUvButton = rootVisualElement.Q<Button>("browse-uv-button");
-            clearUvButton = rootVisualElement.Q<Button>("clear-uv-button");
-            uvPathStatus = rootVisualElement.Q<VisualElement>("uv-path-status");
+            uvxPathOverride = rootVisualElement.Q<TextField>("uv-path-override");
+            browseUvxButton = rootVisualElement.Q<Button>("browse-uv-button");
+            clearUvxButton = rootVisualElement.Q<Button>("clear-uv-button");
+            uvxPathStatus = rootVisualElement.Q<VisualElement>("uv-path-status");
 
             // Connection
             protocolDropdown = rootVisualElement.Q<EnumField>("protocol-dropdown");
@@ -275,8 +275,8 @@ namespace MCPForUnity.Editor.Windows
             });
 
             // Advanced settings callbacks
-            browseUvButton.clicked += OnBrowseUvClicked;
-            clearUvButton.clicked += OnClearUvClicked;
+            browseUvxButton.clicked += OnBrowseUvxClicked;
+            clearUvxButton.clicked += OnClearUvxClicked;
 
             // Connection callbacks
             connectionToggleButton.clicked += OnConnectionToggleClicked;
@@ -448,26 +448,26 @@ namespace MCPForUnity.Editor.Windows
             var pathService = MCPServiceLocator.Paths;
 
             // UV Path
-            string uvPath = pathService.GetUvPath();
-            if (pathService.HasUvPathOverride)
+            string uvxPath = pathService.GetUvxPath();
+            if (pathService.HasUvxPathOverride)
             {
-                uvPathOverride.value = uvPath ?? "(override set but invalid)";
+                uvxPathOverride.value = uvxPath ?? "(override set but invalid)";
             }
             else
             {
-                uvPathOverride.value = uvPath ?? "(auto-detected)";
+                uvxPathOverride.value = uvxPath ?? "(auto-detected)";
             }
 
             // Update status indicator
-            uvPathStatus.RemoveFromClassList("valid");
-            uvPathStatus.RemoveFromClassList("invalid");
-            if (!string.IsNullOrEmpty(uvPath) && File.Exists(uvPath))
+            uvxPathStatus.RemoveFromClassList("valid");
+            uvxPathStatus.RemoveFromClassList("invalid");
+            if (!string.IsNullOrEmpty(uvxPath) && File.Exists(uvxPath))
             {
-                uvPathStatus.AddToClassList("valid");
+                uvxPathStatus.AddToClassList("valid");
             }
             else
             {
-                uvPathStatus.AddToClassList("invalid");
+                uvxPathStatus.AddToClassList("invalid");
             }
         }
 
@@ -608,7 +608,7 @@ namespace MCPForUnity.Editor.Windows
             }
         }
 
-        private void OnBrowseUvClicked()
+        private void OnBrowseUvxClicked()
         {
             string suggested = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
                 ? "/opt/homebrew/bin"
@@ -618,7 +618,7 @@ namespace MCPForUnity.Editor.Windows
             {
                 try
                 {
-                    MCPServiceLocator.Paths.SetUvPathOverride(picked);
+                    MCPServiceLocator.Paths.SetUvxPathOverride(picked);
                     UpdatePathOverrides();
                     McpLog.Info($"UV path override set to: {picked}");
                 }
@@ -629,9 +629,9 @@ namespace MCPForUnity.Editor.Windows
             }
         }
 
-        private void OnClearUvClicked()
+        private void OnClearUvxClicked()
         {
-            MCPServiceLocator.Paths.ClearUvPathOverride();
+            MCPServiceLocator.Paths.ClearUvxPathOverride();
             UpdatePathOverrides();
             McpLog.Info("UV path override cleared");
         }

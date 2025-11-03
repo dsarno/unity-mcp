@@ -14,38 +14,37 @@ namespace MCPForUnity.Editor.Helpers
     /// </summary>
     public static class CodexConfigHelper
     {
-        public static bool IsCodexConfigured(string pythonDir)
-        {
-            try
-            {
-                string basePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                if (string.IsNullOrEmpty(basePath)) return false;
-
-                string configPath = Path.Combine(basePath, ".codex", "config.toml");
-                if (!File.Exists(configPath)) return false;
-
-                string toml = File.ReadAllText(configPath);
-                if (!TryParseCodexServer(toml, out _, out var args)) return false;
-
-                // For uvx-based configuration, we just need to verify the command contains uvx and the expected package
-                string expectedCommand = AssetPathUtility.GetUvxCommand();
-                return TryParseCodexServer(toml, out string command, out _) && 
-                       !string.IsNullOrEmpty(command) && 
-                       command.Contains("uvx") && 
-                       command.Contains("unity-mcp");
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
         public static string BuildCodexServerBlock(string uvPath)
         {
             var table = new TomlTable();
             var mcpServers = new TomlTable();
 
-            mcpServers["unityMCP"] = CreateUnityMcpTable(uvPath);
+            // Use structured uvx command parts for proper TOML formatting
+            var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+            
+            var unityMCP = new TomlTable();
+            unityMCP["command"] = uvxPath;
+            
+            var args = new TomlArray();
+            if (!string.IsNullOrEmpty(fromUrl))
+            {
+                args.Add(new TomlString { Value = "--from" });
+                args.Add(new TomlString { Value = fromUrl });
+            }
+            args.Add(new TomlString { Value = packageName });
+            
+            unityMCP["args"] = args;
+
+            // Add Windows-specific environment configuration, see: https://github.com/CoplayDev/unity-mcp/issues/315
+            var platformService = MCPServiceLocator.Platform;
+            if (platformService.IsWindows())
+            {
+                var envTable = new TomlTable { IsInline = true };
+                envTable["SystemRoot"] = new TomlString { Value = platformService.GetSystemRoot() };
+                unityMCP["env"] = envTable;
+            }
+
+            mcpServers["unityMCP"] = unityMCP;
             table["mcp_servers"] = mcpServers;
 
             using var writer = new StringWriter();
@@ -133,12 +132,17 @@ namespace MCPForUnity.Editor.Helpers
         {
             var unityMCP = new TomlTable();
             
-            // Use uvx command with the package version
-            string uvxCommand = AssetPathUtility.GetUvxCommand();
-            unityMCP["command"] = new TomlString { Value = uvxCommand };
+            // Use structured uvx command parts for proper TOML formatting
+            var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+            unityMCP["command"] = new TomlString { Value = uvxPath };
 
             var argsArray = new TomlArray();
-            argsArray.Add(new TomlString { Value = "mcp-for-unity" });
+            if (!string.IsNullOrEmpty(fromUrl))
+            {
+                argsArray.Add(new TomlString { Value = "--from" });
+                argsArray.Add(new TomlString { Value = fromUrl });
+            }
+            argsArray.Add(new TomlString { Value = packageName });
             unityMCP["args"] = argsArray;
 
             // Add Windows-specific environment configuration, see: https://github.com/CoplayDev/unity-mcp/issues/315
