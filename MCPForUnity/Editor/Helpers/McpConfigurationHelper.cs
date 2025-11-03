@@ -97,7 +97,6 @@ namespace MCPForUnity.Editor.Helpers
             // 1) Start from existing, only fill gaps (prefer trusted resolver)
             string uvPath = MCPServiceLocator.Paths.GetUvPath(verifyPath: true);
             if (uvPath == null) return "UV package manager not found. Please install UV first.";
-            string serverSrc = ""; // TODO: replace with remote server name
 
             // Ensure containers exist and write back configuration
             JObject existingRoot;
@@ -106,7 +105,7 @@ namespace MCPForUnity.Editor.Helpers
             else
                 existingRoot = JObject.FromObject(existingConfig);
 
-            existingRoot = ConfigJsonBuilder.ApplyUnityServerToExistingConfig(existingRoot, uvPath, serverSrc, mcpClient);
+            existingRoot = ConfigJsonBuilder.ApplyUnityServerToExistingConfig(existingRoot, uvPath, mcpClient);
 
             string mergedJson = JsonConvert.SerializeObject(existingRoot, jsonSettings);
 
@@ -116,7 +115,6 @@ namespace MCPForUnity.Editor.Helpers
             try
             {
                 if (File.Exists(uvPath)) EditorPrefs.SetString("MCPForUnity.UvPath", uvPath);
-                EditorPrefs.SetString("MCPForUnity.ServerSrc", serverSrc);
             }
             catch { }
 
@@ -162,9 +160,7 @@ namespace MCPForUnity.Editor.Helpers
                 return "UV package manager not found. Please install UV first.";
             }
 
-            string serverSrc = ""; // TODO: replace with remote server name
-
-            string updatedToml = CodexConfigHelper.UpsertCodexServerBlock(existingToml, uvPath, serverSrc);
+            string updatedToml = CodexConfigHelper.UpsertCodexServerBlock(existingToml, uvPath);
 
             EnsureConfigDirectoryExists(configPath);
             WriteAtomicFile(configPath, updatedToml);
@@ -172,7 +168,6 @@ namespace MCPForUnity.Editor.Helpers
             try
             {
                 if (File.Exists(uvPath)) EditorPrefs.SetString("MCPForUnity.UvPath", uvPath);
-                EditorPrefs.SetString("MCPForUnity.ServerSrc", serverSrc);
             }
             catch { }
 

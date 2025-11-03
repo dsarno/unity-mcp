@@ -136,7 +136,22 @@ namespace MCPForUnity.Editor.Helpers
         }
 
         /// <summary>
-        /// Gets the version string from the package.json file.
+        /// Gets the uvx command with the correct package version for running the MCP server
+        /// </summary>
+        /// <returns>Uvx command string, or "uvx" if version is unknown</returns>
+        public static string GetUvxCommand()
+        {
+            string version = GetPackageVersion();
+            if (version == "unknown")
+            {
+                return "uvx";
+            }
+            
+            return $"uvx --from git+https://github.com/CoplayDev/unity-mcp@v{version}#subdirectory=Server";
+        }
+
+        /// <summary>
+        /// Gets the package version from package.json
         /// </summary>
         /// <returns>Version string, or "unknown" if not found</returns>
         public static string GetPackageVersion()

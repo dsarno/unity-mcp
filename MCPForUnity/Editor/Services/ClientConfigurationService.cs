@@ -237,7 +237,13 @@ namespace MCPForUnity.Editor.Services
 
             if (string.IsNullOrEmpty(mcpServerPath))
             {
-                throw new InvalidOperationException("Cannot register: Python directory not found");
+                // For uvx-based configuration, we don't need a local server path
+                // Just verify uv is available for uvx
+                string uvPath = pathService.GetUvPath();
+                if (string.IsNullOrEmpty(uvPath))
+                {
+                    throw new InvalidOperationException("Cannot register: UV package manager not found. Please install UV first.");
+                }
             }
 
             string claudePath = pathService.GetClaudeCliPath();
@@ -246,8 +252,10 @@ namespace MCPForUnity.Editor.Services
                 throw new InvalidOperationException("Claude CLI not found. Please install Claude Code first.");
             }
 
-            string uvPath = pathService.GetUvPath() ?? "uv";
-            string args = $"mcp add UnityMCP -- \"{uvPath}\" run --directory \"{mcpServerPath}\" server.py";
+            // Use uvx command with package version
+            string uvxCommand = AssetPathUtility.GetUvxCommand();
+            
+            string args = $"mcp add UnityMCP -- {uvxCommand} mcp-for-unity";
             string projectDir = Path.GetDirectoryName(Application.dataPath);
 
             string pathPrepend = null;
@@ -395,11 +403,11 @@ namespace MCPForUnity.Editor.Services
             {
                 if (client.mcpType == McpTypes.Codex)
                 {
-                    return CodexConfigHelper.BuildCodexServerBlock(uvPath, "");
+                    return CodexConfigHelper.BuildCodexServerBlock(uvPath);
                 }
                 else
                 {
-                    return ConfigJsonBuilder.BuildManualConfigJson(uvPath, pythonDir, client);
+                    return ConfigJsonBuilder.BuildManualConfigJson(uvPath, client);
                 }
             }
             catch (Exception ex)

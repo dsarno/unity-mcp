@@ -27,10 +27,12 @@ namespace MCPForUnity.Editor.Helpers
                 string toml = File.ReadAllText(configPath);
                 if (!TryParseCodexServer(toml, out _, out var args)) return false;
 
-                string dir = McpConfigurationHelper.ExtractDirectoryArg(args);
-                if (string.IsNullOrEmpty(dir)) return false;
-
-                return McpConfigurationHelper.PathsEqual(dir, pythonDir);
+                // For uvx-based configuration, we just need to verify the command contains uvx and the expected package
+                string expectedCommand = AssetPathUtility.GetUvxCommand();
+                return TryParseCodexServer(toml, out string command, out _) && 
+                       !string.IsNullOrEmpty(command) && 
+                       command.Contains("uvx") && 
+                       command.Contains("unity-mcp");
             }
             catch
             {
@@ -38,12 +40,12 @@ namespace MCPForUnity.Editor.Helpers
             }
         }
 
-        public static string BuildCodexServerBlock(string uvPath, string serverSrc)
+        public static string BuildCodexServerBlock(string uvPath)
         {
             var table = new TomlTable();
             var mcpServers = new TomlTable();
 
-            mcpServers["unityMCP"] = CreateUnityMcpTable(uvPath, serverSrc);
+            mcpServers["unityMCP"] = CreateUnityMcpTable(uvPath);
             table["mcp_servers"] = mcpServers;
 
             using var writer = new StringWriter();
@@ -51,7 +53,7 @@ namespace MCPForUnity.Editor.Helpers
             return writer.ToString();
         }
 
-        public static string UpsertCodexServerBlock(string existingToml, string uvPath, string serverSrc)
+        public static string UpsertCodexServerBlock(string existingToml, string uvPath)
         {
             // Parse existing TOML or create new root table
             var root = TryParseToml(existingToml) ?? new TomlTable();
@@ -64,7 +66,7 @@ namespace MCPForUnity.Editor.Helpers
             var mcpServers = root["mcp_servers"] as TomlTable;
 
             // Create or update unityMCP table
-            mcpServers["unityMCP"] = CreateUnityMcpTable(uvPath, serverSrc);
+            mcpServers["unityMCP"] = CreateUnityMcpTable(uvPath);
 
             // Serialize back to TOML
             using var writer = new StringWriter();
@@ -126,18 +128,17 @@ namespace MCPForUnity.Editor.Helpers
         /// <summary>
         /// Creates a TomlTable for the unityMCP server configuration
         /// </summary>
-        /// <param name="uvPath">Path to uv executable</param>
-        /// <param name="serverSrc">Path to server source directory</param>
-        private static TomlTable CreateUnityMcpTable(string uvPath, string serverSrc)
+        /// <param name="uvPath">Path to uv executable (used as fallback if uvx is not available)</param>
+        private static TomlTable CreateUnityMcpTable(string uvPath)
         {
             var unityMCP = new TomlTable();
-            unityMCP["command"] = new TomlString { Value = uvPath };
+            
+            // Use uvx command with the package version
+            string uvxCommand = AssetPathUtility.GetUvxCommand();
+            unityMCP["command"] = new TomlString { Value = uvxCommand };
 
             var argsArray = new TomlArray();
-            argsArray.Add(new TomlString { Value = "run" });
-            argsArray.Add(new TomlString { Value = "--directory" });
-            argsArray.Add(new TomlString { Value = serverSrc });
-            argsArray.Add(new TomlString { Value = "server.py" });
+            argsArray.Add(new TomlString { Value = "mcp-for-unity" });
             unityMCP["args"] = argsArray;
 
             // Add Windows-specific environment configuration, see: https://github.com/CoplayDev/unity-mcp/issues/315

@@ -39,15 +39,15 @@ namespace MCPForUnityTests.Editor.Helpers
             string toml = string.Join("\n", new[]
             {
                 "[mcp_servers.unityMCP]",
-                "command = \"uv\"",
-                "args = [\"run\", \"--directory\", \"/abs/path\", \"server.py\"]"
+                "command = \"uvx --from git+https://github.com/CoplayDev/unity-mcp@v6.3.0#subdirectory=Server\"",
+                "args = [\"mcp-for-unity\"]"
             });
 
             bool result = CodexConfigHelper.TryParseCodexServer(toml, out string command, out string[] args);
 
             Assert.IsTrue(result, "Parser should detect server definition");
-            Assert.AreEqual("uv", command);
-            CollectionAssert.AreEqual(new[] { "run", "--directory", "/abs/path", "server.py" }, args);
+            Assert.AreEqual("uvx --from git+https://github.com/CoplayDev/unity-mcp@v6.3.0#subdirectory=Server", command);
+            CollectionAssert.AreEqual(new[] { "mcp-for-unity" }, args);
         }
 
         [Test]
@@ -56,20 +56,17 @@ namespace MCPForUnityTests.Editor.Helpers
             string toml = string.Join("\n", new[]
             {
                 "[mcp_servers.unityMCP]",
-                "command = \"uv\"",
+                "command = \"uvx\"",
                 "args = [",
-                "  \"run\",",
-                "  \"--directory\",",
-                "  \"/abs/path\",",
-                "  \"server.py\",",
+                "  \"mcp-for-unity\",",
                 "]"
             });
 
             bool result = CodexConfigHelper.TryParseCodexServer(toml, out string command, out string[] args);
 
             Assert.IsTrue(result, "Parser should handle multi-line arrays with trailing comma");
-            Assert.AreEqual("uv", command);
-            CollectionAssert.AreEqual(new[] { "run", "--directory", "/abs/path", "server.py" }, args);
+            Assert.AreEqual("uvx", command);
+            CollectionAssert.AreEqual(new[] { "mcp-for-unity" }, args);
         }
 
         [Test]
@@ -78,20 +75,17 @@ namespace MCPForUnityTests.Editor.Helpers
             string toml = string.Join("\n", new[]
             {
                 "[mcp_servers.unityMCP]",
-                "command = \"uv\"",
+                "command = \"uvx\"",
                 "args = [",
-                "  \"run\", # launch command",
-                "  \"--directory\",",
-                "  \"/abs/path\",",
-                "  \"server.py\"",
+                "  \"mcp-for-unity\", # package name",
                 "]"
             });
 
             bool result = CodexConfigHelper.TryParseCodexServer(toml, out string command, out string[] args);
 
             Assert.IsTrue(result, "Parser should tolerate comments within the array block");
-            Assert.AreEqual("uv", command);
-            CollectionAssert.AreEqual(new[] { "run", "--directory", "/abs/path", "server.py" }, args);
+            Assert.AreEqual("uvx", command);
+            CollectionAssert.AreEqual(new[] { "mcp-for-unity" }, args);
         }
 
         [Test]
@@ -100,15 +94,15 @@ namespace MCPForUnityTests.Editor.Helpers
             string toml = string.Join("\n", new[]
             {
                 "[mcp_servers.unityMCP] # annotated header",
-                "command = \"uv\"",
-                "args = [\"run\", \"--directory\", \"/abs/path\", \"server.py\"]"
+                "command = \"uvx\"",
+                "args = [\"mcp-for-unity\"]"
             });
 
             bool result = CodexConfigHelper.TryParseCodexServer(toml, out string command, out string[] args);
 
             Assert.IsTrue(result, "Parser should recognize section headers even with inline comments");
-            Assert.AreEqual("uv", command);
-            CollectionAssert.AreEqual(new[] { "run", "--directory", "/abs/path", "server.py" }, args);
+            Assert.AreEqual("uvx", command);
+            CollectionAssert.AreEqual(new[] { "mcp-for-unity" }, args);
         }
 
         [Test]
@@ -117,15 +111,15 @@ namespace MCPForUnityTests.Editor.Helpers
             string toml = string.Join("\n", new[]
             {
                 "[mcp_servers.unityMCP]",
-                "command = 'uv'",
-                "args = ['run', '--directory', '/Users/O''Connor/codex', 'server.py']"
+                "command = 'uvx'",
+                "args = ['mcp-for-unity']"
             });
 
             bool result = CodexConfigHelper.TryParseCodexServer(toml, out string command, out string[] args);
 
             Assert.IsTrue(result, "Parser should accept single-quoted arrays with escaped apostrophes");
-            Assert.AreEqual("uv", command);
-            CollectionAssert.AreEqual(new[] { "run", "--directory", "/Users/O'Connor/codex", "server.py" }, args);
+            Assert.AreEqual("uvx", command);
+            CollectionAssert.AreEqual(new[] { "mcp-for-unity" }, args);
         }
 
         [Test]
@@ -138,9 +132,8 @@ namespace MCPForUnityTests.Editor.Helpers
             MCPServiceLocator.Register<IPlatformService>(new MockPlatformService(isWindows: true, systemRoot: "C:\\Windows"));
 
             string uvPath = "C:\\path\\to\\uv.exe";
-            string serverSrc = "C:\\path\\to\\server";
 
-            string result = CodexConfigHelper.BuildCodexServerBlock(uvPath, serverSrc);
+            string result = CodexConfigHelper.BuildCodexServerBlock(uvPath);
 
             Assert.IsNotNull(result, "BuildCodexServerBlock should return a valid TOML string");
 
@@ -160,8 +153,18 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.IsInstanceOf<TomlTable>(unityMcpNode, "unityMCP should be a table");
 
             var unityMcp = unityMcpNode as TomlTable;
-            Assert.IsTrue(unityMcp.TryGetNode("command", out _), "unityMCP should contain command");
-            Assert.IsTrue(unityMcp.TryGetNode("args", out _), "unityMCP should contain args");
+            Assert.IsTrue(unityMcp.TryGetNode("command", out var commandNode), "unityMCP should contain command");
+            Assert.IsTrue(unityMcp.TryGetNode("args", out var argsNode), "unityMCP should contain args");
+
+            // Verify command contains uvx
+            var command = (commandNode as TomlString).Value;
+            Assert.IsTrue(command.Contains("uvx"), "Command should contain uvx");
+
+            // Verify args contains mcp-for-unity
+            var args = argsNode as TomlArray;
+            Assert.IsTrue(args.ChildrenCount > 0, "Args should not be empty");
+            var firstArg = (args[0] as TomlString).Value;
+            Assert.AreEqual("mcp-for-unity", firstArg, "First arg should be mcp-for-unity");
 
             // Verify env.SystemRoot is present on Windows
             bool hasEnv = unityMcp.TryGetNode("env", out var envNode);
@@ -185,9 +188,8 @@ namespace MCPForUnityTests.Editor.Helpers
             MCPServiceLocator.Register<IPlatformService>(new MockPlatformService(isWindows: false));
 
             string uvPath = "/usr/local/bin/uv";
-            string serverSrc = "/path/to/server";
 
-            string result = CodexConfigHelper.BuildCodexServerBlock(uvPath, serverSrc);
+            string result = CodexConfigHelper.BuildCodexServerBlock(uvPath);
 
             Assert.IsNotNull(result, "BuildCodexServerBlock should return a valid TOML string");
 
@@ -207,8 +209,18 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.IsInstanceOf<TomlTable>(unityMcpNode, "unityMCP should be a table");
 
             var unityMcp = unityMcpNode as TomlTable;
-            Assert.IsTrue(unityMcp.TryGetNode("command", out _), "unityMCP should contain command");
-            Assert.IsTrue(unityMcp.TryGetNode("args", out _), "unityMCP should contain args");
+            Assert.IsTrue(unityMcp.TryGetNode("command", out var commandNode), "unityMCP should contain command");
+            Assert.IsTrue(unityMcp.TryGetNode("args", out var argsNode), "unityMCP should contain args");
+
+            // Verify command contains uvx
+            var command = (commandNode as TomlString).Value;
+            Assert.IsTrue(command.Contains("uvx"), "Command should contain uvx");
+
+            // Verify args contains mcp-for-unity
+            var args = argsNode as TomlArray;
+            Assert.IsTrue(args.ChildrenCount > 0, "Args should not be empty");
+            var firstArg = (args[0] as TomlString).Value;
+            Assert.AreEqual("mcp-for-unity", firstArg, "First arg should be mcp-for-unity");
 
             // Verify env is NOT present on non-Windows platforms
             bool hasEnv = unityMcp.TryGetNode("env", out _);
@@ -231,9 +243,8 @@ namespace MCPForUnityTests.Editor.Helpers
             });
 
             string uvPath = "C:\\path\\to\\uv.exe";
-            string serverSrc = "C:\\path\\to\\server";
 
-            string result = CodexConfigHelper.UpsertCodexServerBlock(existingToml, uvPath, serverSrc);
+            string result = CodexConfigHelper.UpsertCodexServerBlock(existingToml, uvPath);
 
             Assert.IsNotNull(result, "UpsertCodexServerBlock should return a valid TOML string");
 
@@ -256,8 +267,18 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.IsInstanceOf<TomlTable>(unityMcpNode, "unityMCP should be a table");
 
             var unityMcp = unityMcpNode as TomlTable;
-            Assert.IsTrue(unityMcp.TryGetNode("command", out _), "unityMCP should contain command");
-            Assert.IsTrue(unityMcp.TryGetNode("args", out _), "unityMCP should contain args");
+            Assert.IsTrue(unityMcp.TryGetNode("command", out var commandNode), "unityMCP should contain command");
+            Assert.IsTrue(unityMcp.TryGetNode("args", out var argsNode), "unityMCP should contain args");
+
+            // Verify command contains uvx
+            var command = (commandNode as TomlString).Value;
+            Assert.IsTrue(command.Contains("uvx"), "Command should contain uvx");
+
+            // Verify args contains mcp-for-unity
+            var args = argsNode as TomlArray;
+            Assert.IsTrue(args.ChildrenCount > 0, "Args should not be empty");
+            var firstArg = (args[0] as TomlString).Value;
+            Assert.AreEqual("mcp-for-unity", firstArg, "First arg should be mcp-for-unity");
 
             // Verify env.SystemRoot is present on Windows
             bool hasEnv = unityMcp.TryGetNode("env", out var envNode);
@@ -287,9 +308,8 @@ namespace MCPForUnityTests.Editor.Helpers
             });
 
             string uvPath = "/usr/local/bin/uv";
-            string serverSrc = "/path/to/server";
 
-            string result = CodexConfigHelper.UpsertCodexServerBlock(existingToml, uvPath, serverSrc);
+            string result = CodexConfigHelper.UpsertCodexServerBlock(existingToml, uvPath);
 
             Assert.IsNotNull(result, "UpsertCodexServerBlock should return a valid TOML string");
 
@@ -312,8 +332,18 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.IsInstanceOf<TomlTable>(unityMcpNode, "unityMCP should be a table");
 
             var unityMcp = unityMcpNode as TomlTable;
-            Assert.IsTrue(unityMcp.TryGetNode("command", out _), "unityMCP should contain command");
-            Assert.IsTrue(unityMcp.TryGetNode("args", out _), "unityMCP should contain args");
+            Assert.IsTrue(unityMcp.TryGetNode("command", out var commandNode), "unityMCP should contain command");
+            Assert.IsTrue(unityMcp.TryGetNode("args", out var argsNode), "unityMCP should contain args");
+
+            // Verify command contains uvx
+            var command = (commandNode as TomlString).Value;
+            Assert.IsTrue(command.Contains("uvx"), "Command should contain uvx");
+
+            // Verify args contains mcp-for-unity
+            var args = argsNode as TomlArray;
+            Assert.IsTrue(args.ChildrenCount > 0, "Args should not be empty");
+            var firstArg = (args[0] as TomlString).Value;
+            Assert.AreEqual("mcp-for-unity", firstArg, "First arg should be mcp-for-unity");
 
             // Verify env is NOT present on non-Windows platforms
             bool hasEnv = unityMcp.TryGetNode("env", out _);
