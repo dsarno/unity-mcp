@@ -29,13 +29,9 @@ namespace MCPForUnity.Editor.Windows
         private EnumField validationLevelField;
         private Label validationDescription;
         private Foldout advancedSettingsFoldout;
-        private TextField mcpServerPathOverride;
         private TextField uvPathOverride;
-        private Button browsePythonButton;
-        private Button clearPythonButton;
         private Button browseUvButton;
         private Button clearUvButton;
-        private VisualElement mcpServerPathStatus;
         private VisualElement uvPathStatus;
 
         // Connection UI Elements
@@ -192,13 +188,9 @@ namespace MCPForUnity.Editor.Windows
             validationLevelField = rootVisualElement.Q<EnumField>("validation-level");
             validationDescription = rootVisualElement.Q<Label>("validation-description");
             advancedSettingsFoldout = rootVisualElement.Q<Foldout>("advanced-settings-foldout");
-            mcpServerPathOverride = rootVisualElement.Q<TextField>("python-path-override");
             uvPathOverride = rootVisualElement.Q<TextField>("uv-path-override");
-            browsePythonButton = rootVisualElement.Q<Button>("browse-python-button");
-            clearPythonButton = rootVisualElement.Q<Button>("clear-python-button");
             browseUvButton = rootVisualElement.Q<Button>("browse-uv-button");
             clearUvButton = rootVisualElement.Q<Button>("clear-uv-button");
-            mcpServerPathStatus = rootVisualElement.Q<VisualElement>("mcp-server-path-status");
             uvPathStatus = rootVisualElement.Q<VisualElement>("uv-path-status");
 
             // Connection
@@ -283,8 +275,6 @@ namespace MCPForUnity.Editor.Windows
             });
 
             // Advanced settings callbacks
-            browsePythonButton.clicked += OnBrowsePythonClicked;
-            clearPythonButton.clicked += OnClearPythonClicked;
             browseUvButton.clicked += OnBrowseUvClicked;
             clearUvButton.clicked += OnClearUvClicked;
 
@@ -457,29 +447,6 @@ namespace MCPForUnity.Editor.Windows
         {
             var pathService = MCPServiceLocator.Paths;
 
-            // MCP Server Path
-            string mcpServerPath = pathService.GetMcpServerPath();
-            if (pathService.HasMcpServerOverride)
-            {
-                mcpServerPathOverride.value = mcpServerPath ?? "(override set but invalid)";
-            }
-            else
-            {
-                mcpServerPathOverride.value = mcpServerPath ?? "(auto-detected)";
-            }
-
-            // Update status indicator
-            mcpServerPathStatus.RemoveFromClassList("valid");
-            mcpServerPathStatus.RemoveFromClassList("invalid");
-            if (!string.IsNullOrEmpty(mcpServerPath) && File.Exists(Path.Combine(mcpServerPath, "server.py")))
-            {
-                mcpServerPathStatus.AddToClassList("valid");
-            }
-            else
-            {
-                mcpServerPathStatus.AddToClassList("invalid");
-            }
-
             // UV Path
             string uvPath = pathService.GetUvPath();
             if (pathService.HasUvPathOverride)
@@ -639,31 +606,6 @@ namespace MCPForUnity.Editor.Windows
                 McpLog.Error($"Configuration failed: {ex.Message}");
                 EditorUtility.DisplayDialog("Configuration Failed", ex.Message, "OK");
             }
-        }
-
-        private void OnBrowsePythonClicked()
-        {
-            string picked = EditorUtility.OpenFolderPanel("Select MCP Server Directory", Application.dataPath, "");
-            if (!string.IsNullOrEmpty(picked))
-            {
-                try
-                {
-                    MCPServiceLocator.Paths.SetMcpServerOverride(picked);
-                    UpdatePathOverrides();
-                    McpLog.Info($"MCP server path override set to: {picked}");
-                }
-                catch (Exception ex)
-                {
-                    EditorUtility.DisplayDialog("Invalid Path", ex.Message, "OK");
-                }
-            }
-        }
-
-        private void OnClearPythonClicked()
-        {
-            MCPServiceLocator.Paths.ClearMcpServerOverride();
-            UpdatePathOverrides();
-            McpLog.Info("MCP server path override cleared");
         }
 
         private void OnBrowseUvClicked()

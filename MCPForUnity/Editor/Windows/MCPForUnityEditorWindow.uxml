@@ -25,18 +25,6 @@
                 <ui:Foldout name="advanced-settings-foldout" text="Advanced Settings" class="advanced-settings-foldout">
                     <ui:VisualElement class="advanced-settings-content">
                         <ui:Label text="Path Overrides (leave empty for auto-detection):" class="advanced-label" />
-                        
-                        <!-- MCP Server Path Override -->
-                        <ui:VisualElement class="override-row">
-                            <ui:Label text="MCP Server Path:" class="override-label" />
-                            <ui:VisualElement class="status-indicator-small" name="mcp-server-path-status" />
-                        </ui:VisualElement>
-                        <ui:VisualElement class="path-override-controls">
-                            <ui:TextField name="python-path-override" readonly="true" class="override-field" />
-                            <ui:Button name="browse-python-button" text="Browse" class="icon-button" />
-                            <ui:Button name="clear-python-button" text="Clear" class="icon-button" />
-                        </ui:VisualElement>
-                        
                         <!-- UV Path Override -->
                         <ui:VisualElement class="override-row">
                             <ui:Label text="UV Path:" class="override-label" />

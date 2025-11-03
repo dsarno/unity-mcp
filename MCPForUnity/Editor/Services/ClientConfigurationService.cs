@@ -25,32 +25,32 @@ namespace MCPForUnity.Editor.Services
                 string configPath = McpConfigurationHelper.GetClientConfigPath(client);
                 McpConfigurationHelper.EnsureConfigDirectoryExists(configPath);
 
-                string pythonDir = MCPServiceLocator.Paths.GetMcpServerPath();
+                string mcpServerDir = ""; // TODO: Get MCP server path from path resolver service
 
-                if (pythonDir == null || !File.Exists(Path.Combine(pythonDir, "server.py")))
+                if (mcpServerDir == null || !File.Exists(Path.Combine(mcpServerDir, "server.py")))
                 {
                     throw new InvalidOperationException("Server not found. Please use manual configuration or set server path in Advanced Settings.");
                 }
 
                 string result = client.mcpType == McpTypes.Codex
-                    ? McpConfigurationHelper.ConfigureCodexClient(pythonDir, configPath, client)
-                    : McpConfigurationHelper.WriteMcpConfiguration(pythonDir, configPath, client);
+                    ? McpConfigurationHelper.ConfigureCodexClient(mcpServerDir, configPath, client)
+                    : McpConfigurationHelper.WriteMcpConfiguration(mcpServerDir, configPath, client);
 
                 if (result == "Configured successfully")
                 {
                     client.SetStatus(McpStatus.Configured);
-                    Debug.Log($"<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: {client.name} configured successfully");
+                    McpLog.Info($"Configuration completed with message: {result}");
                 }
                 else
                 {
-                    Debug.LogWarning($"Configuration completed with message: {result}");
+                    McpLog.Warn($"Configuration completed with message: {result}");
                 }
 
                 CheckClientStatus(client);
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Failed to configure {client.name}: {ex.Message}");
+                McpLog.Error($"Failed to configure {client.name}: {ex.Message}");
                 throw;
             }
         }
@@ -134,7 +134,7 @@ namespace MCPForUnity.Editor.Services
                 }
 
                 string configJson = File.ReadAllText(configPath);
-                string pythonDir = MCPServiceLocator.Paths.GetMcpServerPath();
+                string mcpServerDir = ""; // TODO: Get MCP server path from path resolver service
 
                 // Check configuration based on client type
                 string[] args = null;
@@ -178,7 +178,7 @@ namespace MCPForUnity.Editor.Services
                 {
                     string configuredDir = McpConfigurationHelper.ExtractDirectoryArg(args);
                     bool matches = !string.IsNullOrEmpty(configuredDir) &&
-                                   McpConfigurationHelper.PathsEqual(configuredDir, pythonDir);
+                                   McpConfigurationHelper.PathsEqual(configuredDir, mcpServerDir);
 
                     if (matches)
                     {
@@ -190,15 +190,15 @@ namespace MCPForUnity.Editor.Services
                         try
                         {
                             string rewriteResult = client.mcpType == McpTypes.Codex
-                                ? McpConfigurationHelper.ConfigureCodexClient(pythonDir, configPath, client)
-                                : McpConfigurationHelper.WriteMcpConfiguration(pythonDir, configPath, client);
+                                ? McpConfigurationHelper.ConfigureCodexClient(mcpServerDir, configPath, client)
+                                : McpConfigurationHelper.WriteMcpConfiguration(mcpServerDir, configPath, client);
 
                             if (rewriteResult == "Configured successfully")
                             {
                                 bool debugLogsEnabled = EditorPrefs.GetBool("MCPForUnity.DebugLogs", false);
                                 if (debugLogsEnabled)
                                 {
-                                    McpLog.Info($"Auto-updated MCP config for '{client.name}' to new path: {pythonDir}", always: false);
+                                    McpLog.Info($"Auto-updated MCP config for '{client.name}' to new path: {mcpServerDir}", always: false);
                                 }
                                 client.SetStatus(McpStatus.Configured);
                             }
@@ -233,9 +233,9 @@ namespace MCPForUnity.Editor.Services
         public void RegisterClaudeCode()
         {
             var pathService = MCPServiceLocator.Paths;
-            string pythonDir = pathService.GetMcpServerPath();
-            
-            if (string.IsNullOrEmpty(pythonDir))
+            string mcpServerPath = ""; // TODO: use remote URL for configuration
+
+            if (string.IsNullOrEmpty(mcpServerPath))
             {
                 throw new InvalidOperationException("Cannot register: Python directory not found");
             }
@@ -247,7 +247,7 @@ namespace MCPForUnity.Editor.Services
             }
 
             string uvPath = pathService.GetUvPath() ?? "uv";
-            string args = $"mcp add UnityMCP -- \"{uvPath}\" run --directory \"{pythonDir}\" server.py";
+            string args = $"mcp add UnityMCP -- \"{uvPath}\" run --directory \"{mcpServerPath}\" server.py";
             string projectDir = Path.GetDirectoryName(Application.dataPath);
 
             string pathPrepend = null;
@@ -278,7 +278,7 @@ namespace MCPForUnity.Editor.Services
                 string combined = ($"{stdout}\n{stderr}") ?? string.Empty;
                 if (combined.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    Debug.Log("<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: MCP for Unity already registered with Claude Code.");
+                    McpLog.Info("MCP for Unity already registered with Claude Code.");
                 }
                 else
                 {
@@ -287,7 +287,7 @@ namespace MCPForUnity.Editor.Services
                 return;
             }
 
-            Debug.Log("<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: Successfully registered with Claude Code.");
+            McpLog.Info("Successfully registered with Claude Code.");
 
             // Update status
             var claudeClient = mcpClients.clients.FirstOrDefault(c => c.mcpType == McpTypes.ClaudeCode);
@@ -301,7 +301,7 @@ namespace MCPForUnity.Editor.Services
         {
             var pathService = MCPServiceLocator.Paths;
             string claudePath = pathService.GetClaudeCliPath();
-            
+
             if (string.IsNullOrEmpty(claudePath))
             {
                 throw new InvalidOperationException("Claude CLI not found. Please install Claude Code first.");
@@ -323,14 +323,14 @@ namespace MCPForUnity.Editor.Services
                 {
                     claudeClient.SetStatus(McpStatus.NotConfigured);
                 }
-                Debug.Log("<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: No MCP for Unity server found - already unregistered.");
+                McpLog.Info("No MCP for Unity server found - already unregistered.");
                 return;
             }
 
             // Remove the server
             if (ExecPath.TryRun(claudePath, "mcp remove UnityMCP", projectDir, out var stdout, out var stderr, 10000, pathPrepend))
             {
-                Debug.Log("<b><color=#2EA3FF>MCP-FOR-UNITY</color></b>: MCP server successfully unregistered from Claude Code.");
+                McpLog.Info("MCP server successfully unregistered from Claude Code.");
             }
             else
             {
@@ -366,7 +366,7 @@ namespace MCPForUnity.Editor.Services
 
         public string GenerateConfigJson(McpClient client)
         {
-            string pythonDir = MCPServiceLocator.Paths.GetMcpServerPath();
+            string pythonDir = ""; // TODO: Get MCP server path from path resolver service
             string uvPath = MCPServiceLocator.Paths.GetUvPath();
 
             // Claude Code uses CLI commands, not JSON config
@@ -395,8 +395,7 @@ namespace MCPForUnity.Editor.Services
             {
                 if (client.mcpType == McpTypes.Codex)
                 {
-                    return CodexConfigHelper.BuildCodexServerBlock(uvPath,
-                        McpConfigurationHelper.ResolveServerDirectory(pythonDir, null));
+                    return CodexConfigHelper.BuildCodexServerBlock(uvPath, "");
                 }
                 else
                 {

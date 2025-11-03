@@ -157,12 +157,6 @@ namespace MCPForUnity.Editor.Helpers
             catch { }
         }
 
-        // Use existing UV resolver; returns absolute path or null.
-        internal static string ResolveUv()
-        {
-            return ServerInstaller.FindUvPath();
-        }
-
         internal static bool TryRun(
             string file,
             string args,

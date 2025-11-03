@@ -17,17 +17,7 @@ namespace MCPForUnity.Editor.Services
 
         public void Start()
         {
-            // If server is installed, use auto-connect mode
-            // Otherwise use standard mode
-            string serverPath = MCPServiceLocator.Paths.GetMcpServerPath();
-            if (!string.IsNullOrEmpty(serverPath) && File.Exists(Path.Combine(serverPath, "server.py")))
-            {
-                MCPForUnityBridge.StartAutoConnect();
-            }
-            else
-            {
-                MCPForUnityBridge.Start();
-            }
+            MCPForUnityBridge.StartAutoConnect();
         }
 
         public void Stop()
@@ -106,7 +96,7 @@ namespace MCPForUnity.Editor.Services
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
             if (payload.LongLength < 1) throw new IOException("Zero-length frames are not allowed");
-            
+
             byte[] header = new byte[8];
             ulong len = (ulong)payload.LongLength;
             header[0] = (byte)(len >> 56);

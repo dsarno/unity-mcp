@@ -85,11 +85,7 @@ namespace MCPForUnity.Editor.Helpers
             _isSyncing = true;
             try
             {
-                if (!ServerPathResolver.TryFindEmbeddedServerSource(out string srcPath))
-                {
-                    McpLog.Warn("Cannot sync Python tools: MCP server source not found");
-                    return;
-                }
+                string srcPath = "Dummy"; // TODO: find the server location of the uv cache
 
                 string toolsDir = Path.Combine(srcPath, "tools", "custom");
 

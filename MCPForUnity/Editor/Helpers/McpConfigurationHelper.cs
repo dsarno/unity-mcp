@@ -10,6 +10,7 @@ using UnityEngine;
 using MCPForUnity.Editor.Dependencies;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
+using MCPForUnity.Editor.Services;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -94,19 +95,9 @@ namespace MCPForUnity.Editor.Helpers
             catch { }
 
             // 1) Start from existing, only fill gaps (prefer trusted resolver)
-            string uvPath = ServerInstaller.FindUvPath();
-            // Optionally trust existingCommand if it looks like uv/uv.exe
-            try
-            {
-                var name = Path.GetFileName((existingCommand ?? string.Empty).Trim()).ToLowerInvariant();
-                if ((name == "uv" || name == "uv.exe") && IsValidUvBinary(existingCommand))
-                {
-                    uvPath = existingCommand;
-                }
-            }
-            catch { }
+            string uvPath = MCPServiceLocator.Paths.GetUvPath(verifyPath: true);
             if (uvPath == null) return "UV package manager not found. Please install UV first.";
-            string serverSrc = ResolveServerDirectory(pythonDir, existingArgs);
+            string serverSrc = ""; // TODO: replace with remote server name
 
             // Ensure containers exist and write back configuration
             JObject existingRoot;
@@ -165,23 +156,13 @@ namespace MCPForUnity.Editor.Helpers
                 CodexConfigHelper.TryParseCodexServer(existingToml, out existingCommand, out existingArgs);
             }
 
-            string uvPath = ServerInstaller.FindUvPath();
-            try
-            {
-                var name = Path.GetFileName((existingCommand ?? string.Empty).Trim()).ToLowerInvariant();
-                if ((name == "uv" || name == "uv.exe") && IsValidUvBinary(existingCommand))
-                {
-                    uvPath = existingCommand;
-                }
-            }
-            catch { }
-
+            string uvPath = MCPServiceLocator.Paths.GetUvPath();
             if (uvPath == null)
             {
                 return "UV package manager not found. Please install UV first.";
             }
 
-            string serverSrc = ResolveServerDirectory(pythonDir, existingArgs);
+            string serverSrc = ""; // TODO: replace with remote server name
 
             string updatedToml = CodexConfigHelper.UpsertCodexServerBlock(existingToml, uvPath, serverSrc);
 
@@ -196,33 +177,6 @@ namespace MCPForUnity.Editor.Helpers
             catch { }
 
             return "Configured successfully";
-        }
-
-        /// <summary>
-        /// Validates UV binary by running --version command
-        /// </summary>
-        private static bool IsValidUvBinary(string path)
-        {
-            try
-            {
-                if (!File.Exists(path)) return false;
-                var psi = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = path,
-                    Arguments = "--version",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-                using var p = System.Diagnostics.Process.Start(psi);
-                if (p == null) return false;
-                if (!p.WaitForExit(3000)) { try { p.Kill(); } catch { } return false; }
-                if (p.ExitCode != 0) return false;
-                string output = p.StandardOutput.ReadToEnd().Trim();
-                return output.StartsWith("uv ");
-            }
-            catch { return false; }
         }
 
         /// <summary>
@@ -290,58 +244,6 @@ namespace MCPForUnity.Editor.Helpers
             }
         }
 
-        /// <summary>
-        /// Resolves the server directory to use for MCP tools, preferring
-        /// existing config values and falling back to installed/embedded copies.
-        /// </summary>
-        public static string ResolveServerDirectory(string pythonDir, string[] existingArgs)
-        {
-            string serverSrc = ExtractDirectoryArg(existingArgs);
-            bool serverValid = !string.IsNullOrEmpty(serverSrc)
-                && File.Exists(Path.Combine(serverSrc, "server.py"));
-            if (!serverValid)
-            {
-                if (!string.IsNullOrEmpty(pythonDir)
-                    && File.Exists(Path.Combine(pythonDir, "server.py")))
-                {
-                    serverSrc = pythonDir;
-                }
-                else
-                {
-                    serverSrc = ResolveServerSource();
-                }
-            }
-
-            try
-            {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && !string.IsNullOrEmpty(serverSrc))
-                {
-                    string norm = serverSrc.Replace('\\', '/');
-                    int idx = norm.IndexOf("/.local/share/UnityMCP/", StringComparison.Ordinal);
-                    if (idx >= 0)
-                    {
-                        string home = Environment.GetFolderPath(Environment.SpecialFolder.Personal) ?? string.Empty;
-                        string suffix = norm.Substring(idx + "/.local/share/".Length);
-                        serverSrc = Path.Combine(home, "Library", "Application Support", suffix);
-                    }
-                }
-            }
-            catch
-            {
-                // Ignore failures and fall back to the original path.
-            }
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                && !string.IsNullOrEmpty(serverSrc)
-                && serverSrc.IndexOf(@"\Library\PackageCache\", StringComparison.OrdinalIgnoreCase) >= 0
-                && !EditorPrefs.GetBool("MCPForUnity.UseEmbeddedServer", false))
-            {
-                serverSrc = ServerInstaller.GetServerPath();
-            }
-
-            return serverSrc;
-        }
-
         public static void WriteAtomicFile(string path, string contents)
         {
             string tmp = path + ".tmp";
@@ -391,40 +293,6 @@ namespace MCPForUnity.Editor.Helpers
             {
                 try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
                 try { if (writeDone && File.Exists(backup)) File.Delete(backup); } catch { }
-            }
-        }
-
-        public static string ResolveServerSource()
-        {
-            try
-            {
-                string remembered = EditorPrefs.GetString("MCPForUnity.ServerSrc", string.Empty);
-                if (!string.IsNullOrEmpty(remembered)
-                    && File.Exists(Path.Combine(remembered, "server.py")))
-                {
-                    return remembered;
-                }
-
-                ServerInstaller.EnsureServerInstalled();
-                string installed = ServerInstaller.GetServerPath();
-                if (File.Exists(Path.Combine(installed, "server.py")))
-                {
-                    return installed;
-                }
-
-                bool useEmbedded = EditorPrefs.GetBool("MCPForUnity.UseEmbeddedServer", false);
-                if (useEmbedded
-                    && ServerPathResolver.TryFindEmbeddedServerSource(out string embedded)
-                    && File.Exists(Path.Combine(embedded, "server.py")))
-                {
-                    return embedded;
-                }
-
-                return installed;
-            }
-            catch
-            {
-                return ServerInstaller.GetServerPath();
             }
         }
     }

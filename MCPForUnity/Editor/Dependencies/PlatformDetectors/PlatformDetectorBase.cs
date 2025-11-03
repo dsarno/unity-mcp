@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using MCPForUnity.Editor.Dependencies.Models;
 using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Services;
 
 namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
 {
@@ -29,7 +30,7 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
             try
             {
                 // Use existing UV detection from ServerInstaller
-                string uvPath = ServerInstaller.FindUvPath();
+                string uvPath = MCPServiceLocator.Paths.GetUvPath(verifyPath: false);
                 if (!string.IsNullOrEmpty(uvPath))
                 {
                     if (TryValidateUV(uvPath, out string version))
@@ -48,54 +49,6 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
             catch (Exception ex)
             {
                 status.ErrorMessage = $"Error detecting UV: {ex.Message}";
-            }
-
-            return status;
-        }
-
-        public virtual DependencyStatus DetectMCPServer()
-        {
-            var status = new DependencyStatus("MCP Server", isRequired: false);
-
-            try
-            {
-                // Check if server is installed
-                string serverPath = ServerInstaller.GetServerPath();
-                string serverPy = Path.Combine(serverPath, "server.py");
-
-                if (File.Exists(serverPy))
-                {
-                    status.IsAvailable = true;
-                    status.Path = serverPath;
-
-                    // Try to get version
-                    string versionFile = Path.Combine(serverPath, "server_version.txt");
-                    if (File.Exists(versionFile))
-                    {
-                        status.Version = File.ReadAllText(versionFile).Trim();
-                    }
-
-                    status.Details = $"MCP Server found at {serverPath}";
-                }
-                else
-                {
-                    // Check for embedded server
-                    if (ServerPathResolver.TryFindEmbeddedServerSource(out string embeddedPath))
-                    {
-                        status.IsAvailable = true;
-                        status.Path = embeddedPath;
-                        status.Details = "MCP Server available (embedded in package)";
-                    }
-                    else
-                    {
-                        status.ErrorMessage = "MCP Server not found";
-                        status.Details = "Server will be installed automatically when needed";
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                status.ErrorMessage = $"Error detecting MCP Server: {ex.Message}";
             }
 
             return status;
