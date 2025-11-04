@@ -391,7 +391,7 @@ namespace MCPForUnity.Editor
                     isRunning = true;
                     isAutoConnectMode = false;
                     string platform = Application.platform.ToString();
-                    string serverVer = "6.3.0"; // TODO: Get version from package.json
+                    string serverVer = AssetPathUtility.GetPackageVersion();
                     McpLog.Info($"MCPForUnityBridge started on port {currentUnityPort}. (OS={platform}, server={serverVer})");
                     // Start background listener with cooperative cancellation
                     cts = new CancellationTokenSource();
