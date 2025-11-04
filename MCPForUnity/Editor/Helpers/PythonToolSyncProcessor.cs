@@ -85,7 +85,7 @@ namespace MCPForUnity.Editor.Helpers
             _isSyncing = true;
             try
             {
-                string srcPath = "Dummy"; // TODO: find the server location of the uv cache
+                string srcPath = MCPServiceLocator.Paths.GetUvxPackageSourcePath();
 
                 string toolsDir = Path.Combine(srcPath, "tools", "custom");
 
