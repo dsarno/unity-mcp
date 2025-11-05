@@ -22,7 +22,7 @@ Model Context Protocol server for Unity Editor integration. Control Unity throug
 Run directly from GitHub without installation:
 
 ```bash
-uvx --from git+https://github.com/CoplayDev/unity-mcp@v6.3.0#subdirectory=Server mcp-for-unity
+uvx --from git+https://github.com/CoplayDev/unity-mcp@v7.0.0#subdirectory=Server mcp-for-unity
 ```
 
 **MCP Client Configuration:**
@@ -34,7 +34,7 @@ uvx --from git+https://github.com/CoplayDev/unity-mcp@v6.3.0#subdirectory=Server
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/CoplayDev/unity-mcp@v6.3.0#subdirectory=Server",
+        "git+https://github.com/CoplayDev/unity-mcp@v7.0.0#subdirectory=Server",
         "mcp-for-unity"
       ]
     }
@@ -146,7 +146,7 @@ For complete documentation, troubleshooting, and advanced usage:
 
 ## Requirements
 
-- **Python:** 3.11 or newer
+- **Python:** 3.10 or newer
 - **Unity Editor:** 2021.3 LTS or newer
 - **uv:** Python package manager ([Installation Guide](https://docs.astral.sh/uv/getting-started/installation/))
 
