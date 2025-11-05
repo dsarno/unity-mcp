@@ -3,7 +3,7 @@ from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from registry import mcp_for_unity_tool
-from tools import send_with_unity_instance
+from tools import get_unity_instance_from_context, send_with_unity_instance
 from unity_connection import send_command_with_retry
 
 
@@ -20,7 +20,7 @@ def manage_shader(
 ) -> dict[str, Any]:
     # Get active instance from session state
     # Removed session_state import
-    unity_instance = ctx.get_state("unity_instance")
+    unity_instance = get_unity_instance_from_context(ctx)
     try:
         # Prepare parameters for Unity
         params = {

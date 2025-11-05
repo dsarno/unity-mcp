@@ -3,7 +3,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from registry import mcp_for_unity_tool
 from telemetry import is_telemetry_enabled, record_tool_usage
-from tools import send_with_unity_instance
+from tools import get_unity_instance_from_context, send_with_unity_instance
 from unity_connection import send_command_with_retry
 
 
@@ -24,7 +24,7 @@ def manage_editor(
                           "Layer name when adding and removing layers"] | None = None,
 ) -> dict[str, Any]:
     # Get active instance from request state (injected by middleware)
-    unity_instance = ctx.get_state("unity_instance")
+    unity_instance = get_unity_instance_from_context(ctx)
 
     # Coerce boolean parameters defensively to tolerate 'true'/'false' strings
     def _coerce_bool(value, default=None):

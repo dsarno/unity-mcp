@@ -138,8 +138,7 @@ def with_unity_instance(
 
         if is_coro:
             async def _wrapper(ctx: Context, *args, **kwargs):
-                from session_state import get_active_instance as _get_active
-                inst = get_unity_instance_from_context(ctx) or _get_active(ctx)
+                inst = get_unity_instance_from_context(ctx)
                 msg = _compose_message(ctx, args, kwargs, inst)
                 if msg:
                     try:
@@ -152,8 +151,7 @@ def with_unity_instance(
                 return await fn(ctx, *args, **kwargs)
         else:
             def _wrapper(ctx: Context, *args, **kwargs):
-                from session_state import get_active_instance as _get_active
-                inst = get_unity_instance_from_context(ctx) or _get_active(ctx)
+                inst = get_unity_instance_from_context(ctx)
                 msg = _compose_message(ctx, args, kwargs, inst)
                 if msg:
                     try:

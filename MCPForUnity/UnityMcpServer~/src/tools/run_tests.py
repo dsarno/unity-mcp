@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from models import MCPResponse
 from registry import mcp_for_unity_tool
-from tools import async_send_with_unity_instance
+from tools import get_unity_instance_from_context, async_send_with_unity_instance
 from unity_connection import async_send_command_with_retry
 
 
@@ -49,7 +49,7 @@ async def run_tests(
 ) -> dict[str, Any]:
     # Get active instance from session state
     # Removed session_state import
-    unity_instance = ctx.get_state("unity_instance")
+    unity_instance = get_unity_instance_from_context(ctx)
 
     # Coerce timeout defensively (string/float -> int)
     def _coerce_int(value, default=None):
