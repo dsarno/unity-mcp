@@ -2,20 +2,16 @@ from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from registry import mcp_for_unity_tool
+from tools import send_with_unity_instance
 from unity_connection import send_command_with_retry
 
 
 @mcp_for_unity_tool(
-    description="Bridge for prefab management commands (stage control and creation)."
+    description="Performs prefab operations (create, modify, delete, etc.)."
 )
 def manage_prefabs(
     ctx: Context,
-    action: Annotated[Literal[
-        "open_stage",
-        "close_stage",
-        "save_open_stage",
-        "create_from_gameobject",
-    ], "Manage prefabs (stage control and creation)."],
+    action: Annotated[Literal["create", "modify", "delete", "get_components"], "Perform prefab operations."],
     prefab_path: Annotated[str,
                            "Prefab asset path relative to Assets e.g. Assets/Prefabs/favorite.prefab"] | None = None,
     mode: Annotated[str,
@@ -28,10 +24,11 @@ def manage_prefabs(
                                "Allow replacing an existing prefab at the same path"] | None = None,
     search_inactive: Annotated[bool,
                                "Include inactive objects when resolving the target name"] | None = None,
-    unity_instance: Annotated[str,
-                             "Target Unity instance (project name, hash, or 'Name@hash'). If not specified, uses default instance."] | None = None,
+    component_properties: Annotated[str, "Component properties in JSON format"] | None = None,
 ) -> dict[str, Any]:
-    ctx.info(f"Processing manage_prefabs: {action}")
+    # Get active instance from session state
+    # Removed session_state import
+    unity_instance = ctx.get_state("unity_instance")
     try:
         params: dict[str, Any] = {"action": action}
 
@@ -47,7 +44,7 @@ def manage_prefabs(
             params["allowOverwrite"] = bool(allow_overwrite)
         if search_inactive is not None:
             params["searchInactive"] = bool(search_inactive)
-        response = send_command_with_retry("manage_prefabs", params, instance_id=unity_instance)
+        response = send_with_unity_instance(send_command_with_retry, unity_instance, "manage_prefabs", params)
 
         if isinstance(response, dict) and response.get("success"):
             return {

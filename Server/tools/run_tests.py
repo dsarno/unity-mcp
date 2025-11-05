@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from models import MCPResponse
 from registry import mcp_for_unity_tool
+from tools import async_send_with_unity_instance
 from unity_connection import async_send_command_with_retry
 
 
@@ -38,17 +39,17 @@ class RunTestsResponse(MCPResponse):
     data: RunTestsResult | None = None
 
 
-@mcp_for_unity_tool(description="Runs Unity tests for the specified mode")
+@mcp_for_unity_tool(
+    description="Runs Unity tests for the specified mode"
+)
 async def run_tests(
     ctx: Context,
-    mode: Annotated[Literal["edit", "play"], Field(
-        description="Unity test mode to run")] = "edit",
-    timeout_seconds: Annotated[str, Field(
-        description="Optional timeout in seconds for the Unity test run (string, e.g. '30')")] | None = None,
-    unity_instance: Annotated[str,
-                             "Target Unity instance (project name, hash, or 'Name@hash'). If not specified, uses default instance."] | None = None,
-) -> RunTestsResponse:
-    await ctx.info(f"Processing run_tests: mode={mode}")
+    mode: Annotated[Literal["edit", "play"], "Unity test mode to run"] = "edit",
+    timeout_seconds: Annotated[int | str | None, "Optional timeout in seconds for the Unity test run (string, e.g. '30')"] = None,
+) -> dict[str, Any]:
+    # Get active instance from session state
+    # Removed session_state import
+    unity_instance = ctx.get_state("unity_instance")
 
     # Coerce timeout defensively (string/float -> int)
     def _coerce_int(value, default=None):
@@ -71,6 +72,6 @@ async def run_tests(
     if ts is not None:
         params["timeoutSeconds"] = ts
 
-    response = await async_send_command_with_retry("run_tests", params, instance_id=unity_instance)
+    response = await async_send_with_unity_instance(async_send_command_with_retry, unity_instance, "run_tests", params)
     await ctx.info(f'Response {response}')
     return RunTestsResponse(**response) if isinstance(response, dict) else response

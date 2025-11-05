@@ -14,6 +14,7 @@ from urllib.parse import urlparse, unquote
 from fastmcp import Context
 
 from registry import mcp_for_unity_tool
+from tools import get_unity_instance_from_context, send_with_unity_instance, async_send_with_unity_instance
 from unity_connection import send_command_with_retry
 
 
@@ -42,7 +43,8 @@ def _coerce_int(value: Any, default: int | None = None, minimum: int | None = No
         return default
 
 
-def _resolve_project_root(override: str | None, unity_instance: str | None = None) -> Path:
+def _resolve_project_root(ctx: Context, override: str | None) -> Path:
+    unity_instance = get_unity_instance_from_context(ctx)
     # 1) Explicit override
     if override:
         pr = Path(override).expanduser().resolve()
@@ -59,10 +61,14 @@ def _resolve_project_root(override: str | None, unity_instance: str | None = Non
             return pr
     # 3) Ask Unity via manage_editor.get_project_root
     try:
-        resp = send_command_with_retry(
-            "manage_editor", {"action": "get_project_root"}, instance_id=unity_instance)
-        if isinstance(resp, dict) and resp.get("success"):
-            pr = Path(resp.get("data", {}).get(
+        response = send_with_unity_instance(
+            send_command_with_retry,
+            unity_instance,
+            "manage_editor",
+            {"action": "get_project_root"},
+        )
+        if isinstance(response, dict) and response.get("success"):
+            pr = Path(response.get("data", {}).get(
                 "projectRoot", "")).expanduser().resolve()
             if pr and (pr / "Assets").exists():
                 return pr
@@ -141,12 +147,11 @@ async def list_resources(
                      "Folder under project root, default is Assets"] = "Assets",
     limit: Annotated[int, "Page limit"] = 200,
     project_root: Annotated[str, "Project path"] | None = None,
-    unity_instance: Annotated[str,
-                             "Target Unity instance (project name, hash, or 'Name@hash'). If not specified, uses default instance."] | None = None,
 ) -> dict[str, Any]:
-    ctx.info(f"Processing list_resources: {pattern}")
+    unity_instance = get_unity_instance_from_context(ctx)
+    ctx.info(f"Processing list_resources: {pattern} (unity_instance={unity_instance or 'default'})")
     try:
-        project = _resolve_project_root(project_root, unity_instance)
+        project = _resolve_project_root(ctx, project_root)
         base = (project / under).resolve()
         try:
             base.relative_to(project)
@@ -203,10 +208,9 @@ async def read_resource(
     project_root: Annotated[str,
                             "The project root directory"] | None = None,
     request: Annotated[str, "The request ID"] | None = None,
-    unity_instance: Annotated[str,
-                             "Target Unity instance (project name, hash, or 'Name@hash'). If not specified, uses default instance."] | None = None,
 ) -> dict[str, Any]:
-    ctx.info(f"Processing read_resource: {uri}")
+    unity_instance = get_unity_instance_from_context(ctx)
+    ctx.info(f"Processing read_resource: {uri} (unity_instance={unity_instance or 'default'})")
     try:
         # Serve the canonical spec directly when requested (allow bare or with scheme)
         if uri in ("unity://spec/script-edits", "spec/script-edits", "script-edits"):
@@ -270,7 +274,7 @@ async def read_resource(
             sha = hashlib.sha256(spec_json.encode("utf-8")).hexdigest()
             return {"success": True, "data": {"text": spec_json, "metadata": {"sha256": sha}}}
 
-        project = _resolve_project_root(project_root, unity_instance)
+        project = _resolve_project_root(ctx, project_root)
         p = _resolve_safe_path_from_uri(uri, project)
         if not p or not p.exists() or not p.is_file():
             return {"success": False, "error": f"Resource not found: {uri}"}
@@ -360,12 +364,11 @@ async def find_in_file(
                             "The project root directory"] | None = None,
     max_results: Annotated[int,
                            "Cap results to avoid huge payloads"] = 200,
-    unity_instance: Annotated[str,
-                             "Target Unity instance (project name, hash, or 'Name@hash'). If not specified, uses default instance."] | None = None,
 ) -> dict[str, Any]:
-    ctx.info(f"Processing find_in_file: {uri}")
+    unity_instance = get_unity_instance_from_context(ctx)
+    ctx.info(f"Processing find_in_file: {uri} (unity_instance={unity_instance or 'default'})")
     try:
-        project = _resolve_project_root(project_root, unity_instance)
+        project = _resolve_project_root(ctx, project_root)
         p = _resolve_safe_path_from_uri(uri, project)
         if not p or not p.exists() or not p.is_file():
             return {"success": False, "error": f"Resource not found: {uri}"}

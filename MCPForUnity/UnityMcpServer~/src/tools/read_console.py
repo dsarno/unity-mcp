@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from registry import mcp_for_unity_tool
+from tools import send_with_unity_instance
 from unity_connection import send_command_with_retry
 
 
@@ -24,10 +25,10 @@ def read_console(
                               'json'], "Output format"] | None = None,
     include_stacktrace: Annotated[bool | str,
                                   "Include stack traces in output (accepts true/false or 'true'/'false')"] | None = None,
-    unity_instance: Annotated[str,
-                             "Target Unity instance (project name, hash, or 'Name@hash'). If not specified, uses default instance."] | None = None
 ) -> dict[str, Any]:
-    ctx.info(f"Processing read_console: {action}")
+    # Get active instance from session state
+    # Removed session_state import
+    unity_instance = ctx.get_state("unity_instance")
     # Set defaults if values are None
     action = action if action is not None else 'get'
     types = types if types is not None else ['error', 'warning', 'log']
@@ -90,7 +91,7 @@ def read_console(
         params_dict['count'] = None
 
     # Use centralized retry helper with instance routing
-    resp = send_command_with_retry("read_console", params_dict, instance_id=unity_instance)
+    resp = send_with_unity_instance(send_command_with_retry, unity_instance, "read_console", params_dict)
     if isinstance(resp, dict) and resp.get("success") and not include_stacktrace:
         # Strip stacktrace fields from returned lines if present
         try:

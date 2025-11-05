@@ -46,7 +46,7 @@ def test_manage_asset_pagination_coercion(monkeypatch):
 
     captured = {}
 
-    async def fake_async_send(cmd, params, loop=None):
+    async def fake_async_send(cmd, params, **kwargs):
         captured["params"] = params
         return {"success": True, "data": {}}
 

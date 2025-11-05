@@ -1,17 +1,21 @@
 """
-Tool to list all available Unity Editor instances.
+Resource to list all available Unity Editor instances.
 """
-from typing import Annotated, Any
+from typing import Any
 
 from fastmcp import Context
-from registry import mcp_for_unity_tool
+from registry import mcp_for_unity_resource
 from unity_connection import get_unity_connection_pool
 
 
-@mcp_for_unity_tool(description="List all running Unity Editor instances with their details.")
-def list_unity_instances(
+@mcp_for_unity_resource(
+    uri="unity://instances{?force_refresh}",
+    name="unity_instances",
+    description="Lists all running Unity Editor instances with their details."
+)
+def unity_instances(
     ctx: Context,
-    force_refresh: Annotated[bool, "Force refresh the instance list, bypassing cache"] = False
+    force_refresh: str | None = None
 ) -> dict[str, Any]:
     """
     List all available Unity Editor instances.
@@ -27,16 +31,19 @@ def list_unity_instances(
     - unity_version: Unity version (if available)
 
     Args:
-        force_refresh: If True, bypass cache and scan immediately
+        force_refresh: If "true", bypass cache and scan immediately
 
     Returns:
         Dictionary containing list of instances and metadata
     """
-    ctx.info(f"Listing Unity instances (force_refresh={force_refresh})")
+    # Coerce force_refresh from string to boolean
+    force_refresh_bool = force_refresh is not None and force_refresh.lower() in ("true", "1", "yes")
+
+    ctx.info(f"Listing Unity instances (force_refresh={force_refresh_bool})")
 
     try:
         pool = get_unity_connection_pool()
-        instances = pool.discover_all_instances(force_refresh=force_refresh)
+        instances = pool.discover_all_instances(force_refresh=force_refresh_bool)
 
         # Check for duplicate project names
         name_counts = {}
@@ -67,4 +74,3 @@ def list_unity_instances(
             "instance_count": 0,
             "instances": []
         }
-

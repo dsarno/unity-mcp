@@ -558,7 +558,7 @@ class UnityConnectionPool:
         raise ConnectionError(
             f"Unity instance '{identifier}' not found. "
             f"Available instances: {available_ids}. "
-            f"Use list_unity_instances() to see all instances."
+            f"Check unity://instances resource for all instances."
         )
 
     def get_connection(self, instance_identifier: Optional[str] = None) -> UnityConnection:

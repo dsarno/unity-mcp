@@ -10,6 +10,7 @@ from config import config
 from tools import register_all_tools
 from resources import register_all_resources
 from unity_connection import get_unity_connection_pool, UnityConnectionPool
+from unity_instance_middleware import UnityInstanceMiddleware, set_unity_instance_middleware
 import time
 
 # Configure logging using settings from config
@@ -190,6 +191,12 @@ Available tools:\n
 
 """
 )
+
+# Initialize and register middleware for session-based Unity instance routing
+unity_middleware = UnityInstanceMiddleware()
+set_unity_instance_middleware(unity_middleware)
+mcp.add_middleware(unity_middleware)
+logger.info("Registered Unity instance middleware for session-based routing")
 
 # Register all tools
 register_all_tools(mcp)
