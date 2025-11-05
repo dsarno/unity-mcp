@@ -65,57 +65,15 @@ def get_unity_instance_from_context(
     ctx: Context,
     key: str = "unity_instance",
 ) -> str | None:
-    """Extract the unity_instance value from the request metadata if present."""
+    """Extract the unity_instance value from middleware state.
 
-    request_context = getattr(ctx, "request_context", None)
-    if request_context is None:
-        return None
-
-    try:
-        meta = request_context.meta
-    except ValueError:
-        return None
-
-    if meta is None:
-        return None
-
-    # 1. Direct attribute access (common for extra='allow')
-    value = getattr(meta, key, None)
-    if value:
-        return value
-
-    # 2. Pydantic "model_extra" storage for dynamic fields
-    model_extra: dict[str, Any] | None = getattr(meta, "model_extra", None)  # type: ignore[attr-defined]
-    if isinstance(model_extra, dict):
-        value = model_extra.get(key)
-        if value:
-            return value
-
-    # 3. Items stored as dict (defensive)
-    if isinstance(meta, dict):
-        value = meta.get(key)
-        if value:
-            return value
-
-    # 4. Fall back to model dump (exclude Nones)
-    dump_fn = getattr(meta, "model_dump", None)
-    if callable(dump_fn):
+    The instance is set via the set_active_instance tool and injected into
+    request state by UnityInstanceMiddleware.
+    """
+    get_state_fn = getattr(ctx, "get_state", None)
+    if callable(get_state_fn):
         try:
-            data = dump_fn(exclude_none=True)
-            if isinstance(data, dict):
-                value = data.get(key)
-                if value:
-                    return value
-        except Exception:  # pragma: no cover - defensive
-            pass
-
-    # 5. Final fallback for mapping-like objects
-    get_fn = getattr(meta, "get", None)
-    if callable(get_fn):
-        try:
-            value = get_fn(key, None)
-            if value:
-                return value
+            return get_state_fn(key)
         except Exception:  # pragma: no cover - defensive
             pass
 
