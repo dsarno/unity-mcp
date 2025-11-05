@@ -9,14 +9,11 @@ from unity_connection import get_unity_connection_pool
 
 
 @mcp_for_unity_resource(
-    uri="unity://instances{?force_refresh}",
+    uri="unity://instances",
     name="unity_instances",
     description="Lists all running Unity Editor instances with their details."
 )
-def unity_instances(
-    ctx: Context,
-    force_refresh: str | None = None
-) -> dict[str, Any]:
+def unity_instances(ctx: Context) -> dict[str, Any]:
     """
     List all available Unity Editor instances.
 
@@ -30,20 +27,14 @@ def unity_instances(
     - last_heartbeat: Last heartbeat timestamp
     - unity_version: Unity version (if available)
 
-    Args:
-        force_refresh: If "true", bypass cache and scan immediately
-
     Returns:
         Dictionary containing list of instances and metadata
     """
-    # Coerce force_refresh from string to boolean
-    force_refresh_bool = force_refresh is not None and force_refresh.lower() in ("true", "1", "yes")
-
-    ctx.info(f"Listing Unity instances (force_refresh={force_refresh_bool})")
+    ctx.info("Listing Unity instances")
 
     try:
         pool = get_unity_connection_pool()
-        instances = pool.discover_all_instances(force_refresh=force_refresh_bool)
+        instances = pool.discover_all_instances(force_refresh=False)
 
         # Check for duplicate project names
         name_counts = {}
