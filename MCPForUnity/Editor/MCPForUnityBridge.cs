@@ -366,16 +366,18 @@ namespace MCPForUnity.Editor
                             int oldPort = currentUnityPort;
                             currentUnityPort = PortManager.GetPortWithFallback();
 
-                            // Safety check: ensure we got a different port
-                            if (currentUnityPort == oldPort)
-                            {
-                                McpLog.Error($"Port {oldPort} is occupied and no alternative port available");
-                                throw;
-                            }
-
+                            // GetPortWithFallback() may return the same port if it became available during wait
+                            // or a different port if switching to an alternative
                             if (IsDebugEnabled())
                             {
-                                McpLog.Info($"Port {oldPort} occupied, switching to port {currentUnityPort}");
+                                if (currentUnityPort == oldPort)
+                                {
+                                    McpLog.Info($"Port {oldPort} became available, proceeding");
+                                }
+                                else
+                                {
+                                    McpLog.Info($"Port {oldPort} occupied, switching to port {currentUnityPort}");
+                                }
                             }
 
                             listener = new TcpListener(IPAddress.Loopback, currentUnityPort);

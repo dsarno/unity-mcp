@@ -6,7 +6,7 @@ from urllib.parse import urlparse, unquote
 from fastmcp import FastMCP, Context
 
 from registry import mcp_for_unity_tool
-from tools import get_unity_instance_from_context
+from tools import get_unity_instance_from_context, send_with_unity_instance
 import unity_connection
 
 

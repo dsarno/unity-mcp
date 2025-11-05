@@ -484,9 +484,12 @@ class UnityConnectionPool:
                 logger.debug(f"Using default instance: {instance_identifier}")
             else:
                 # Use the most recently active instance
-                # Instances with no heartbeat (None) should be sorted last (use epoch as sentinel)
-                from datetime import datetime
-                sorted_instances = sorted(instances, key=lambda i: i.last_heartbeat or datetime.fromtimestamp(0), reverse=True)
+                # Instances with no heartbeat (None) should be sorted last (use 0 as sentinel)
+                sorted_instances = sorted(
+                    instances,
+                    key=lambda inst: inst.last_heartbeat.timestamp() if inst.last_heartbeat else 0.0,
+                    reverse=True,
+                )
                 logger.info(f"No instance specified, using most recent: {sorted_instances[0].id}")
                 return sorted_instances[0]
 

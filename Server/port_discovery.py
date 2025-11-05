@@ -16,7 +16,7 @@ import json
 import logging
 import os
 import struct
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import socket
 from typing import Optional, List, Dict
@@ -238,7 +238,7 @@ class PortDiscovery:
         for status_file_path in status_files:
             try:
                 status_path = Path(status_file_path)
-                file_mtime = datetime.fromtimestamp(status_path.stat().st_mtime)
+                file_mtime = datetime.fromtimestamp(status_path.stat().st_mtime, tz=timezone.utc)
 
                 with status_path.open('r') as f:
                     data = json.load(f)
@@ -258,7 +258,12 @@ class PortDiscovery:
                 heartbeat_str = data.get('last_heartbeat')
                 if heartbeat_str:
                     try:
-                        last_heartbeat = datetime.fromisoformat(heartbeat_str.replace('Z', '+00:00'))
+                        parsed = datetime.fromisoformat(heartbeat_str.replace('Z', '+00:00'))
+                        # Normalize to UTC for consistent comparison
+                        if parsed.tzinfo is None:
+                            last_heartbeat = parsed.replace(tzinfo=timezone.utc)
+                        else:
+                            last_heartbeat = parsed.astimezone(timezone.utc)
                     except Exception:
                         pass
 
