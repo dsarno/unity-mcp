@@ -11,18 +11,23 @@ class GetMenuItemsResponse(MCPResponse):
 
 
 @mcp_for_unity_resource(
-    uri="mcpforunity://menu-items{?unity_instance}",
+    uri="mcpforunity://menu-items",
     name="get_menu_items",
     description="Provides a list of all menu items."
 )
-async def get_menu_items(ctx: Context, unity_instance: str | None = None) -> GetMenuItemsResponse:
+async def get_menu_items(ctx: Context) -> GetMenuItemsResponse:
     """Provides a list of all menu items.
     """
-    unity_instance = unity_instance or get_unity_instance_from_context(ctx)
+    unity_instance = get_unity_instance_from_context(ctx)
     params = {
         "refresh": True,
         "search": "",
     }
 
-    response = await async_send_with_unity_instance(async_send_command_with_retry, unity_instance, "get_menu_items", params)
+    response = await async_send_with_unity_instance(
+        async_send_command_with_retry,
+        unity_instance,
+        "get_menu_items",
+        params,
+    )
     return GetMenuItemsResponse(**response) if isinstance(response, dict) else response
