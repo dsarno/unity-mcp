@@ -1,9 +1,7 @@
-using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Services;
 using MCPForUnity.Editor.Setup;
 using MCPForUnity.Editor.Windows;
 using UnityEditor;
-using UnityEngine;
 
 namespace MCPForUnity.Editor
 {
@@ -32,6 +30,28 @@ namespace MCPForUnity.Editor
         public static void OpenMCPWindow()
         {
             MCPForUnityEditorWindow.ShowWindow();
+        }
+        
+        // ========================================
+        // Server Management Menu Items
+        // ========================================
+        
+        /// <summary>
+        /// Start the local HTTP server
+        /// </summary>
+        [MenuItem("Window/MCP For Unity/Server/Start Local HTTP Server", priority = 100)]
+        public static void StartLocalHttpServer()
+        {
+            MCPServiceLocator.Server.StartLocalHttpServer();
+        }
+        
+        /// <summary>
+        /// Validate the Start Local HTTP Server menu item
+        /// </summary>
+        [MenuItem("Window/MCP For Unity/Server/Start Local HTTP Server", true)]
+        public static bool StartLocalHttpServerValidate()
+        {
+            return MCPServiceLocator.Server.CanStartLocalServer();
         }
         
         // ========================================

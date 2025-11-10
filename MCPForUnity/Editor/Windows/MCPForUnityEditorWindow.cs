@@ -33,6 +33,8 @@ namespace MCPForUnity.Editor.Windows
         private Button browseUvxButton;
         private Button clearUvxButton;
         private VisualElement uvxPathStatus;
+        private TextField gitUrlOverride;
+        private Button clearGitUrlButton;
 
         // Connection UI Elements
         private EnumField transportDropdown;
@@ -194,6 +196,8 @@ namespace MCPForUnity.Editor.Windows
             browseUvxButton = rootVisualElement.Q<Button>("browse-uv-button");
             clearUvxButton = rootVisualElement.Q<Button>("clear-uv-button");
             uvxPathStatus = rootVisualElement.Q<VisualElement>("uv-path-status");
+            gitUrlOverride = rootVisualElement.Q<TextField>("git-url-override");
+            clearGitUrlButton = rootVisualElement.Q<Button>("clear-git-url-button");
 
             // Connection
             transportDropdown = rootVisualElement.Q<EnumField>("transport-dropdown");
@@ -240,6 +244,9 @@ namespace MCPForUnity.Editor.Windows
 
             // Advanced settings starts collapsed
             advancedSettingsFoldout.value = false;
+            
+            // Load Git URL override
+            gitUrlOverride.value = EditorPrefs.GetString("MCPForUnity.GitUrlOverride", "");
 
             // Connection Section
             transportDropdown.Init(TransportProtocol.HTTP);
@@ -324,6 +331,28 @@ namespace MCPForUnity.Editor.Windows
             // Advanced settings callbacks
             browseUvxButton.clicked += OnBrowseUvxClicked;
             clearUvxButton.clicked += OnClearUvxClicked;
+            
+            // Git URL override callbacks
+            gitUrlOverride.RegisterValueChangedCallback(evt =>
+            {
+                string url = evt.newValue?.Trim();
+                if (string.IsNullOrEmpty(url))
+                {
+                    EditorPrefs.DeleteKey("MCPForUnity.GitUrlOverride");
+                }
+                else
+                {
+                    EditorPrefs.SetString("MCPForUnity.GitUrlOverride", url);
+                }
+                UpdateManualConfiguration(); // Refresh config display
+            });
+            
+            clearGitUrlButton.clicked += () =>
+            {
+                gitUrlOverride.value = string.Empty;
+                EditorPrefs.DeleteKey("MCPForUnity.GitUrlOverride");
+                UpdateManualConfiguration();
+            };
 
             // Connection callbacks
             connectionToggleButton.clicked += OnConnectionToggleClicked;

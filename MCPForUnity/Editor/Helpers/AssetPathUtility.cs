@@ -153,10 +153,19 @@ namespace MCPForUnity.Editor.Helpers
 
         /// <summary>
         /// Gets just the git URL part for the MCP server package
+        /// Checks for EditorPrefs override first, then falls back to package version
         /// </summary>
-        /// <returns>Git URL string, or empty string if version is unknown</returns>
+        /// <returns>Git URL string, or empty string if version is unknown and no override</returns>
         public static string GetMcpServerGitUrl()
         {
+            // Check for Git URL override first
+            string gitUrlOverride = EditorPrefs.GetString("MCPForUnity.GitUrlOverride", "");
+            if (!string.IsNullOrEmpty(gitUrlOverride))
+            {
+                return gitUrlOverride;
+            }
+            
+            // Fall back to default package version
             string version = GetPackageVersion();
             if (version == "unknown")
             {

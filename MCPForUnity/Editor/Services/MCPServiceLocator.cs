@@ -17,6 +17,7 @@ namespace MCPForUnity.Editor.Services
         private static IToolDiscoveryService _toolDiscoveryService;
         private static ICustomToolRegistrationService _customToolRegistrationService;
         private static ICacheManagementService _cacheManagementService;
+        private static IServerManagementService _serverManagementService;
 
         public static IBridgeControlService Bridge => _bridgeService ??= new BridgeControlService();
         public static IClientConfigurationService Client => _clientService ??= new ClientConfigurationService();
@@ -27,6 +28,7 @@ namespace MCPForUnity.Editor.Services
         public static IToolDiscoveryService ToolDiscovery => _toolDiscoveryService ??= new ToolDiscoveryService();
         public static ICustomToolRegistrationService CustomToolRegistration => _customToolRegistrationService ??= new CustomToolRegistrationService();
         public static ICacheManagementService Cache => _cacheManagementService ??= new CacheManagementService();
+        public static IServerManagementService Server => _serverManagementService ??= new ServerManagementService();
 
         /// <summary>
         /// Registers a custom implementation for a service (useful for testing)
@@ -53,6 +55,8 @@ namespace MCPForUnity.Editor.Services
                 _customToolRegistrationService = ctr;
             else if (implementation is ICacheManagementService cm)
                 _cacheManagementService = cm;
+            else if (implementation is IServerManagementService sm)
+                _serverManagementService = sm;
         }
 
         /// <summary>
@@ -69,6 +73,7 @@ namespace MCPForUnity.Editor.Services
             (_toolDiscoveryService as IDisposable)?.Dispose();
             (_customToolRegistrationService as IDisposable)?.Dispose();
             (_cacheManagementService as IDisposable)?.Dispose();
+            (_serverManagementService as IDisposable)?.Dispose();
 
             _bridgeService = null;
             _clientService = null;
@@ -79,6 +84,7 @@ namespace MCPForUnity.Editor.Services
             _toolDiscoveryService = null;
             _customToolRegistrationService = null;
             _cacheManagementService = null;
+            _serverManagementService = null;
         }
     }
 }

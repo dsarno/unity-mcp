@@ -35,6 +35,20 @@
                             <ui:Button name="browse-uv-button" text="Browse" class="icon-button" />
                             <ui:Button name="clear-uv-button" text="Clear" class="icon-button" />
                         </ui:VisualElement>
+                        
+                        <!-- Server Git URL Override -->
+                        <ui:Label text="Server Source Override:" class="advanced-label" style="margin-top: 10px;" />
+                        <ui:Label text="Override the source used for uvx --from. Leave empty to use default package." class="help-text" />
+                        <ui:VisualElement class="override-row">
+                            <ui:Label text="Source Path/URL:" class="override-label" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="path-override-controls">
+                            <ui:TextField name="git-url-override" placeholder-text="/path/to/Server or git+https://..." class="override-field" />
+                            <ui:Button name="clear-git-url-button" text="Clear" class="icon-button" />
+                        </ui:VisualElement>
+                        <ui:Label text="Examples:" class="help-text" style="margin-top: 5px;" />
+                        <ui:Label text="• Local: /Users/you/Projects/unity-mcp/Server" class="help-text" />
+                        <ui:Label text="• Remote: git+https://github.com/CoplayDev/unity-mcp@v6.3.0#subdirectory=Server" class="help-text" />
                     </ui:VisualElement>
                 </ui:Foldout>
             </ui:VisualElement>
