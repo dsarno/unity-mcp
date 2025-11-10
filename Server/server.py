@@ -283,19 +283,27 @@ Examples:
              "Overrides UNITY_MCP_ENABLE_HTTP_SERVER environment variable."
     )
     parser.add_argument(
+        "--http-url",
+        type=str,
+        default="http://localhost:8080",
+        metavar="URL",
+        help="HTTP server URL (default: http://localhost:8080). "
+             "Can also set via UNITY_MCP_HTTP_URL environment variable."
+    )
+    parser.add_argument(
         "--http-host",
         type=str,
-        default="localhost",
+        default=None,
         metavar="HOST",
-        help="HTTP server host (default: localhost). "
+        help="HTTP server host (overrides URL host). "
              "Overrides UNITY_MCP_HTTP_HOST environment variable."
     )
     parser.add_argument(
         "--http-port",
         type=int,
-        default=8080,
+        default=None,
         metavar="PORT",
-        help="HTTP server port (default: 8080). "
+        help="HTTP server port (overrides URL port). "
              "Overrides UNITY_MCP_HTTP_PORT environment variable."
     )
 
@@ -311,20 +319,35 @@ Examples:
         os.environ["UNITY_MCP_ENABLE_HTTP_SERVER"] = "1"
         logger.info("HTTP server enabled via command-line")
 
-    if args.http_host != "localhost":
-        os.environ["UNITY_MCP_HTTP_HOST"] = args.http_host
-        logger.info(f"HTTP server host set to: {args.http_host}")
-
-    if args.http_port != 8080:
-        os.environ["UNITY_MCP_HTTP_PORT"] = str(args.http_port)
-        logger.info(f"HTTP server port set to: {args.http_port}")
+    # Parse HTTP URL to extract host and port
+    from urllib.parse import urlparse
+    http_url = os.environ.get("UNITY_MCP_HTTP_URL", args.http_url)
+    parsed_url = urlparse(http_url)
+    
+    # Allow individual host/port to override URL components
+    http_host = args.http_host or os.environ.get("UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "localhost"
+    http_port = args.http_port or (int(os.environ.get("UNITY_MCP_HTTP_PORT")) if os.environ.get("UNITY_MCP_HTTP_PORT") else None) or parsed_url.port or 8080
+    
+    os.environ["UNITY_MCP_HTTP_HOST"] = http_host
+    os.environ["UNITY_MCP_HTTP_PORT"] = str(http_port)
+    
+    if args.http_url != "http://localhost:8080":
+        logger.info(f"HTTP URL set to: {http_url}")
+    if args.http_host:
+        logger.info(f"HTTP host override: {http_host}")
+    if args.http_port:
+        logger.info(f"HTTP port override: {http_port}")
 
     # Determine transport mode
     if args.enable_http_server:
         # Use HTTP transport for FastMCP
         transport = 'http'
-        host = args.http_host
-        port = args.http_port
+        # Use the parsed host and port from URL/args
+        from urllib.parse import urlparse
+        http_url = os.environ.get("UNITY_MCP_HTTP_URL", args.http_url)
+        parsed_url = urlparse(http_url)
+        host = args.http_host or os.environ.get("UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "localhost"
+        port = args.http_port or (int(os.environ.get("UNITY_MCP_HTTP_PORT")) if os.environ.get("UNITY_MCP_HTTP_PORT") else None) or parsed_url.port or 8080
         logger.info(f"Starting FastMCP with HTTP transport on {host}:{port}")
     else:
         # Use stdio transport for traditional MCP

@@ -73,27 +73,9 @@ namespace MCPForUnity.Editor.Helpers
             {
                 string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
                 
-                // Parse URL to extract host and port
-                if (System.Uri.TryCreate(httpUrl, System.UriKind.Absolute, out var uri))
-                {
-                    string host = uri.Host;
-                    int port = uri.Port;
-                    
-                    args.Add("--enable-http-server");
-                    args.Add("--http-host");
-                    args.Add(host);
-                    args.Add("--http-port");
-                    args.Add(port.ToString());
-                }
-                else
-                {
-                    // Fallback to defaults if URL parsing fails
-                    args.Add("--enable-http-server");
-                    args.Add("--http-host");
-                    args.Add("localhost");
-                    args.Add("--http-port");
-                    args.Add("8080");
-                }
+                args.Add("--enable-http-server");
+                args.Add("--http-url");
+                args.Add(httpUrl);
             }
             
             unity["args"] = JArray.FromObject(args.ToArray());
