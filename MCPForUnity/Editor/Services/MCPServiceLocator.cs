@@ -1,4 +1,5 @@
 using System;
+using MCPForUnity.Editor.Helpers;
 
 namespace MCPForUnity.Editor.Services
 {
@@ -10,20 +11,20 @@ namespace MCPForUnity.Editor.Services
         private static IBridgeControlService _bridgeService;
         private static IClientConfigurationService _clientService;
         private static IPathResolverService _pathService;
-        private static IPythonToolRegistryService _pythonToolRegistryService;
         private static ITestRunnerService _testRunnerService;
-        private static IToolSyncService _toolSyncService;
         private static IPackageUpdateService _packageUpdateService;
         private static IPlatformService _platformService;
+        private static IToolDiscoveryService _toolDiscoveryService;
+        private static ICustomToolRegistrationService _customToolRegistrationService;
 
         public static IBridgeControlService Bridge => _bridgeService ??= new BridgeControlService();
         public static IClientConfigurationService Client => _clientService ??= new ClientConfigurationService();
         public static IPathResolverService Paths => _pathService ??= new PathResolverService();
-        public static IPythonToolRegistryService PythonToolRegistry => _pythonToolRegistryService ??= new PythonToolRegistryService();
         public static ITestRunnerService Tests => _testRunnerService ??= new TestRunnerService();
-        public static IToolSyncService ToolSync => _toolSyncService ??= new ToolSyncService();
         public static IPackageUpdateService Updates => _packageUpdateService ??= new PackageUpdateService();
         public static IPlatformService Platform => _platformService ??= new PlatformService();
+        public static IToolDiscoveryService ToolDiscovery => _toolDiscoveryService ??= new ToolDiscoveryService();
+        public static ICustomToolRegistrationService CustomToolRegistration => _customToolRegistrationService ??= new CustomToolRegistrationService();
 
         /// <summary>
         /// Registers a custom implementation for a service (useful for testing)
@@ -38,16 +39,16 @@ namespace MCPForUnity.Editor.Services
                 _clientService = c;
             else if (implementation is IPathResolverService p)
                 _pathService = p;
-            else if (implementation is IPythonToolRegistryService ptr)
-                _pythonToolRegistryService = ptr;
             else if (implementation is ITestRunnerService t)
                 _testRunnerService = t;
-            else if (implementation is IToolSyncService ts)
-                _toolSyncService = ts;
             else if (implementation is IPackageUpdateService pu)
                 _packageUpdateService = pu;
             else if (implementation is IPlatformService ps)
                 _platformService = ps;
+            else if (implementation is IToolDiscoveryService td)
+                _toolDiscoveryService = td;
+            else if (implementation is ICustomToolRegistrationService ctr)
+                _customToolRegistrationService = ctr;
         }
 
         /// <summary>
@@ -58,20 +59,20 @@ namespace MCPForUnity.Editor.Services
             (_bridgeService as IDisposable)?.Dispose();
             (_clientService as IDisposable)?.Dispose();
             (_pathService as IDisposable)?.Dispose();
-            (_pythonToolRegistryService as IDisposable)?.Dispose();
             (_testRunnerService as IDisposable)?.Dispose();
-            (_toolSyncService as IDisposable)?.Dispose();
             (_packageUpdateService as IDisposable)?.Dispose();
             (_platformService as IDisposable)?.Dispose();
+            (_toolDiscoveryService as IDisposable)?.Dispose();
+            (_customToolRegistrationService as IDisposable)?.Dispose();
 
             _bridgeService = null;
             _clientService = null;
             _pathService = null;
-            _pythonToolRegistryService = null;
             _testRunnerService = null;
-            _toolSyncService = null;
             _packageUpdateService = null;
             _platformService = null;
+            _toolDiscoveryService = null;
+            _customToolRegistrationService = null;
         }
     }
 }

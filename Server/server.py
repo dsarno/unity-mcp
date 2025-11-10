@@ -12,6 +12,8 @@ from resources import register_all_resources
 from unity_connection import get_unity_connection_pool, UnityConnectionPool
 from unity_instance_middleware import UnityInstanceMiddleware, set_unity_instance_middleware
 import time
+from custom_tools_manager import CustomToolsManager
+from fastmcp_tool_registry import register_tool_endpoints
 
 # Configure logging using settings from config
 logging.basicConfig(
@@ -66,12 +68,33 @@ except Exception:
 # Global connection pool
 _unity_connection_pool: UnityConnectionPool = None
 
+# Global custom tools manager
+_custom_tools_manager: CustomToolsManager = None
+
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     """Handle server startup and shutdown."""
-    global _unity_connection_pool
+    global _unity_connection_pool, _custom_tools_manager
     logger.info("MCP for Unity Server starting up")
+
+    # Initialize custom tools manager
+    _custom_tools_manager = CustomToolsManager(mcp)
+
+    # Register custom tool management endpoints with FastMCP
+    register_tool_endpoints(mcp, _custom_tools_manager)
+
+    # Note: When using HTTP transport, FastMCP handles the HTTP server
+    # Tool registration will be handled through FastMCP endpoints
+    enable_http_server = os.environ.get(
+        "UNITY_MCP_ENABLE_HTTP_SERVER", "").lower() in ("1", "true", "yes", "on")
+    if enable_http_server:
+        http_host = os.environ.get("UNITY_MCP_HTTP_HOST", "localhost")
+        http_port = int(os.environ.get("UNITY_MCP_HTTP_PORT", "8080"))
+        logger.info(
+            f"HTTP tool registry will be available on http://{http_host}:{http_port}")
+    else:
+        logger.info("HTTP server disabled - using stdio transport")
 
     # Record server startup telemetry
     start_time = time.time()
@@ -108,12 +131,14 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
             instances = _unity_connection_pool.discover_all_instances()
 
             if instances:
-                logger.info(f"Discovered {len(instances)} Unity instance(s): {[i.id for i in instances]}")
+                logger.info(
+                    f"Discovered {len(instances)} Unity instance(s): {[i.id for i in instances]}")
 
                 # Try to connect to default instance
                 try:
                     _unity_connection_pool.get_connection()
-                    logger.info("Connected to default Unity instance on startup")
+                    logger.info(
+                        "Connected to default Unity instance on startup")
 
                     # Record successful Unity connection (deferred)
                     import threading as _t
@@ -126,7 +151,8 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
                         }
                     )).start()
                 except Exception as e:
-                    logger.warning("Could not connect to default Unity instance: %s", e)
+                    logger.warning(
+                        "Could not connect to default Unity instance: %s", e)
             else:
                 logger.warning("No Unity instances found on startup")
 
@@ -228,6 +254,9 @@ Environment Variables:
   UNITY_MCP_DEFAULT_INSTANCE   Default Unity instance to target (project name, hash, or 'Name@hash')
   UNITY_MCP_SKIP_STARTUP_CONNECT   Skip initial Unity connection attempt (set to 1/true/yes/on)
   UNITY_MCP_TELEMETRY_ENABLED   Enable telemetry (set to 1/true/yes/on)
+  UNITY_MCP_ENABLE_HTTP_SERVER   Enable HTTP server for tool registration (set to 1/true/yes/on)
+  UNITY_MCP_HTTP_HOST   HTTP server host (default: localhost)
+  UNITY_MCP_HTTP_PORT   HTTP server port (default: 8080)
 
 Examples:
   # Use specific Unity project as default
@@ -235,6 +264,9 @@ Examples:
 
   # Or use environment variable
   UNITY_MCP_DEFAULT_INSTANCE="MyProject" python -m src.server
+
+  # Start with HTTP server enabled
+  python -m src.server --enable-http-server --http-port 8080
         """
     )
     parser.add_argument(
@@ -244,15 +276,68 @@ Examples:
         help="Default Unity instance to target (project name, hash, or 'Name@hash'). "
              "Overrides UNITY_MCP_DEFAULT_INSTANCE environment variable."
     )
+    parser.add_argument(
+        "--enable-http-server",
+        action="store_true",
+        help="Enable HTTP server for tool registration. "
+             "Overrides UNITY_MCP_ENABLE_HTTP_SERVER environment variable."
+    )
+    parser.add_argument(
+        "--http-host",
+        type=str,
+        default="localhost",
+        metavar="HOST",
+        help="HTTP server host (default: localhost). "
+             "Overrides UNITY_MCP_HTTP_HOST environment variable."
+    )
+    parser.add_argument(
+        "--http-port",
+        type=int,
+        default=8080,
+        metavar="PORT",
+        help="HTTP server port (default: 8080). "
+             "Overrides UNITY_MCP_HTTP_PORT environment variable."
+    )
 
     args = parser.parse_args()
 
-    # Set environment variable if --default-instance is provided
+    # Set environment variables from command line args
     if args.default_instance:
         os.environ["UNITY_MCP_DEFAULT_INSTANCE"] = args.default_instance
-        logger.info(f"Using default Unity instance from command-line: {args.default_instance}")
+        logger.info(
+            f"Using default Unity instance from command-line: {args.default_instance}")
 
-    mcp.run(transport='stdio')
+    if args.enable_http_server:
+        os.environ["UNITY_MCP_ENABLE_HTTP_SERVER"] = "1"
+        logger.info("HTTP server enabled via command-line")
+
+    if args.http_host != "localhost":
+        os.environ["UNITY_MCP_HTTP_HOST"] = args.http_host
+        logger.info(f"HTTP server host set to: {args.http_host}")
+
+    if args.http_port != 8080:
+        os.environ["UNITY_MCP_HTTP_PORT"] = str(args.http_port)
+        logger.info(f"HTTP server port set to: {args.http_port}")
+
+    # Determine transport mode
+    if args.enable_http_server:
+        # Use HTTP transport for FastMCP
+        transport = 'http'
+        host = args.http_host
+        port = args.http_port
+        logger.info(f"Starting FastMCP with HTTP transport on {host}:{port}")
+    else:
+        # Use stdio transport for traditional MCP
+        transport = 'stdio'
+        host = None
+        port = None
+        logger.info("Starting FastMCP with stdio transport")
+
+        mcp.run(transport='stdio')
+        return
+
+    # Run the server with appropriate transport
+    mcp.run(transport=transport, host=host, port=port)
 
 
 # Run the server

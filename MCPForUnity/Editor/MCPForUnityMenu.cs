@@ -31,45 +31,5 @@ namespace MCPForUnity.Editor
         {
             MCPForUnityEditorWindow.ShowWindow();
         }
-
-        // ========================================
-        // Tool Sync Menu Items
-        // ========================================
-
-        /// <summary>
-        /// Reimport all Python files in the project
-        /// </summary>
-        [MenuItem("Window/MCP For Unity/Tool Sync/Reimport Python Files", priority = 99)]
-        public static void ReimportPythonFiles()
-        {
-            PythonToolSyncProcessor.ReimportPythonFiles();
-        }
-
-        /// <summary>
-        /// Manually sync Python tools to the MCP server
-        /// </summary>
-        [MenuItem("Window/MCP For Unity/Tool Sync/Sync Python Tools", priority = 100)]
-        public static void SyncPythonTools()
-        {
-            PythonToolSyncProcessor.ManualSync();
-        }
-
-        /// <summary>
-        /// Toggle auto-sync for Python tools
-        /// </summary>
-        [MenuItem("Window/MCP For Unity/Tool Sync/Auto-Sync Python Tools", priority = 101)]
-        public static void ToggleAutoSync()
-        {
-            PythonToolSyncProcessor.ToggleAutoSync();
-        }
-
-        /// <summary>
-        /// Validate menu item (shows checkmark when auto-sync is enabled)
-        /// </summary>
-        [MenuItem("Window/MCP For Unity/Tool Sync/Auto-Sync Python Tools", true, priority = 101)]
-        public static bool ToggleAutoSyncValidate()
-        {
-            return PythonToolSyncProcessor.ToggleAutoSyncValidate();
-        }
     }
 }
