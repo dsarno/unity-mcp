@@ -20,6 +20,7 @@ namespace MCPForUnity.Editor.Services
         private readonly string _baseUrl;
         private bool _isConnected;
         private string _sessionId;
+        private int _requestId = 0;
 
         public bool IsConnected => _isConnected;
         public string BaseUrl => _baseUrl;
@@ -219,27 +220,62 @@ namespace MCPForUnity.Editor.Services
         }
 
         /// <summary>
-        /// Execute a tool on the MCP server via HTTP
+        /// Execute a tool on the MCP server via HTTP using JSON-RPC protocol
         /// </summary>
         public async Task<JObject> ExecuteToolAsync(string toolName, JObject parameters)
         {
             try
             {
-                var requestBody = new
+                // Build MCP JSON-RPC request
+                var mcpRequest = new
                 {
-                    name = toolName,
-                    arguments = parameters
+                    jsonrpc = "2.0",
+                    id = System.Threading.Interlocked.Increment(ref _requestId),
+                    method = "tools/call",
+                    @params = new
+                    {
+                        name = toolName,
+                        arguments = parameters
+                    }
                 };
 
-                string jsonContent = JsonConvert.SerializeObject(requestBody);
+                string jsonContent = JsonConvert.SerializeObject(mcpRequest);
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+                
+                // Create request with proper MCP headers
+                var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl)
+                {
+                    Content = content
+                };
+                request.Headers.Add("Accept", "application/json, text/event-stream");
+                request.Headers.Add("MCP-Protocol-Version", "2024-11-05");
+                
+                if (!string.IsNullOrEmpty(_sessionId))
+                {
+                    request.Headers.Add("Mcp-Session-Id", _sessionId);
+                }
 
-                var response = await _httpClient.PostAsync($"{_baseUrl}/tools/call", content);
+                var response = await _httpClient.SendAsync(request);
                 string responseText = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
                 {
-                    return JObject.Parse(responseText);
+                    // Parse JSON-RPC response
+                    var jsonResponse = JObject.Parse(responseText);
+                    
+                    // Check for JSON-RPC error
+                    if (jsonResponse["error"] != null)
+                    {
+                        McpLog.Error($"MCP tool call returned error: {jsonResponse["error"]}");
+                        return new JObject
+                        {
+                            ["success"] = false,
+                            ["error"] = jsonResponse["error"].ToString()
+                        };
+                    }
+                    
+                    // Return the result
+                    return jsonResponse["result"] as JObject ?? jsonResponse;
                 }
                 else
                 {
