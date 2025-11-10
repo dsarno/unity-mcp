@@ -9,19 +9,19 @@ namespace MCPForUnity.Editor.MenuItems
     /// </summary>
     public static class CustomToolsMenuItems
     {
-        [MenuItem("MCP For Unity/Custom Tools/Register All Tools")]
+        [MenuItem("Window/MCP For Unity/Custom Tools/Register All Tools")]
         public static void RegisterAllTools()
         {
             CustomToolRegistrationProcessor.RegisterAllToolsSync();
         }
         
-        [MenuItem("MCP For Unity/Custom Tools/Force Re-registration")]
+        [MenuItem("Window/MCP For Unity/Custom Tools/Force Re-registration")]
         public static void ForceReregistration()
         {
             CustomToolRegistrationProcessor.ForceReregistration();
         }
         
-        [MenuItem("MCP For Unity/Custom Tools/Show Tool Info")]
+        [MenuItem("Window/MCP For Unity/Custom Tools/Show Tool Info")]
         public static void ShowToolInfo()
         {
             string info = CustomToolRegistrationProcessor.GetToolInfo();
@@ -31,7 +31,7 @@ namespace MCPForUnity.Editor.MenuItems
             EditorUtility.DisplayDialog("MCP Custom Tools", info, "OK");
         }
         
-        [MenuItem("MCP For Unity/Custom Tools/Enable Registration")]
+        [MenuItem("Window/MCP For Unity/Custom Tools/Enable Registration")]
         public static void EnableRegistration()
         {
             CustomToolRegistrationProcessor.IsRegistrationEnabled = true;
@@ -39,7 +39,7 @@ namespace MCPForUnity.Editor.MenuItems
             Debug.Log("MCP Custom Tool Registration enabled");
         }
         
-        [MenuItem("MCP For Unity/Custom Tools/Disable Registration")]
+        [MenuItem("Window/MCP For Unity/Custom Tools/Disable Registration")]
         public static void DisableRegistration()
         {
             CustomToolRegistrationProcessor.IsRegistrationEnabled = false;
@@ -47,13 +47,13 @@ namespace MCPForUnity.Editor.MenuItems
             Debug.Log("MCP Custom Tool Registration disabled");
         }
         
-        [MenuItem("MCP For Unity/Custom Tools/Enable Registration", true)]
+        [MenuItem("Window/MCP For Unity/Custom Tools/Enable Registration", true)]
         public static bool EnableRegistrationValidate()
         {
             return !CustomToolRegistrationProcessor.IsRegistrationEnabled;
         }
         
-        [MenuItem("MCP For Unity/Custom Tools/Disable Registration", true)]
+        [MenuItem("Window/MCP For Unity/Custom Tools/Disable Registration", true)]
         public static bool DisableRegistrationValidate()
         {
             return CustomToolRegistrationProcessor.IsRegistrationEnabled;
