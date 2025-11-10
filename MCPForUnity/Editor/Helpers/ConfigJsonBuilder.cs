@@ -73,9 +73,15 @@ namespace MCPForUnity.Editor.Helpers
             {
                 string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
                 
-                args.Add("--enable-http-server");
+                args.Add("--transport");
+                args.Add("http");
                 args.Add("--http-url");
                 args.Add(httpUrl);
+            }
+            else
+            {
+                args.Add("--transport");
+                args.Add("stdio");
             }
             
             unity["args"] = JArray.FromObject(args.ToArray());

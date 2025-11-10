@@ -38,8 +38,7 @@ namespace MCPForUnity.Editor.Windows
         private EnumField transportDropdown;
         private VisualElement httpUrlRow;
         private TextField httpUrlField;
-        private VisualElement httpPortRow;
-        private TextField httpPortField;
+        private VisualElement unitySocketPortRow;
         private TextField unityPortField;
         private VisualElement statusIndicator;
         private Label connectionStatusLabel;
@@ -200,8 +199,7 @@ namespace MCPForUnity.Editor.Windows
             transportDropdown = rootVisualElement.Q<EnumField>("transport-dropdown");
             httpUrlRow = rootVisualElement.Q<VisualElement>("http-url-row");
             httpUrlField = rootVisualElement.Q<TextField>("http-url");
-            httpPortRow = rootVisualElement.Q<VisualElement>("http-port-row");
-            httpPortField = rootVisualElement.Q<TextField>("http-port");
+            unitySocketPortRow = rootVisualElement.Q<VisualElement>("unity-socket-port-row");
             unityPortField = rootVisualElement.Q<TextField>("unity-port");
             statusIndicator = rootVisualElement.Q<VisualElement>("status-indicator");
             connectionStatusLabel = rootVisualElement.Q<Label>("connection-status");
@@ -250,7 +248,6 @@ namespace MCPForUnity.Editor.Windows
             
             // HTTP configuration
             httpUrlField.value = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
-            httpPortField.value = EditorPrefs.GetInt("MCPForUnity.HttpPort", 8080).ToString();
             
             // Unity socket port (editable)
             int unityPort = EditorPrefs.GetInt("MCPForUnity.UnitySocketPort", 0);
@@ -313,36 +310,7 @@ namespace MCPForUnity.Editor.Windows
                     httpUrlField.SetValueWithoutNotify(url);
                 }
                 EditorPrefs.SetString("MCPForUnity.HttpUrl", url);
-                
-                // Try to extract port from URL
-                if (System.Uri.TryCreate(url, System.UriKind.Absolute, out var uri))
-                {
-                    int port = uri.Port;
-                    if (port > 0 && port != 80 && port != 443)
-                    {
-                        EditorPrefs.SetInt("MCPForUnity.HttpPort", port);
-                        httpPortField.SetValueWithoutNotify(port.ToString());
-                    }
-                }
                 UpdateManualConfiguration(); // Refresh config display
-            });
-            
-            httpPortField.RegisterValueChangedCallback(evt =>
-            {
-                if (int.TryParse(evt.newValue, out int port))
-                {
-                    EditorPrefs.SetInt("MCPForUnity.HttpPort", port);
-                    
-                    // Update URL with new port
-                    string currentUrl = httpUrlField.value;
-                    if (System.Uri.TryCreate(currentUrl, System.UriKind.Absolute, out var uri))
-                    {
-                        string newUrl = $"{uri.Scheme}://{uri.Host}:{port}{uri.PathAndQuery}";
-                        httpUrlField.SetValueWithoutNotify(newUrl);
-                        EditorPrefs.SetString("MCPForUnity.HttpUrl", newUrl);
-                    }
-                    UpdateManualConfiguration(); // Refresh config display
-                }
             });
             
             unityPortField.RegisterValueChangedCallback(evt =>
@@ -432,8 +400,12 @@ namespace MCPForUnity.Editor.Windows
         private void UpdateHttpFieldVisibility()
         {
             bool useHttp = (TransportProtocol)transportDropdown.value == TransportProtocol.HTTP;
+            
+            // Show HTTP URL only in HTTP mode
             httpUrlRow.style.display = useHttp ? DisplayStyle.Flex : DisplayStyle.None;
-            httpPortRow.style.display = useHttp ? DisplayStyle.Flex : DisplayStyle.None;
+            
+            // Show Unity Socket Port only in stdio mode (HTTP uses the same URL/port as MCP client)
+            unitySocketPortRow.style.display = useHttp ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         private void UpdateClientStatus()

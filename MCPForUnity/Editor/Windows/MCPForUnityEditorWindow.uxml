@@ -52,11 +52,7 @@
                     <ui:Label text="HTTP URL:" class="setting-label" />
                     <ui:TextField name="http-url" class="port-field" />
                 </ui:VisualElement>
-                <ui:VisualElement class="setting-row" name="http-port-row">
-                    <ui:Label text="HTTP Port:" class="setting-label" />
-                    <ui:TextField name="http-port" class="port-field" />
-                </ui:VisualElement>
-                <ui:VisualElement class="setting-row">
+                <ui:VisualElement class="setting-row" name="unity-socket-port-row">
                     <ui:Label text="Unity Socket Port:" class="setting-label" />
                     <ui:TextField name="unity-port" class="port-field" />
                 </ui:VisualElement>

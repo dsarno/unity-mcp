@@ -254,19 +254,23 @@ Environment Variables:
   UNITY_MCP_DEFAULT_INSTANCE   Default Unity instance to target (project name, hash, or 'Name@hash')
   UNITY_MCP_SKIP_STARTUP_CONNECT   Skip initial Unity connection attempt (set to 1/true/yes/on)
   UNITY_MCP_TELEMETRY_ENABLED   Enable telemetry (set to 1/true/yes/on)
-  UNITY_MCP_ENABLE_HTTP_SERVER   Enable HTTP server for tool registration (set to 1/true/yes/on)
-  UNITY_MCP_HTTP_HOST   HTTP server host (default: localhost)
-  UNITY_MCP_HTTP_PORT   HTTP server port (default: 8080)
+  UNITY_MCP_TRANSPORT   Transport protocol: stdio or http (default: stdio)
+  UNITY_MCP_HTTP_URL   HTTP server URL (default: http://localhost:8080)
+  UNITY_MCP_HTTP_HOST   HTTP server host (overrides URL host)
+  UNITY_MCP_HTTP_PORT   HTTP server port (overrides URL port)
 
 Examples:
   # Use specific Unity project as default
   python -m src.server --default-instance "MyProject"
 
-  # Or use environment variable
-  UNITY_MCP_DEFAULT_INSTANCE="MyProject" python -m src.server
+  # Start with HTTP transport
+  python -m src.server --transport http --http-url http://localhost:8080
 
-  # Start with HTTP server enabled
-  python -m src.server --enable-http-server --http-port 8080
+  # Start with stdio transport (default)
+  python -m src.server --transport stdio
+
+  # Use environment variable for transport
+  UNITY_MCP_TRANSPORT=http UNITY_MCP_HTTP_URL=http://localhost:9000 python -m src.server
         """
     )
     parser.add_argument(
@@ -277,10 +281,12 @@ Examples:
              "Overrides UNITY_MCP_DEFAULT_INSTANCE environment variable."
     )
     parser.add_argument(
-        "--enable-http-server",
-        action="store_true",
-        help="Enable HTTP server for tool registration. "
-             "Overrides UNITY_MCP_ENABLE_HTTP_SERVER environment variable."
+        "--transport",
+        type=str,
+        choices=["stdio", "http"],
+        default="stdio",
+        help="Transport protocol to use: stdio or http (default: stdio). "
+             "Overrides UNITY_MCP_TRANSPORT environment variable."
     )
     parser.add_argument(
         "--http-url",
@@ -315,22 +321,26 @@ Examples:
         logger.info(
             f"Using default Unity instance from command-line: {args.default_instance}")
 
-    if args.enable_http_server:
-        os.environ["UNITY_MCP_ENABLE_HTTP_SERVER"] = "1"
-        logger.info("HTTP server enabled via command-line")
+    # Set transport mode
+    transport_mode = args.transport or os.environ.get(
+        "UNITY_MCP_TRANSPORT", "stdio")
+    os.environ["UNITY_MCP_TRANSPORT"] = transport_mode
+    logger.info(f"Transport mode: {transport_mode}")
 
     # Parse HTTP URL to extract host and port
     from urllib.parse import urlparse
     http_url = os.environ.get("UNITY_MCP_HTTP_URL", args.http_url)
     parsed_url = urlparse(http_url)
-    
+
     # Allow individual host/port to override URL components
-    http_host = args.http_host or os.environ.get("UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "localhost"
-    http_port = args.http_port or (int(os.environ.get("UNITY_MCP_HTTP_PORT")) if os.environ.get("UNITY_MCP_HTTP_PORT") else None) or parsed_url.port or 8080
-    
+    http_host = args.http_host or os.environ.get(
+        "UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "localhost"
+    http_port = args.http_port or (int(os.environ.get("UNITY_MCP_HTTP_PORT")) if os.environ.get(
+        "UNITY_MCP_HTTP_PORT") else None) or parsed_url.port or 8080
+
     os.environ["UNITY_MCP_HTTP_HOST"] = http_host
     os.environ["UNITY_MCP_HTTP_PORT"] = str(http_port)
-    
+
     if args.http_url != "http://localhost:8080":
         logger.info(f"HTTP URL set to: {http_url}")
     if args.http_host:
@@ -339,28 +349,23 @@ Examples:
         logger.info(f"HTTP port override: {http_port}")
 
     # Determine transport mode
-    if args.enable_http_server:
+    if transport_mode == 'http':
         # Use HTTP transport for FastMCP
         transport = 'http'
         # Use the parsed host and port from URL/args
         from urllib.parse import urlparse
         http_url = os.environ.get("UNITY_MCP_HTTP_URL", args.http_url)
         parsed_url = urlparse(http_url)
-        host = args.http_host or os.environ.get("UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "localhost"
-        port = args.http_port or (int(os.environ.get("UNITY_MCP_HTTP_PORT")) if os.environ.get("UNITY_MCP_HTTP_PORT") else None) or parsed_url.port or 8080
+        host = args.http_host or os.environ.get(
+            "UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "localhost"
+        port = args.http_port or (int(os.environ.get("UNITY_MCP_HTTP_PORT")) if os.environ.get(
+            "UNITY_MCP_HTTP_PORT") else None) or parsed_url.port or 8080
         logger.info(f"Starting FastMCP with HTTP transport on {host}:{port}")
+        mcp.run(transport=transport, host=host, port=port)
     else:
         # Use stdio transport for traditional MCP
-        transport = 'stdio'
-        host = None
-        port = None
         logger.info("Starting FastMCP with stdio transport")
-
         mcp.run(transport='stdio')
-        return
-
-    # Run the server with appropriate transport
-    mcp.run(transport=transport, host=host, port=port)
 
 
 # Run the server
