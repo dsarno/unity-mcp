@@ -121,18 +121,75 @@ namespace MCPForUnity.Editor.Services
         
         private async Task<dynamic> CallFastMcpHttpAsync(string toolName, object parameters)
         {
-            // This would make HTTP calls to FastMCP's HTTP transport
-            // For now, returning mock response
-            await Task.Delay(100); // Simulate network call
-            return new { success = true, registered = new List<string> { "mock_tool" }, message = "Tools registered via HTTP" };
+            try
+            {
+                string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
+                // Ensure URL doesn't have trailing slash before adding path
+                httpUrl = httpUrl.TrimEnd('/');
+                string url = $"{httpUrl}/tools/call";
+                
+                using (var client = new System.Net.Http.HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(30);
+                    
+                    var requestBody = new
+                    {
+                        name = toolName,
+                        arguments = parameters
+                    };
+                    
+                    string jsonContent = Newtonsoft.Json.JsonConvert.SerializeObject(requestBody);
+                    var content = new System.Net.Http.StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json");
+                    
+                    var response = await client.PostAsync(url, content);
+                    string responseText = await response.Content.ReadAsStringAsync();
+                    
+                    if (response.IsSuccessStatusCode)
+                    {
+                        return Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(responseText);
+                    }
+                    else
+                    {
+                        McpLog.Error($"HTTP call failed: {response.StatusCode} - {responseText}");
+                        return new { success = false, error = $"HTTP {response.StatusCode}: {responseText}" };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                McpLog.Error($"HTTP call exception: {ex.Message}");
+                return new { success = false, error = ex.Message };
+            }
         }
         
         private async Task<dynamic> CallMcpBridgeAsync(string toolName, object parameters)
         {
             // Use the existing MCP bridge for stdio transport
-            // For now, returning mock response  
-            await Task.Delay(100); // Simulate processing
-            return new { success = true, registered = new List<string> { "mock_tool" }, message = "Tools registered via bridge" };
+            // This would send the tool call through the Unity socket bridge
+            try
+            {
+                // For stdio mode, we need to send through the bridge
+                // The bridge service would handle the MCP protocol communication
+                var bridgeService = MCPServiceLocator.Bridge;
+                
+                if (!bridgeService.IsRunning)
+                {
+                    return new { success = false, error = "Bridge is not running" };
+                }
+                
+                // Serialize the tool call
+                string jsonParams = Newtonsoft.Json.JsonConvert.SerializeObject(parameters);
+                
+                // Send via bridge (this is a simplified version - actual implementation may vary)
+                // For now, return a placeholder indicating stdio mode needs the server running
+                await Task.Delay(100);
+                return new { success = true, registered = new List<string>(), message = "Stdio mode: Tools will be registered when server starts" };
+            }
+            catch (Exception ex)
+            {
+                McpLog.Error($"Bridge call exception: {ex.Message}");
+                return new { success = false, error = ex.Message };
+            }
         }
     }
 }

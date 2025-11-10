@@ -16,11 +16,11 @@ namespace MCPForUnity.Editor.Windows
 {
     public class MCPForUnityEditorWindow : EditorWindow
     {
-        // Protocol enum for future HTTP support
-        private enum ConnectionProtocol
+        // Transport protocol enum
+        private enum TransportProtocol
         {
-            Stdio,
-            // HTTPStreaming // Future
+            HTTP,
+            Stdio
         }
 
         // Settings UI Elements
@@ -35,9 +35,12 @@ namespace MCPForUnity.Editor.Windows
         private VisualElement uvxPathStatus;
 
         // Connection UI Elements
-        private EnumField protocolDropdown;
+        private EnumField transportDropdown;
+        private VisualElement httpUrlRow;
+        private TextField httpUrlField;
+        private VisualElement httpPortRow;
+        private TextField httpPortField;
         private TextField unityPortField;
-        private TextField serverPortField;
         private VisualElement statusIndicator;
         private Label connectionStatusLabel;
         private Button connectionToggleButton;
@@ -194,9 +197,12 @@ namespace MCPForUnity.Editor.Windows
             uvxPathStatus = rootVisualElement.Q<VisualElement>("uv-path-status");
 
             // Connection
-            protocolDropdown = rootVisualElement.Q<EnumField>("protocol-dropdown");
+            transportDropdown = rootVisualElement.Q<EnumField>("transport-dropdown");
+            httpUrlRow = rootVisualElement.Q<VisualElement>("http-url-row");
+            httpUrlField = rootVisualElement.Q<TextField>("http-url");
+            httpPortRow = rootVisualElement.Q<VisualElement>("http-port-row");
+            httpPortField = rootVisualElement.Q<TextField>("http-port");
             unityPortField = rootVisualElement.Q<TextField>("unity-port");
-            serverPortField = rootVisualElement.Q<TextField>("server-port");
             statusIndicator = rootVisualElement.Q<VisualElement>("status-indicator");
             connectionStatusLabel = rootVisualElement.Q<Label>("connection-status");
             connectionToggleButton = rootVisualElement.Q<Button>("connection-toggle");
@@ -238,11 +244,24 @@ namespace MCPForUnity.Editor.Windows
             advancedSettingsFoldout.value = false;
 
             // Connection Section
-            protocolDropdown.Init(ConnectionProtocol.Stdio);
-            protocolDropdown.SetEnabled(false); // Disabled for now, only stdio supported
-
-            unityPortField.value = MCPServiceLocator.Bridge.CurrentPort.ToString();
-            serverPortField.value = "6500";
+            transportDropdown.Init(TransportProtocol.HTTP);
+            bool useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
+            transportDropdown.value = useHttpTransport ? TransportProtocol.HTTP : TransportProtocol.Stdio;
+            
+            // HTTP configuration
+            httpUrlField.value = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
+            httpPortField.value = EditorPrefs.GetInt("MCPForUnity.HttpPort", 8080).ToString();
+            
+            // Unity socket port (editable)
+            int unityPort = EditorPrefs.GetInt("MCPForUnity.UnitySocketPort", 0);
+            if (unityPort == 0)
+            {
+                unityPort = MCPServiceLocator.Bridge.CurrentPort;
+            }
+            unityPortField.value = unityPort.ToString();
+            
+            // Update HTTP field visibility
+            UpdateHttpFieldVisibility();
 
             // Client Configuration
             var clientNames = mcpClients.clients.Select(c => c.name).ToList();
@@ -272,6 +291,66 @@ namespace MCPForUnity.Editor.Windows
                 currentValidationLevel = (ValidationLevel)evt.newValue;
                 EditorPrefs.SetInt("MCPForUnity.ValidationLevel", (int)currentValidationLevel);
                 UpdateValidationDescription();
+            });
+            
+            // Transport callbacks
+            transportDropdown.RegisterValueChangedCallback(evt =>
+            {
+                bool useHttp = (TransportProtocol)evt.newValue == TransportProtocol.HTTP;
+                EditorPrefs.SetBool("MCPForUnity.UseHttpTransport", useHttp);
+                UpdateHttpFieldVisibility();
+                UpdateManualConfiguration(); // Refresh config display
+                McpLog.Info($"Transport changed to: {evt.newValue}");
+            });
+            
+            httpUrlField.RegisterValueChangedCallback(evt =>
+            {
+                string url = evt.newValue;
+                // Ensure URL has protocol
+                if (!string.IsNullOrEmpty(url) && !url.StartsWith("http://") && !url.StartsWith("https://"))
+                {
+                    url = "http://" + url;
+                    httpUrlField.SetValueWithoutNotify(url);
+                }
+                EditorPrefs.SetString("MCPForUnity.HttpUrl", url);
+                
+                // Try to extract port from URL
+                if (System.Uri.TryCreate(url, System.UriKind.Absolute, out var uri))
+                {
+                    int port = uri.Port;
+                    if (port > 0 && port != 80 && port != 443)
+                    {
+                        EditorPrefs.SetInt("MCPForUnity.HttpPort", port);
+                        httpPortField.SetValueWithoutNotify(port.ToString());
+                    }
+                }
+                UpdateManualConfiguration(); // Refresh config display
+            });
+            
+            httpPortField.RegisterValueChangedCallback(evt =>
+            {
+                if (int.TryParse(evt.newValue, out int port))
+                {
+                    EditorPrefs.SetInt("MCPForUnity.HttpPort", port);
+                    
+                    // Update URL with new port
+                    string currentUrl = httpUrlField.value;
+                    if (System.Uri.TryCreate(currentUrl, System.UriKind.Absolute, out var uri))
+                    {
+                        string newUrl = $"{uri.Scheme}://{uri.Host}:{port}{uri.PathAndQuery}";
+                        httpUrlField.SetValueWithoutNotify(newUrl);
+                        EditorPrefs.SetString("MCPForUnity.HttpUrl", newUrl);
+                    }
+                    UpdateManualConfiguration(); // Refresh config display
+                }
+            });
+            
+            unityPortField.RegisterValueChangedCallback(evt =>
+            {
+                if (int.TryParse(evt.newValue, out int port))
+                {
+                    EditorPrefs.SetInt("MCPForUnity.UnitySocketPort", port);
+                }
             });
 
             // Advanced settings callbacks
@@ -343,7 +422,18 @@ namespace MCPForUnity.Editor.Windows
             }
 
             // Update ports
-            unityPortField.value = bridgeService.CurrentPort.ToString();
+            int savedPort = EditorPrefs.GetInt("MCPForUnity.UnitySocketPort", 0);
+            if (savedPort == 0)
+            {
+                unityPortField.value = bridgeService.CurrentPort.ToString();
+            }
+        }
+        
+        private void UpdateHttpFieldVisibility()
+        {
+            bool useHttp = (TransportProtocol)transportDropdown.value == TransportProtocol.HTTP;
+            httpUrlRow.style.display = useHttp ? DisplayStyle.Flex : DisplayStyle.None;
+            httpPortRow.style.display = useHttp ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         private void UpdateClientStatus()

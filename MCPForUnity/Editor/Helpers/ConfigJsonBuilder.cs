@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Helpers;
+using UnityEditor;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -46,13 +47,16 @@ namespace MCPForUnity.Editor.Helpers
         /// Centralized builder that applies all caveats consistently.
         /// - Sets command/args with uvx and package version
         /// - Ensures env exists
-        /// - Adds type:"stdio" for VSCode
+        /// - Adds transport configuration (HTTP or stdio)
         /// - Adds disabled:false for Windsurf/Kiro only when missing
         /// </summary>
         private static void PopulateUnityNode(JObject unity, string uvPath, McpClient client, bool isVSCode)
         {
             // Use structured uvx command parts for proper formatting
             var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+            
+            // Get transport preference (default to HTTP)
+            bool useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
             
             // For JSON config clients (Cursor, VSCode, etc.), separate command and args properly
             unity["command"] = uvxPath;
@@ -63,11 +67,41 @@ namespace MCPForUnity.Editor.Helpers
                 args.Insert(0, fromUrl);
                 args.Insert(0, "--from");
             }
+            
+            // Add transport-specific arguments
+            if (useHttpTransport)
+            {
+                string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
+                
+                // Parse URL to extract host and port
+                if (System.Uri.TryCreate(httpUrl, System.UriKind.Absolute, out var uri))
+                {
+                    string host = uri.Host;
+                    int port = uri.Port;
+                    
+                    args.Add("--enable-http-server");
+                    args.Add("--http-host");
+                    args.Add(host);
+                    args.Add("--http-port");
+                    args.Add(port.ToString());
+                }
+                else
+                {
+                    // Fallback to defaults if URL parsing fails
+                    args.Add("--enable-http-server");
+                    args.Add("--http-host");
+                    args.Add("localhost");
+                    args.Add("--http-port");
+                    args.Add("8080");
+                }
+            }
+            
             unity["args"] = JArray.FromObject(args.ToArray());
 
             if (isVSCode)
             {
-                unity["type"] = "stdio";
+                // VSCode requires explicit transport type
+                unity["type"] = useHttpTransport ? "http" : "stdio";
             }
             else
             {

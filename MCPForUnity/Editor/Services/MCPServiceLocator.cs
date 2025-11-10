@@ -16,6 +16,7 @@ namespace MCPForUnity.Editor.Services
         private static IPlatformService _platformService;
         private static IToolDiscoveryService _toolDiscoveryService;
         private static ICustomToolRegistrationService _customToolRegistrationService;
+        private static ICacheManagementService _cacheManagementService;
 
         public static IBridgeControlService Bridge => _bridgeService ??= new BridgeControlService();
         public static IClientConfigurationService Client => _clientService ??= new ClientConfigurationService();
@@ -25,6 +26,7 @@ namespace MCPForUnity.Editor.Services
         public static IPlatformService Platform => _platformService ??= new PlatformService();
         public static IToolDiscoveryService ToolDiscovery => _toolDiscoveryService ??= new ToolDiscoveryService();
         public static ICustomToolRegistrationService CustomToolRegistration => _customToolRegistrationService ??= new CustomToolRegistrationService();
+        public static ICacheManagementService Cache => _cacheManagementService ??= new CacheManagementService();
 
         /// <summary>
         /// Registers a custom implementation for a service (useful for testing)
@@ -49,6 +51,8 @@ namespace MCPForUnity.Editor.Services
                 _toolDiscoveryService = td;
             else if (implementation is ICustomToolRegistrationService ctr)
                 _customToolRegistrationService = ctr;
+            else if (implementation is ICacheManagementService cm)
+                _cacheManagementService = cm;
         }
 
         /// <summary>
@@ -64,6 +68,7 @@ namespace MCPForUnity.Editor.Services
             (_platformService as IDisposable)?.Dispose();
             (_toolDiscoveryService as IDisposable)?.Dispose();
             (_customToolRegistrationService as IDisposable)?.Dispose();
+            (_cacheManagementService as IDisposable)?.Dispose();
 
             _bridgeService = null;
             _clientService = null;
@@ -73,6 +78,7 @@ namespace MCPForUnity.Editor.Services
             _platformService = null;
             _toolDiscoveryService = null;
             _customToolRegistrationService = null;
+            _cacheManagementService = null;
         }
     }
 }
