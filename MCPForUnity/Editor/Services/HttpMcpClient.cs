@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -18,9 +19,11 @@ namespace MCPForUnity.Editor.Services
         private readonly HttpClient _httpClient;
         private readonly string _baseUrl;
         private bool _isConnected;
+        private string _sessionId;
 
         public bool IsConnected => _isConnected;
         public string BaseUrl => _baseUrl;
+        public string SessionId => _sessionId;
 
         public HttpMcpClient(string baseUrl)
         {
@@ -35,23 +38,181 @@ namespace MCPForUnity.Editor.Services
                 Timeout = TimeSpan.FromSeconds(30)
             };
             _isConnected = false;
+            _sessionId = null;
         }
 
         /// <summary>
-        /// Test connection to the MCP server
+        /// Initialize MCP session with the server
+        /// Sends initialize request and stores session ID if provided
         /// </summary>
-        public async Task<bool> TestConnectionAsync()
+        public async Task<bool> InitializeAsync()
         {
             try
             {
-                // Try to ping the server
-                var response = await _httpClient.GetAsync($"{_baseUrl}/health");
-                _isConnected = response.IsSuccessStatusCode;
-                return _isConnected;
+                var initRequest = new
+                {
+                    jsonrpc = "2.0",
+                    id = 1,
+                    method = "initialize",
+                    @params = new
+                    {
+                        protocolVersion = "2024-11-05",
+                        capabilities = new { },
+                        clientInfo = new
+                        {
+                            name = "unity-mcp-client",
+                            version = "1.0.0"
+                        }
+                    }
+                };
+
+                string jsonContent = JsonConvert.SerializeObject(initRequest);
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+                
+                // Add required headers
+                var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl)
+                {
+                    Content = content
+                };
+                request.Headers.Add("Accept", "application/json, text/event-stream");
+                request.Headers.Add("MCP-Protocol-Version", "2024-11-05");
+                
+                // Add session ID if we have one
+                if (!string.IsNullOrEmpty(_sessionId))
+                {
+                    request.Headers.Add("Mcp-Session-Id", _sessionId);
+                }
+
+                var response = await _httpClient.SendAsync(request);
+                string responseText = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    // Check for session ID in response headers
+                    if (response.Headers.TryGetValues("Mcp-Session-Id", out var sessionIds))
+                    {
+                        _sessionId = sessionIds.FirstOrDefault();
+                        McpLog.Info($"MCP session initialized with ID: {_sessionId}");
+                    }
+                    else
+                    {
+                        McpLog.Info("MCP session initialized (no session ID provided by server)");
+                    }
+                    
+                    _isConnected = true;
+                    return true;
+                }
+                else
+                {
+                    McpLog.Error($"MCP initialize failed: {response.StatusCode} - {responseText}");
+                    _isConnected = false;
+                    return false;
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                McpLog.Error($"MCP initialize failed: {ex.Message}");
+                _isConnected = false;
+                return false;
             }
             catch (Exception ex)
             {
-                McpLog.Error($"HTTP connection test failed: {ex.Message}");
+                McpLog.Error($"MCP initialize failed: {ex.Message}");
+                _isConnected = false;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Send ping request to test MCP server health
+        /// </summary>
+        public async Task<bool> PingAsync()
+        {
+            try
+            {
+                var pingRequest = new
+                {
+                    jsonrpc = "2.0",
+                    id = 2,
+                    method = "ping"
+                };
+
+                string jsonContent = JsonConvert.SerializeObject(pingRequest);
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+                
+                var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl)
+                {
+                    Content = content
+                };
+                request.Headers.Add("Accept", "application/json, text/event-stream");
+                request.Headers.Add("MCP-Protocol-Version", "2024-11-05");
+                
+                if (!string.IsNullOrEmpty(_sessionId))
+                {
+                    request.Headers.Add("Mcp-Session-Id", _sessionId);
+                }
+
+                var response = await _httpClient.SendAsync(request);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    McpLog.Info("MCP ping successful");
+                    return true;
+                }
+                else
+                {
+                    string responseText = await response.Content.ReadAsStringAsync();
+                    McpLog.Warn($"MCP ping failed: {response.StatusCode} - {responseText}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                McpLog.Error($"MCP ping failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// End the MCP session
+        /// </summary>
+        public async Task<bool> DisconnectAsync()
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_sessionId))
+                {
+                    // No session to end
+                    _isConnected = false;
+                    return true;
+                }
+
+                var request = new HttpRequestMessage(HttpMethod.Delete, _baseUrl);
+                request.Headers.Add("Mcp-Session-Id", _sessionId);
+                request.Headers.Add("MCP-Protocol-Version", "2024-11-05");
+
+                var response = await _httpClient.SendAsync(request);
+                
+                if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
+                {
+                    // 405 means server doesn't support explicit session termination, which is fine
+                    McpLog.Info("MCP session ended");
+                    _sessionId = null;
+                    _isConnected = false;
+                    return true;
+                }
+                else
+                {
+                    McpLog.Warn($"MCP session end returned {response.StatusCode}");
+                    _sessionId = null;
+                    _isConnected = false;
+                    return true; // Still consider it ended
+                }
+            }
+            catch (Exception ex)
+            {
+                McpLog.Error($"MCP disconnect failed: {ex.Message}");
+                _sessionId = null;
                 _isConnected = false;
                 return false;
             }

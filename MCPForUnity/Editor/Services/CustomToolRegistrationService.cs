@@ -123,41 +123,29 @@ namespace MCPForUnity.Editor.Services
         {
             try
             {
-                string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
-                // Ensure URL doesn't have trailing slash before adding path
-                httpUrl = httpUrl.TrimEnd('/');
-                string url = $"{httpUrl}/tools/call";
+                // Use the HttpMcpClient from the bridge service to make proper MCP tool calls
+                var bridgeService = MCPServiceLocator.Bridge;
+                var httpClient = bridgeService.GetHttpClient();
                 
-                using (var client = new System.Net.Http.HttpClient())
+                if (httpClient == null)
                 {
-                    client.Timeout = TimeSpan.FromSeconds(30);
-                    
-                    var requestBody = new
-                    {
-                        name = toolName,
-                        arguments = parameters
-                    };
-                    
-                    string jsonContent = Newtonsoft.Json.JsonConvert.SerializeObject(requestBody);
-                    var content = new System.Net.Http.StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json");
-                    
-                    var response = await client.PostAsync(url, content);
-                    string responseText = await response.Content.ReadAsStringAsync();
-                    
-                    if (response.IsSuccessStatusCode)
-                    {
-                        return Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(responseText);
-                    }
-                    else
-                    {
-                        McpLog.Error($"HTTP call failed: {response.StatusCode} - {responseText}");
-                        return new { success = false, error = $"HTTP {response.StatusCode}: {responseText}" };
-                    }
+                    McpLog.Error("HTTP MCP client not available - ensure session is started");
+                    return new { success = false, error = "HTTP MCP client not initialized" };
                 }
+                
+                // Convert parameters to JObject
+                string jsonParams = Newtonsoft.Json.JsonConvert.SerializeObject(parameters);
+                JObject paramsObj = JObject.Parse(jsonParams);
+                
+                // Execute tool via MCP protocol
+                var result = await httpClient.ExecuteToolAsync(toolName, paramsObj);
+                
+                // Convert JObject result to dynamic
+                return Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(result.ToString());
             }
             catch (Exception ex)
             {
-                McpLog.Error($"HTTP call exception: {ex.Message}");
+                McpLog.Error($"HTTP MCP tool call exception: {ex.Message}");
                 return new { success = false, error = ex.Message };
             }
         }

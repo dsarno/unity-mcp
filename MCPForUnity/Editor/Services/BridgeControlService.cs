@@ -50,7 +50,7 @@ namespace MCPForUnity.Editor.Services
             try
             {
                 string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
-                McpLog.Info($"Starting HTTP transport to {httpUrl}");
+                McpLog.Info($"Starting HTTP MCP session to {httpUrl}");
 
                 // Dispose existing client if any
                 _httpClient?.Dispose();
@@ -58,23 +58,23 @@ namespace MCPForUnity.Editor.Services
                 // Create new HTTP client
                 _httpClient = new HttpMcpClient(httpUrl);
 
-                // Test connection asynchronously
+                // Initialize MCP session asynchronously
                 System.Threading.Tasks.Task.Run(async () =>
                 {
-                    bool connected = await _httpClient.TestConnectionAsync();
-                    if (connected)
+                    bool initialized = await _httpClient.InitializeAsync();
+                    if (initialized)
                     {
-                        McpLog.Info("HTTP transport connected successfully");
+                        McpLog.Info("HTTP MCP session initialized successfully");
                     }
                     else
                     {
-                        McpLog.Warn("HTTP transport connection test failed - server may not be running");
+                        McpLog.Warn("HTTP MCP session initialization failed - server may not be running");
                     }
                 });
             }
             catch (Exception ex)
             {
-                McpLog.Error($"Failed to start HTTP transport: {ex.Message}");
+                McpLog.Error($"Failed to start HTTP MCP session: {ex.Message}");
             }
         }
 
@@ -100,13 +100,24 @@ namespace MCPForUnity.Editor.Services
         {
             try
             {
-                _httpClient?.Dispose();
-                _httpClient = null;
-                McpLog.Info("HTTP transport stopped");
+                if (_httpClient != null)
+                {
+                    // End MCP session asynchronously
+                    System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        await _httpClient.DisconnectAsync();
+                    }).Wait(TimeSpan.FromSeconds(5)); // Wait up to 5 seconds
+                    
+                    _httpClient.Dispose();
+                    _httpClient = null;
+                }
+                McpLog.Info("HTTP MCP session ended");
             }
             catch (Exception ex)
             {
-                McpLog.Error($"Error stopping HTTP transport: {ex.Message}");
+                McpLog.Error($"Error stopping HTTP MCP session: {ex.Message}");
+                _httpClient?.Dispose();
+                _httpClient = null;
             }
         }
 
@@ -115,7 +126,63 @@ namespace MCPForUnity.Editor.Services
             MCPForUnityBridge.Stop();
         }
 
+        public async System.Threading.Tasks.Task<BridgeVerificationResult> VerifyAsync()
+        {
+            if (_useHttpTransport)
+            {
+                return await VerifyHttpTransportAsync();
+            }
+            else
+            {
+                return VerifyStdioTransport(CurrentPort);
+            }
+        }
+
+        private async System.Threading.Tasks.Task<BridgeVerificationResult> VerifyHttpTransportAsync()
+        {
+            var result = new BridgeVerificationResult
+            {
+                Success = false,
+                HandshakeValid = false,
+                PingSucceeded = false,
+                Message = "HTTP verification not started"
+            };
+
+            if (_httpClient == null)
+            {
+                result.Message = "HTTP MCP client not initialized";
+                return result;
+            }
+
+            try
+            {
+                bool pingSucceeded = await _httpClient.PingAsync();
+                if (pingSucceeded)
+                {
+                    result.Success = true;
+                    result.HandshakeValid = true;
+                    result.PingSucceeded = true;
+                    result.Message = "MCP ping successful";
+                }
+                else
+                {
+                    result.Message = "MCP ping failed - server may not be responding";
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Message = $"MCP ping failed: {ex.Message}";
+            }
+
+            return result;
+        }
+
         public BridgeVerificationResult Verify(int port)
+        {
+            return VerifyStdioTransport(port);
+        }
+
+        private BridgeVerificationResult VerifyStdioTransport(int port)
         {
             var result = new BridgeVerificationResult
             {
@@ -249,6 +316,11 @@ namespace MCPForUnity.Editor.Services
                 }
                 return Encoding.ASCII.GetString(ms.ToArray());
             }
+        }
+
+        public HttpMcpClient GetHttpClient()
+        {
+            return _httpClient;
         }
     }
 }

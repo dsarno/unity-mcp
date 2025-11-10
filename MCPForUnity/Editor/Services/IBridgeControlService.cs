@@ -1,3 +1,5 @@
+using System.Threading.Tasks;
+
 namespace MCPForUnity.Editor.Services
 {
     /// <summary>
@@ -36,6 +38,17 @@ namespace MCPForUnity.Editor.Services
         /// <param name="port">The port to verify</param>
         /// <returns>Verification result with detailed status</returns>
         BridgeVerificationResult Verify(int port);
+        
+        /// <summary>
+        /// Verifies the connection asynchronously (works for both HTTP and stdio transports)
+        /// </summary>
+        /// <returns>Verification result with detailed status</returns>
+        Task<BridgeVerificationResult> VerifyAsync();
+        
+        /// <summary>
+        /// Gets the HTTP client instance (null if not in HTTP mode)
+        /// </summary>
+        HttpMcpClient GetHttpClient();
     }
     
     /// <summary>

@@ -73,14 +73,8 @@ namespace MCPForUnity.Editor.Services
             {
                 try
                 {
-                    // Start the server in a new terminal window
-                    var startInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "/bin/bash",
-                        Arguments = $"-c \"osascript -e 'tell app \\\"Terminal\\\" to do script \\\"{command}\\\"'\"",
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
+                    // Start the server in a new terminal window (cross-platform)
+                    var startInfo = CreateTerminalProcessStartInfo(command);
                     
                     System.Diagnostics.Process.Start(startInfo);
                     
@@ -141,6 +135,92 @@ namespace MCPForUnity.Editor.Services
         {
             bool useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
             return useHttpTransport && IsLocalUrl();
+        }
+        
+        /// <summary>
+        /// Creates a ProcessStartInfo for opening a terminal window with the given command
+        /// Works cross-platform: macOS, Windows, and Linux
+        /// </summary>
+        private System.Diagnostics.ProcessStartInfo CreateTerminalProcessStartInfo(string command)
+        {
+#if UNITY_EDITOR_OSX
+            // macOS: Use osascript to open Terminal.app
+            return new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "/bin/bash",
+                Arguments = $"-c \"osascript -e 'tell app \\\"Terminal\\\" to do script \\\"{command}\\\"'\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+#elif UNITY_EDITOR_WIN
+            // Windows: Use cmd.exe with start command to open new window
+            return new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c start cmd.exe /k \"{command}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+#else
+            // Linux: Try common terminal emulators
+            // Priority: gnome-terminal, xterm, konsole, xfce4-terminal
+            string[] terminals = { "gnome-terminal", "xterm", "konsole", "xfce4-terminal" };
+            string terminalCmd = null;
+            
+            foreach (var term in terminals)
+            {
+                try
+                {
+                    var which = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "which",
+                        Arguments = term,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        CreateNoWindow = true
+                    });
+                    which.WaitForExit();
+                    if (which.ExitCode == 0)
+                    {
+                        terminalCmd = term;
+                        break;
+                    }
+                }
+                catch { }
+            }
+            
+            if (terminalCmd == null)
+            {
+                terminalCmd = "xterm"; // Fallback
+            }
+            
+            // Different terminals have different argument formats
+            string args;
+            if (terminalCmd == "gnome-terminal")
+            {
+                args = $"-- bash -c \"{command}; exec bash\"";
+            }
+            else if (terminalCmd == "konsole")
+            {
+                args = $"-e bash -c \"{command}; exec bash\"";
+            }
+            else if (terminalCmd == "xfce4-terminal")
+            {
+                args = $"--hold -e \"bash -c '{command}'\"";
+            }
+            else // xterm and others
+            {
+                args = $"-hold -e bash -c \"{command}\"";
+            }
+            
+            return new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = terminalCmd,
+                Arguments = args,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+#endif
         }
     }
 }

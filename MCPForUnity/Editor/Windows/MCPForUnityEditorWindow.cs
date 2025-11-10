@@ -167,7 +167,7 @@ namespace MCPForUnity.Editor.Windows
             // Auto-verify bridge health if connected
             if (MCPServiceLocator.Bridge.IsRunning)
             {
-                VerifyBridgeConnection();
+                _ = VerifyBridgeConnectionAsync();
             }
 
             // Update path overrides
@@ -393,17 +393,17 @@ namespace MCPForUnity.Editor.Windows
 
             if (isRunning)
             {
-                connectionStatusLabel.text = "Connected";
+                connectionStatusLabel.text = "Session Active";
                 statusIndicator.RemoveFromClassList("disconnected");
                 statusIndicator.AddToClassList("connected");
-                connectionToggleButton.text = "Stop";
+                connectionToggleButton.text = "End Session";
             }
             else
             {
-                connectionStatusLabel.text = "Disconnected";
+                connectionStatusLabel.text = "No Session";
                 statusIndicator.RemoveFromClassList("connected");
                 statusIndicator.AddToClassList("disconnected");
-                connectionToggleButton.text = "Start";
+                connectionToggleButton.text = "Start Session";
 
                 // Reset health status when disconnected
                 healthStatusLabel.text = "Unknown";
@@ -570,11 +570,11 @@ namespace MCPForUnity.Editor.Windows
                 bridgeService.Start();
 
                 // Verify connection after starting (Option C: verify on connect)
-                EditorApplication.delayCall += () =>
+                EditorApplication.delayCall += async () =>
                 {
                     if (bridgeService.IsRunning)
                     {
-                        VerifyBridgeConnection();
+                        await VerifyBridgeConnectionAsync();
                     }
                 };
             }
@@ -582,12 +582,12 @@ namespace MCPForUnity.Editor.Windows
             UpdateConnectionStatus();
         }
 
-        private void OnTestConnectionClicked()
+        private async void OnTestConnectionClicked()
         {
-            VerifyBridgeConnection();
+            await VerifyBridgeConnectionAsync();
         }
 
-        private void VerifyBridgeConnection()
+        private async System.Threading.Tasks.Task VerifyBridgeConnectionAsync()
         {
             var bridgeService = MCPServiceLocator.Bridge;
 
@@ -601,7 +601,8 @@ namespace MCPForUnity.Editor.Windows
                 return;
             }
 
-            var result = bridgeService.Verify(bridgeService.CurrentPort);
+            // Use async verification that works for both HTTP and stdio
+            var result = await bridgeService.VerifyAsync();
 
             healthIndicator.RemoveFromClassList("healthy");
             healthIndicator.RemoveFromClassList("warning");
@@ -611,19 +612,19 @@ namespace MCPForUnity.Editor.Windows
             {
                 healthStatusLabel.text = "Healthy";
                 healthIndicator.AddToClassList("healthy");
-                McpLog.Info("Bridge verification successful");
+                McpLog.Info($"Connection verification successful: {result.Message}");
             }
             else if (result.HandshakeValid)
             {
                 healthStatusLabel.text = "Ping Failed";
                 healthIndicator.AddToClassList("warning");
-                McpLog.Warn($"Bridge verification warning: {result.Message}");
+                McpLog.Warn($"Connection verification warning: {result.Message}");
             }
             else
             {
                 healthStatusLabel.text = "Unhealthy";
                 healthIndicator.AddToClassList("warning");
-                McpLog.Error($"Bridge verification failed: {result.Message}");
+                McpLog.Error($"Connection verification failed: {result.Message}");
             }
         }
 
