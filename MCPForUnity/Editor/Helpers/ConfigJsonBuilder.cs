@@ -52,49 +52,56 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         private static void PopulateUnityNode(JObject unity, string uvPath, McpClient client, bool isVSCode)
         {
-            // Use structured uvx command parts for proper formatting
-            var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
-            
             // Get transport preference (default to HTTP)
             bool useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
             
-            // For JSON config clients (Cursor, VSCode, etc.), separate command and args properly
-            unity["command"] = uvxPath;
-            
-            var args = new List<string> { packageName };
-            if (!string.IsNullOrEmpty(fromUrl))
-            {
-                args.Insert(0, fromUrl);
-                args.Insert(0, "--from");
-            }
-            
-            // Add transport-specific arguments
             if (useHttpTransport)
             {
+                // HTTP mode: Use URL, no command
                 string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
+                unity["url"] = httpUrl;
+                
+                // Remove command/args if they exist from previous config
+                if (unity["command"] != null) unity.Remove("command");
+                if (unity["args"] != null) unity.Remove("args");
+                
+                if (isVSCode)
+                {
+                    unity["type"] = "http";
+                }
+            }
+            else
+            {
+                // Stdio mode: Use uvx command
+                var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+                
+                unity["command"] = uvxPath;
+                
+                var args = new List<string> { packageName };
+                if (!string.IsNullOrEmpty(fromUrl))
+                {
+                    args.Insert(0, fromUrl);
+                    args.Insert(0, "--from");
+                }
                 
                 args.Add("--transport");
-                args.Add("http");
-                args.Add("--http-url");
-                args.Add(httpUrl);
-            }
-            else
-            {
-                args.Add("--transport");
                 args.Add("stdio");
+                
+                unity["args"] = JArray.FromObject(args.ToArray());
+                
+                // Remove url if it exists from previous config
+                if (unity["url"] != null) unity.Remove("url");
+                
+                if (isVSCode)
+                {
+                    unity["type"] = "stdio";
+                }
             }
             
-            unity["args"] = JArray.FromObject(args.ToArray());
-
-            if (isVSCode)
+            // Remove type for non-VSCode clients
+            if (!isVSCode && unity["type"] != null)
             {
-                // VSCode requires explicit transport type
-                unity["type"] = useHttpTransport ? "http" : "stdio";
-            }
-            else
-            {
-                // Remove type if it somehow exists from previous clients
-                if (unity["type"] != null) unity.Remove("type");
+                unity.Remove("type");
             }
 
             if (client != null && (client.mcpType == McpTypes.Windsurf || client.mcpType == McpTypes.Kiro))
