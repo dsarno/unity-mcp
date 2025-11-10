@@ -97,6 +97,14 @@
     margin-left: auto;
 }
 
+/* URL Fields */
+.url-field {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 200px;
+    margin-left: auto;
+}
+
 .port-field > .unity-text-field__input {
     background-color: rgba(0, 0, 0, 0.1);
     -unity-text-align: middle-center;

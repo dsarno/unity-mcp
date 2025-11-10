@@ -309,14 +309,8 @@ namespace MCPForUnity.Editor.Windows
             
             httpUrlField.RegisterValueChangedCallback(evt =>
             {
-                string url = evt.newValue;
-                // Ensure URL has protocol
-                if (!string.IsNullOrEmpty(url) && !url.StartsWith("http://") && !url.StartsWith("https://"))
-                {
-                    url = "http://" + url;
-                    httpUrlField.SetValueWithoutNotify(url);
-                }
-                EditorPrefs.SetString("MCPForUnity.HttpUrl", url);
+                // Save URL as-is, no automatic modifications
+                EditorPrefs.SetString("MCPForUnity.HttpUrl", evt.newValue);
                 UpdateManualConfiguration(); // Refresh config display
             });
             
