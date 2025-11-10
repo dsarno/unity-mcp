@@ -554,6 +554,9 @@ namespace MCPForUnity.Editor.Windows
             {
                 uvxPathStatus.AddToClassList("invalid");
             }
+
+            // Git URL Override - refresh from EditorPrefs
+            gitUrlOverride.value = EditorPrefs.GetString("MCPForUnity.GitUrlOverride", "");
         }
 
         // Button callbacks
