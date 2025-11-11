@@ -38,6 +38,7 @@
 /* Setting Rows */
 .setting-row {
     flex-direction: row;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
@@ -55,6 +56,7 @@
 
 .setting-label {
     min-width: 140px;
+    flex-shrink: 0;
     -unity-text-align: middle-left;
 }
 
@@ -78,7 +80,7 @@
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 150px;
-    max-width: 100%;
+    flex-basis: 200px;
 }
 
 /* Validation Description */
@@ -102,7 +104,7 @@
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 200px;
-    margin-left: auto;
+    flex-basis: 250px;
 }
 
 .port-field > .unity-text-field__input {
