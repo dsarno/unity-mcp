@@ -16,11 +16,11 @@ namespace MCPForUnity.Editor.Windows
 {
     public class MCPForUnityEditorWindow : EditorWindow
     {
-        // Protocol enum for future HTTP support
-        private enum ConnectionProtocol
+        // Transport protocol enum
+        private enum TransportProtocol
         {
-            Stdio,
-            // HTTPStreaming // Future
+            HTTP,
+            Stdio
         }
 
         // Settings UI Elements
@@ -29,29 +29,23 @@ namespace MCPForUnity.Editor.Windows
         private EnumField validationLevelField;
         private Label validationDescription;
         private Foldout advancedSettingsFoldout;
-        private TextField mcpServerPathOverride;
-        private TextField uvPathOverride;
-        private Button browsePythonButton;
-        private Button clearPythonButton;
-        private Button browseUvButton;
-        private Button clearUvButton;
-        private VisualElement mcpServerPathStatus;
-        private VisualElement uvPathStatus;
+        private TextField uvxPathOverride;
+        private Button browseUvxButton;
+        private Button clearUvxButton;
+        private VisualElement uvxPathStatus;
 
         // Connection UI Elements
-        private EnumField protocolDropdown;
+        private EnumField transportDropdown;
+        private VisualElement httpUrlRow;
+        private TextField httpUrlField;
+        private VisualElement unitySocketPortRow;
         private TextField unityPortField;
-        private TextField serverPortField;
         private VisualElement statusIndicator;
         private Label connectionStatusLabel;
         private Button connectionToggleButton;
         private VisualElement healthIndicator;
         private Label healthStatusLabel;
         private Button testConnectionButton;
-        private VisualElement serverStatusBanner;
-        private Label serverStatusMessage;
-        private Button downloadServerButton;
-        private Button rebuildServerButton;
 
         // Client UI Elements
         private DropdownField clientDropdown;
@@ -128,7 +122,6 @@ namespace MCPForUnity.Editor.Windows
 
             // Initial update
             UpdateConnectionStatus();
-            UpdateServerStatusBanner();
             UpdateClientStatus();
             UpdatePathOverrides();
             // Technically not required to connect, but if we don't do this, the UI will be blank
@@ -197,29 +190,23 @@ namespace MCPForUnity.Editor.Windows
             validationLevelField = rootVisualElement.Q<EnumField>("validation-level");
             validationDescription = rootVisualElement.Q<Label>("validation-description");
             advancedSettingsFoldout = rootVisualElement.Q<Foldout>("advanced-settings-foldout");
-            mcpServerPathOverride = rootVisualElement.Q<TextField>("python-path-override");
-            uvPathOverride = rootVisualElement.Q<TextField>("uv-path-override");
-            browsePythonButton = rootVisualElement.Q<Button>("browse-python-button");
-            clearPythonButton = rootVisualElement.Q<Button>("clear-python-button");
-            browseUvButton = rootVisualElement.Q<Button>("browse-uv-button");
-            clearUvButton = rootVisualElement.Q<Button>("clear-uv-button");
-            mcpServerPathStatus = rootVisualElement.Q<VisualElement>("mcp-server-path-status");
-            uvPathStatus = rootVisualElement.Q<VisualElement>("uv-path-status");
+            uvxPathOverride = rootVisualElement.Q<TextField>("uv-path-override");
+            browseUvxButton = rootVisualElement.Q<Button>("browse-uv-button");
+            clearUvxButton = rootVisualElement.Q<Button>("clear-uv-button");
+            uvxPathStatus = rootVisualElement.Q<VisualElement>("uv-path-status");
 
             // Connection
-            protocolDropdown = rootVisualElement.Q<EnumField>("protocol-dropdown");
+            transportDropdown = rootVisualElement.Q<EnumField>("transport-dropdown");
+            httpUrlRow = rootVisualElement.Q<VisualElement>("http-url-row");
+            httpUrlField = rootVisualElement.Q<TextField>("http-url");
+            unitySocketPortRow = rootVisualElement.Q<VisualElement>("unity-socket-port-row");
             unityPortField = rootVisualElement.Q<TextField>("unity-port");
-            serverPortField = rootVisualElement.Q<TextField>("server-port");
             statusIndicator = rootVisualElement.Q<VisualElement>("status-indicator");
             connectionStatusLabel = rootVisualElement.Q<Label>("connection-status");
             connectionToggleButton = rootVisualElement.Q<Button>("connection-toggle");
             healthIndicator = rootVisualElement.Q<VisualElement>("health-indicator");
             healthStatusLabel = rootVisualElement.Q<Label>("health-status");
             testConnectionButton = rootVisualElement.Q<Button>("test-connection-button");
-            serverStatusBanner = rootVisualElement.Q<VisualElement>("server-status-banner");
-            serverStatusMessage = rootVisualElement.Q<Label>("server-status-message");
-            downloadServerButton = rootVisualElement.Q<Button>("download-server-button");
-            rebuildServerButton = rootVisualElement.Q<Button>("rebuild-server-button");
 
             // Client
             clientDropdown = rootVisualElement.Q<DropdownField>("client-dropdown");
@@ -255,11 +242,23 @@ namespace MCPForUnity.Editor.Windows
             advancedSettingsFoldout.value = false;
 
             // Connection Section
-            protocolDropdown.Init(ConnectionProtocol.Stdio);
-            protocolDropdown.SetEnabled(false); // Disabled for now, only stdio supported
-
-            unityPortField.value = MCPServiceLocator.Bridge.CurrentPort.ToString();
-            serverPortField.value = "6500";
+            transportDropdown.Init(TransportProtocol.HTTP);
+            bool useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
+            transportDropdown.value = useHttpTransport ? TransportProtocol.HTTP : TransportProtocol.Stdio;
+            
+            // HTTP configuration
+            httpUrlField.value = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
+            
+            // Unity socket port (editable)
+            int unityPort = EditorPrefs.GetInt("MCPForUnity.UnitySocketPort", 0);
+            if (unityPort == 0)
+            {
+                unityPort = MCPServiceLocator.Bridge.CurrentPort;
+            }
+            unityPortField.value = unityPort.ToString();
+            
+            // Update HTTP field visibility
+            UpdateHttpFieldVisibility();
 
             // Client Configuration
             var clientNames = mcpClients.clients.Select(c => c.name).ToList();
@@ -290,18 +289,45 @@ namespace MCPForUnity.Editor.Windows
                 EditorPrefs.SetInt("MCPForUnity.ValidationLevel", (int)currentValidationLevel);
                 UpdateValidationDescription();
             });
+            
+            // Transport callbacks
+            transportDropdown.RegisterValueChangedCallback(evt =>
+            {
+                bool useHttp = (TransportProtocol)evt.newValue == TransportProtocol.HTTP;
+                EditorPrefs.SetBool("MCPForUnity.UseHttpTransport", useHttp);
+                UpdateHttpFieldVisibility();
+                UpdateManualConfiguration(); // Refresh config display
+                McpLog.Info($"Transport changed to: {evt.newValue}");
+            });
+            
+            httpUrlField.RegisterValueChangedCallback(evt =>
+            {
+                string url = evt.newValue;
+                // Ensure URL has protocol
+                if (!string.IsNullOrEmpty(url) && !url.StartsWith("http://") && !url.StartsWith("https://"))
+                {
+                    url = "http://" + url;
+                    httpUrlField.SetValueWithoutNotify(url);
+                }
+                EditorPrefs.SetString("MCPForUnity.HttpUrl", url);
+                UpdateManualConfiguration(); // Refresh config display
+            });
+            
+            unityPortField.RegisterValueChangedCallback(evt =>
+            {
+                if (int.TryParse(evt.newValue, out int port))
+                {
+                    EditorPrefs.SetInt("MCPForUnity.UnitySocketPort", port);
+                }
+            });
 
             // Advanced settings callbacks
-            browsePythonButton.clicked += OnBrowsePythonClicked;
-            clearPythonButton.clicked += OnClearPythonClicked;
-            browseUvButton.clicked += OnBrowseUvClicked;
-            clearUvButton.clicked += OnClearUvClicked;
+            browseUvxButton.clicked += OnBrowseUvxClicked;
+            clearUvxButton.clicked += OnClearUvxClicked;
 
             // Connection callbacks
             connectionToggleButton.clicked += OnConnectionToggleClicked;
             testConnectionButton.clicked += OnTestConnectionClicked;
-            downloadServerButton.clicked += OnDownloadServerClicked;
-            rebuildServerButton.clicked += OnRebuildServerClicked;
 
             // Client callbacks
             clientDropdown.RegisterValueChangedCallback(evt =>
@@ -364,7 +390,22 @@ namespace MCPForUnity.Editor.Windows
             }
 
             // Update ports
-            unityPortField.value = bridgeService.CurrentPort.ToString();
+            int savedPort = EditorPrefs.GetInt("MCPForUnity.UnitySocketPort", 0);
+            if (savedPort == 0)
+            {
+                unityPortField.value = bridgeService.CurrentPort.ToString();
+            }
+        }
+        
+        private void UpdateHttpFieldVisibility()
+        {
+            bool useHttp = (TransportProtocol)transportDropdown.value == TransportProtocol.HTTP;
+            
+            // Show HTTP URL only in HTTP mode
+            httpUrlRow.style.display = useHttp ? DisplayStyle.Flex : DisplayStyle.None;
+            
+            // Show Unity Socket Port only in stdio mode (HTTP uses the same URL/port as MCP client)
+            unitySocketPortRow.style.display = useHttp ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         private void UpdateClientStatus()
@@ -376,7 +417,7 @@ namespace MCPForUnity.Editor.Windows
             MCPServiceLocator.Client.CheckClientStatus(client);
 
             clientStatusLabel.text = client.GetStatusDisplayString();
-            
+
             // Reset inline color style (clear error state from OnConfigureClicked)
             clientStatusLabel.style.color = StyleKeyword.Null;
 
@@ -468,50 +509,27 @@ namespace MCPForUnity.Editor.Windows
         {
             var pathService = MCPServiceLocator.Paths;
 
-            // MCP Server Path
-            string mcpServerPath = pathService.GetMcpServerPath();
-            if (pathService.HasMcpServerOverride)
-            {
-                mcpServerPathOverride.value = mcpServerPath ?? "(override set but invalid)";
-            }
-            else
-            {
-                mcpServerPathOverride.value = mcpServerPath ?? "(auto-detected)";
-            }
-
-            // Update status indicator
-            mcpServerPathStatus.RemoveFromClassList("valid");
-            mcpServerPathStatus.RemoveFromClassList("invalid");
-            if (!string.IsNullOrEmpty(mcpServerPath) && File.Exists(Path.Combine(mcpServerPath, "server.py")))
-            {
-                mcpServerPathStatus.AddToClassList("valid");
-            }
-            else
-            {
-                mcpServerPathStatus.AddToClassList("invalid");
-            }
-
             // UV Path
-            string uvPath = pathService.GetUvPath();
-            if (pathService.HasUvPathOverride)
+            string uvxPath = pathService.GetUvxPath();
+            if (pathService.HasUvxPathOverride)
             {
-                uvPathOverride.value = uvPath ?? "(override set but invalid)";
+                uvxPathOverride.value = uvxPath ?? "(override set but invalid)";
             }
             else
             {
-                uvPathOverride.value = uvPath ?? "(auto-detected)";
+                uvxPathOverride.value = uvxPath ?? "(auto-detected)";
             }
 
             // Update status indicator
-            uvPathStatus.RemoveFromClassList("valid");
-            uvPathStatus.RemoveFromClassList("invalid");
-            if (!string.IsNullOrEmpty(uvPath) && File.Exists(uvPath))
+            uvxPathStatus.RemoveFromClassList("valid");
+            uvxPathStatus.RemoveFromClassList("invalid");
+            if (!string.IsNullOrEmpty(uvxPath) && File.Exists(uvxPath))
             {
-                uvPathStatus.AddToClassList("valid");
+                uvxPathStatus.AddToClassList("valid");
             }
             else
             {
-                uvPathStatus.AddToClassList("invalid");
+                uvxPathStatus.AddToClassList("invalid");
             }
         }
 
@@ -586,85 +604,6 @@ namespace MCPForUnity.Editor.Windows
             }
         }
 
-        private void OnDownloadServerClicked()
-        {
-            if (ServerInstaller.DownloadAndInstallServer())
-            {
-                UpdateServerStatusBanner();
-                UpdatePathOverrides();
-                EditorUtility.DisplayDialog(
-                    "Download Complete",
-                    "Server installed successfully! Start your connection and configure your MCP clients to begin.",
-                    "OK"
-                );
-            }
-        }
-
-        private void OnRebuildServerClicked()
-        {
-            try
-            {
-                bool success = ServerInstaller.RebuildMcpServer();
-                if (success)
-                {
-                    EditorUtility.DisplayDialog("MCP For Unity", "Server rebuilt successfully.", "OK");
-                    UpdateServerStatusBanner();
-                    UpdatePathOverrides();
-                }
-                else
-                {
-                    EditorUtility.DisplayDialog("MCP For Unity", "Rebuild failed. Please check Console for details.", "OK");
-                }
-            }
-            catch (Exception ex)
-            {
-                McpLog.Error($"Failed to rebuild server: {ex.Message}");
-                EditorUtility.DisplayDialog("MCP For Unity", $"Rebuild failed: {ex.Message}", "OK");
-            }
-        }
-
-        private void UpdateServerStatusBanner()
-        {
-            bool hasEmbedded = ServerInstaller.HasEmbeddedServer();
-            string installedVer = ServerInstaller.GetInstalledServerVersion();
-            string packageVer = AssetPathUtility.GetPackageVersion();
-
-            // Show/hide download vs rebuild buttons
-            if (hasEmbedded)
-            {
-                downloadServerButton.style.display = DisplayStyle.None;
-                rebuildServerButton.style.display = DisplayStyle.Flex;
-            }
-            else
-            {
-                downloadServerButton.style.display = DisplayStyle.Flex;
-                rebuildServerButton.style.display = DisplayStyle.None;
-            }
-
-            // Check for installation errors first
-            string installError = PackageLifecycleManager.GetLastInstallError();
-            if (!string.IsNullOrEmpty(installError))
-            {
-                serverStatusMessage.text = $"\u274C Server installation failed: {installError}. Click 'Rebuild Server' to retry.";
-                serverStatusBanner.style.display = DisplayStyle.Flex;
-            }
-            // Update banner
-            else if (!hasEmbedded && string.IsNullOrEmpty(installedVer))
-            {
-                serverStatusMessage.text = "\u26A0 Server not installed. Click 'Download & Install Server' to get started.";
-                serverStatusBanner.style.display = DisplayStyle.Flex;
-            }
-            else if (!hasEmbedded && !string.IsNullOrEmpty(installedVer) && installedVer != packageVer)
-            {
-                serverStatusMessage.text = $"\u26A0 Server update available (v{installedVer} \u2192 v{packageVer}). Update recommended.";
-                serverStatusBanner.style.display = DisplayStyle.Flex;
-            }
-            else
-            {
-                serverStatusBanner.style.display = DisplayStyle.None;
-            }
-        }
-
         private void OnConfigureAllClientsClicked()
         {
             try
@@ -731,32 +670,7 @@ namespace MCPForUnity.Editor.Windows
             }
         }
 
-        private void OnBrowsePythonClicked()
-        {
-            string picked = EditorUtility.OpenFolderPanel("Select MCP Server Directory", Application.dataPath, "");
-            if (!string.IsNullOrEmpty(picked))
-            {
-                try
-                {
-                    MCPServiceLocator.Paths.SetMcpServerOverride(picked);
-                    UpdatePathOverrides();
-                    McpLog.Info($"MCP server path override set to: {picked}");
-                }
-                catch (Exception ex)
-                {
-                    EditorUtility.DisplayDialog("Invalid Path", ex.Message, "OK");
-                }
-            }
-        }
-
-        private void OnClearPythonClicked()
-        {
-            MCPServiceLocator.Paths.ClearMcpServerOverride();
-            UpdatePathOverrides();
-            McpLog.Info("MCP server path override cleared");
-        }
-
-        private void OnBrowseUvClicked()
+        private void OnBrowseUvxClicked()
         {
             string suggested = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
                 ? "/opt/homebrew/bin"
@@ -766,7 +680,7 @@ namespace MCPForUnity.Editor.Windows
             {
                 try
                 {
-                    MCPServiceLocator.Paths.SetUvPathOverride(picked);
+                    MCPServiceLocator.Paths.SetUvxPathOverride(picked);
                     UpdatePathOverrides();
                     McpLog.Info($"UV path override set to: {picked}");
                 }
@@ -777,9 +691,9 @@ namespace MCPForUnity.Editor.Windows
             }
         }
 
-        private void OnClearUvClicked()
+        private void OnClearUvxClicked()
         {
-            MCPServiceLocator.Paths.ClearUvPathOverride();
+            MCPServiceLocator.Paths.ClearUvxPathOverride();
             UpdatePathOverrides();
             McpLog.Info("UV path override cleared");
         }

@@ -239,11 +239,7 @@ namespace MCPForUnityTests.Editor.Helpers
 
         private static void InvokeWriteToConfig(string configPath, McpClient client)
         {
-            var result = McpConfigurationHelper.WriteMcpConfiguration(
-                pythonDir: string.Empty,
-                configPath: configPath,
-                mcpClient: client
-            );
+            var result = McpConfigurationHelper.WriteMcpConfiguration(configPath, client);
 
             Assert.AreEqual("Configured successfully", result, "WriteMcpConfiguration should return success");
         }

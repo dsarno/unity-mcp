@@ -34,7 +34,7 @@ async def unity_instances(ctx: Context) -> dict[str, Any]:
 
     try:
         pool = get_unity_connection_pool()
-        instances = pool.discover_all_instances(force_refresh=False)
+        instances = pool.discover_all_instances(force_refresh=True)
 
         # Check for duplicate project names
         name_counts = {}

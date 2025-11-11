@@ -1,7 +1,9 @@
 using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Services;
 using MCPForUnity.Editor.Setup;
 using MCPForUnity.Editor.Windows;
 using UnityEditor;
+using UnityEngine;
 
 namespace MCPForUnity.Editor
 {
@@ -31,45 +33,42 @@ namespace MCPForUnity.Editor
         {
             MCPForUnityEditorWindow.ShowWindow();
         }
-
+        
         // ========================================
-        // Tool Sync Menu Items
+        // Maintenance Menu Items
         // ========================================
-
+        
         /// <summary>
-        /// Reimport all Python files in the project
+        /// Clear the local uvx cache for the MCP server
         /// </summary>
-        [MenuItem("Window/MCP For Unity/Tool Sync/Reimport Python Files", priority = 99)]
-        public static void ReimportPythonFiles()
+        [MenuItem("Window/MCP For Unity/Maintenance/Clear UVX Cache", priority = 200)]
+        public static void ClearUvxCache()
         {
-            PythonToolSyncProcessor.ReimportPythonFiles();
-        }
-
-        /// <summary>
-        /// Manually sync Python tools to the MCP server
-        /// </summary>
-        [MenuItem("Window/MCP For Unity/Tool Sync/Sync Python Tools", priority = 100)]
-        public static void SyncPythonTools()
-        {
-            PythonToolSyncProcessor.ManualSync();
-        }
-
-        /// <summary>
-        /// Toggle auto-sync for Python tools
-        /// </summary>
-        [MenuItem("Window/MCP For Unity/Tool Sync/Auto-Sync Python Tools", priority = 101)]
-        public static void ToggleAutoSync()
-        {
-            PythonToolSyncProcessor.ToggleAutoSync();
-        }
-
-        /// <summary>
-        /// Validate menu item (shows checkmark when auto-sync is enabled)
-        /// </summary>
-        [MenuItem("Window/MCP For Unity/Tool Sync/Auto-Sync Python Tools", true, priority = 101)]
-        public static bool ToggleAutoSyncValidate()
-        {
-            return PythonToolSyncProcessor.ToggleAutoSyncValidate();
+            if (EditorUtility.DisplayDialog(
+                "Clear UVX Cache",
+                "This will clear the local uvx cache for the MCP server package. " +
+                "The server will be re-downloaded on next launch.\n\n" +
+                "Continue?",
+                "Clear Cache",
+                "Cancel"))
+            {
+                bool success = MCPServiceLocator.Cache.ClearUvxCache();
+                
+                if (success)
+                {
+                    EditorUtility.DisplayDialog(
+                        "Success",
+                        "UVX cache cleared successfully. The server will be re-downloaded on next launch.",
+                        "OK");
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog(
+                        "Error",
+                        "Failed to clear UVX cache. Check the console for details.",
+                        "OK");
+                }
+            }
         }
     }
 }

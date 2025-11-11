@@ -408,7 +408,7 @@ namespace MCPForUnity.Editor
                     isRunning = true;
                     isAutoConnectMode = false;
                     string platform = Application.platform.ToString();
-                    string serverVer = ReadInstalledServerVersionSafe();
+                    string serverVer = AssetPathUtility.GetPackageVersion();
                     McpLog.Info($"MCPForUnityBridge started on port {currentUnityPort}. (OS={platform}, server={serverVer})");
                     // Start background listener with cooperative cancellation
                     cts = new CancellationTokenSource();
@@ -1257,22 +1257,6 @@ namespace MCPForUnity.Editor
             {
                 // Best-effort only
             }
-        }
-
-        private static string ReadInstalledServerVersionSafe()
-        {
-            try
-            {
-                string serverSrc = ServerInstaller.GetServerPath();
-                string verFile = Path.Combine(serverSrc, "server_version.txt");
-                if (File.Exists(verFile))
-                {
-                    string v = File.ReadAllText(verFile)?.Trim();
-                    if (!string.IsNullOrEmpty(v)) return v;
-                }
-            }
-            catch { }
-            return "unknown";
         }
 
         private static string ComputeProjectHash(string input)

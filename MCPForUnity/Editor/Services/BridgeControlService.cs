@@ -3,34 +3,114 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using UnityEditor;
+using MCPForUnity.Editor.Helpers;
 
 namespace MCPForUnity.Editor.Services
 {
     /// <summary>
     /// Implementation of bridge control service
+    /// Supports both HTTP and TCP socket (stdio) transports
     /// </summary>
     public class BridgeControlService : IBridgeControlService
     {
-        public bool IsRunning => MCPForUnityBridge.IsRunning;
+        private HttpMcpClient _httpClient;
+        private bool _useHttpTransport;
+        public bool IsRunning
+        {
+            get
+            {
+                if (_useHttpTransport)
+                {
+                    return _httpClient != null && _httpClient.IsConnected;
+                }
+                return MCPForUnityBridge.IsRunning;
+            }
+        }
         public int CurrentPort => MCPForUnityBridge.GetCurrentPort();
         public bool IsAutoConnectMode => MCPForUnityBridge.IsAutoConnectMode();
 
         public void Start()
         {
-            // If server is installed, use auto-connect mode
-            // Otherwise use standard mode
-            string serverPath = MCPServiceLocator.Paths.GetMcpServerPath();
-            if (!string.IsNullOrEmpty(serverPath) && File.Exists(Path.Combine(serverPath, "server.py")))
+            // Check transport mode from EditorPrefs
+            _useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
+
+            if (_useHttpTransport)
             {
-                MCPForUnityBridge.StartAutoConnect();
+                StartHttpTransport();
             }
             else
             {
-                MCPForUnityBridge.Start();
+                StartStdioTransport();
             }
         }
 
+        private void StartHttpTransport()
+        {
+            try
+            {
+                string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
+                McpLog.Info($"Starting HTTP transport to {httpUrl}");
+
+                // Dispose existing client if any
+                _httpClient?.Dispose();
+
+                // Create new HTTP client
+                _httpClient = new HttpMcpClient(httpUrl);
+
+                // Test connection asynchronously
+                System.Threading.Tasks.Task.Run(async () =>
+                {
+                    bool connected = await _httpClient.TestConnectionAsync();
+                    if (connected)
+                    {
+                        McpLog.Info("HTTP transport connected successfully");
+                    }
+                    else
+                    {
+                        McpLog.Warn("HTTP transport connection test failed - server may not be running");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                McpLog.Error($"Failed to start HTTP transport: {ex.Message}");
+            }
+        }
+
+        private void StartStdioTransport()
+        {
+            McpLog.Info("Starting stdio (TCP socket) transport");
+            MCPForUnityBridge.StartAutoConnect();
+        }
+
         public void Stop()
+        {
+            if (_useHttpTransport)
+            {
+                StopHttpTransport();
+            }
+            else
+            {
+                StopStdioTransport();
+            }
+        }
+
+        private void StopHttpTransport()
+        {
+            try
+            {
+                _httpClient?.Dispose();
+                _httpClient = null;
+                McpLog.Info("HTTP transport stopped");
+            }
+            catch (Exception ex)
+            {
+                McpLog.Error($"Error stopping HTTP transport: {ex.Message}");
+            }
+        }
+
+        private void StopStdioTransport()
         {
             MCPForUnityBridge.Stop();
         }
@@ -106,7 +186,7 @@ namespace MCPForUnity.Editor.Services
         {
             if (payload == null) throw new ArgumentNullException(nameof(payload));
             if (payload.LongLength < 1) throw new IOException("Zero-length frames are not allowed");
-            
+
             byte[] header = new byte[8];
             ulong len = (ulong)payload.LongLength;
             header[0] = (byte)(len >> 56);
