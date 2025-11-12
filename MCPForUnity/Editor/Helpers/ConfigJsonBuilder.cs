@@ -54,12 +54,21 @@ namespace MCPForUnity.Editor.Helpers
         {
             // Get transport preference (default to HTTP)
             bool useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
+            bool isWindsurf = client?.mcpType == McpTypes.Windsurf;
             
             if (useHttpTransport)
             {
                 // HTTP mode: Use URL, no command
                 string httpUrl = HttpEndpointUtility.GetMcpRpcUrl();
-                unity["url"] = httpUrl;
+                string httpProperty = isWindsurf ? "serverUrl" : "url";
+                unity[httpProperty] = httpUrl;
+
+                // Remove legacy property for Windsurf (or vice versa)
+                string staleProperty = isWindsurf ? "url" : "serverUrl";
+                if (unity[staleProperty] != null)
+                {
+                    unity.Remove(staleProperty);
+                }
                 
                 // Remove command/args if they exist from previous config
                 if (unity["command"] != null) unity.Remove("command");
@@ -89,8 +98,9 @@ namespace MCPForUnity.Editor.Helpers
                 
                 unity["args"] = JArray.FromObject(args.ToArray());
                 
-                // Remove url if it exists from previous config
+                // Remove url/serverUrl if they exist from previous config
                 if (unity["url"] != null) unity.Remove("url");
+                if (unity["serverUrl"] != null) unity.Remove("serverUrl");
                 
                 if (isVSCode)
                 {
@@ -104,17 +114,24 @@ namespace MCPForUnity.Editor.Helpers
                 unity.Remove("type");
             }
 
-            if (client != null && (client.mcpType == McpTypes.Windsurf || client.mcpType == McpTypes.Kiro))
+            bool requiresEnv = client?.mcpType == McpTypes.Kiro;
+            bool requiresDisabled = client != null && (client.mcpType == McpTypes.Windsurf || client.mcpType == McpTypes.Kiro);
+
+            if (requiresEnv)
             {
                 if (unity["env"] == null)
                 {
                     unity["env"] = new JObject();
                 }
+            }
+            else if (isWindsurf && unity["env"] != null)
+            {
+                unity.Remove("env");
+            }
 
-                if (unity["disabled"] == null)
-                {
-                    unity["disabled"] = false;
-                }
+            if (requiresDisabled && unity["disabled"] == null)
+            {
+                unity["disabled"] = false;
             }
         }
 

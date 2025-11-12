@@ -70,7 +70,7 @@ namespace MCPForUnityTests.Editor.Helpers
         // --- Tests ---
 
         [Test]
-        public void AddsEnvAndDisabledFalse_ForWindsurf()
+        public void AddsDisabledFalseAndServerUrl_ForWindsurf()
         {
             var configPath = Path.Combine(_tempRoot, "windsurf.json");
             WriteInitialConfig(configPath, isVSCode: false, command: _fakeUvPath, directory: "/old/path");
@@ -81,10 +81,9 @@ namespace MCPForUnityTests.Editor.Helpers
             var root = JObject.Parse(File.ReadAllText(configPath));
             var unity = (JObject)root.SelectToken("mcpServers.unityMCP");
             Assert.NotNull(unity, "Expected mcpServers.unityMCP node");
-            Assert.NotNull(unity["env"], "env should be present for all clients");
-            Assert.IsTrue(unity["env"]!.Type == JTokenType.Object, "env should be an object");
+            Assert.IsNull(unity["env"], "Windsurf configs should not include an env block");
             Assert.AreEqual(false, (bool)unity["disabled"], "disabled:false should be set for Windsurf when missing");
-            AssertTransportConfiguration(unity, isVSCode: false);
+            AssertTransportConfiguration(unity, McpTypes.Windsurf);
         }
 
         [Test]
@@ -102,7 +101,7 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity["env"], "env should be present for all clients");
             Assert.IsTrue(unity["env"]!.Type == JTokenType.Object, "env should be an object");
             Assert.AreEqual(false, (bool)unity["disabled"], "disabled:false should be set for Kiro when missing");
-            AssertTransportConfiguration(unity, isVSCode: false);
+            AssertTransportConfiguration(unity, McpTypes.Kiro);
         }
 
         [Test]
@@ -119,7 +118,7 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity, "Expected mcpServers.unityMCP node");
             Assert.IsNull(unity["env"], "env should not be added for non-Windsurf/Kiro clients");
             Assert.IsNull(unity["disabled"], "disabled should not be added for non-Windsurf/Kiro clients");
-            AssertTransportConfiguration(unity, isVSCode: false);
+            AssertTransportConfiguration(unity, McpTypes.Cursor);
         }
 
         [Test]
@@ -136,7 +135,7 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity, "Expected servers.unityMCP node");
             Assert.IsNull(unity["env"], "env should not be added for VSCode client");
             Assert.IsNull(unity["disabled"], "disabled should not be added for VSCode client");
-            AssertTransportConfiguration(unity, isVSCode: true);
+            AssertTransportConfiguration(unity, McpTypes.VSCode);
         }
 
         [Test]
@@ -158,11 +157,11 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity, "Expected mcpServers.unityMCP node");
             Assert.IsNull(unity["env"], "env should not be added for Trae client");
             Assert.IsNull(unity["disabled"], "disabled should not be added for Trae client");
-            AssertTransportConfiguration(unity, isVSCode: false);
+            AssertTransportConfiguration(unity, traeValue);
         }
 
         [Test]
-        public void PreservesExistingEnvAndDisabled()
+        public void PreservesExistingEnvAndDisabled_ForKiro()
         {
             var configPath = Path.Combine(_tempRoot, "preserve.json");
 
@@ -182,7 +181,7 @@ namespace MCPForUnityTests.Editor.Helpers
             };
             File.WriteAllText(configPath, json.ToString());
 
-            var client = new McpClient { name = "Windsurf", mcpType = McpTypes.Windsurf };
+            var client = new McpClient { name = "Kiro", mcpType = McpTypes.Kiro };
             InvokeWriteToConfig(configPath, client);
 
             var root = JObject.Parse(File.ReadAllText(configPath));
@@ -190,7 +189,38 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity, "Expected mcpServers.unityMCP node");
             Assert.AreEqual("bar", (string)unity["env"]!["FOO"], "Existing env should be preserved");
             Assert.AreEqual(true, (bool)unity["disabled"], "Existing disabled value should be preserved");
-            AssertTransportConfiguration(unity, isVSCode: false);
+            AssertTransportConfiguration(unity, McpTypes.Kiro);
+        }
+
+        [Test]
+        public void RemovesEnvBlock_ForWindsurf()
+        {
+            var configPath = Path.Combine(_tempRoot, "windsurf-env.json");
+
+            var json = new JObject
+            {
+                ["mcpServers"] = new JObject
+                {
+                    ["unityMCP"] = new JObject
+                    {
+                        ["command"] = _fakeUvPath,
+                        ["args"] = new JArray("run", "--directory", "/old/path", "server.py"),
+                        ["env"] = new JObject { ["SHOULD"] = "be removed" },
+                        ["disabled"] = true
+                    }
+                }
+            };
+            File.WriteAllText(configPath, json.ToString());
+
+            var client = new McpClient { name = "Windsurf", mcpType = McpTypes.Windsurf };
+            InvokeWriteToConfig(configPath, client);
+
+            var root = JObject.Parse(File.ReadAllText(configPath));
+            var unity = (JObject)root.SelectToken("mcpServers.unityMCP");
+            Assert.NotNull(unity, "Expected mcpServers.unityMCP node");
+            Assert.IsNull(unity["env"], "Windsurf config should strip any existing env block");
+            Assert.AreEqual(true, (bool)unity["disabled"], "Existing disabled value should be preserved");
+            AssertTransportConfiguration(unity, McpTypes.Windsurf);
         }
 
         [Test]
@@ -207,7 +237,7 @@ namespace MCPForUnityTests.Editor.Helpers
                 var root = JObject.Parse(File.ReadAllText(configPath));
                 var unity = (JObject)root.SelectToken("mcpServers.unityMCP");
                 Assert.NotNull(unity, "Expected mcpServers.unityMCP node");
-                AssertTransportConfiguration(unity, isVSCode: false);
+                AssertTransportConfiguration(unity, McpTypes.Windsurf);
             });
         }
 
@@ -225,7 +255,7 @@ namespace MCPForUnityTests.Editor.Helpers
                 var root = JObject.Parse(File.ReadAllText(configPath));
                 var unity = (JObject)root.SelectToken("servers.unityMCP");
                 Assert.NotNull(unity, "Expected servers.unityMCP node");
-                AssertTransportConfiguration(unity, isVSCode: true);
+                AssertTransportConfiguration(unity, McpTypes.VSCode);
             });
         }
 
@@ -293,14 +323,27 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.AreEqual("Configured successfully", result, "WriteMcpConfiguration should return success");
         }
 
-        private static void AssertTransportConfiguration(JObject unity, bool isVSCode)
+        private static void AssertTransportConfiguration(JObject unity, McpTypes clientType)
         {
             bool useHttp = EditorPrefs.GetBool(UseHttpTransportPrefKey, true);
+            bool isVSCode = clientType == McpTypes.VSCode;
+            bool isWindsurf = clientType == McpTypes.Windsurf;
 
             if (useHttp)
             {
-                Assert.AreEqual(HttpEndpointUtility.GetMcpRpcUrl(), (string)unity["url"],
-                    "HTTP transport should set url to the MCP endpoint");
+                string expectedUrl = HttpEndpointUtility.GetMcpRpcUrl();
+                if (isWindsurf)
+                {
+                    Assert.AreEqual(expectedUrl, (string)unity["serverUrl"],
+                        "Windsurf should advertise HTTP using serverUrl");
+                    Assert.IsNull(unity["url"], "Windsurf configs should not use the url property");
+                }
+                else
+                {
+                    Assert.AreEqual(expectedUrl, (string)unity["url"],
+                        "HTTP transport should set url to the MCP endpoint");
+                    Assert.IsNull(unity["serverUrl"], "serverUrl should be reserved for Windsurf");
+                }
                 Assert.IsNull(unity["command"], "HTTP transport should remove command");
                 Assert.IsNull(unity["args"], "HTTP transport should remove args");
 
@@ -318,6 +361,7 @@ namespace MCPForUnityTests.Editor.Helpers
             else
             {
                 Assert.IsNull(unity["url"], "stdio transport should not include a url");
+                Assert.IsNull(unity["serverUrl"], "stdio transport should not include a serverUrl");
 
                 string command = (string)unity["command"];
                 Assert.False(string.IsNullOrEmpty(command), "stdio transport should include a command");
