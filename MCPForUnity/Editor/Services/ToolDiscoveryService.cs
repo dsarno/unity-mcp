@@ -89,7 +89,8 @@ namespace MCPForUnity.Editor.Services
                     StructuredOutput = toolAttr.StructuredOutput,
                     Parameters = parameters,
                     ClassName = type.Name,
-                    Namespace = type.Namespace ?? ""
+                    Namespace = type.Namespace ?? "",
+                    AutoRegister = toolAttr.AutoRegister
                 };
             }
             catch (Exception ex)

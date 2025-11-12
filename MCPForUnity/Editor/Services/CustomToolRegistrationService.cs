@@ -34,7 +34,14 @@ namespace MCPForUnity.Editor.Services
                     return true;
                 }
                 
-                var request = BuildRegisterRequest(projectId, tools);
+                var candidates = tools.Where(t => t.AutoRegister).ToList();
+                if (candidates.Count == 0)
+                {
+                    McpLog.Info("No tools marked for auto-registration, skipping");
+                    return true;
+                }
+
+                var request = BuildRegisterRequest(projectId, candidates);
                 string endpoint = HttpEndpointUtility.GetRegisterToolsUrl();
                 var response = await SendRegistrationAsync(endpoint, request);
                 

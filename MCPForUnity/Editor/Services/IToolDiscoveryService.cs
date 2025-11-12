@@ -13,6 +13,7 @@ namespace MCPForUnity.Editor.Services
         public List<ParameterMetadata> Parameters { get; set; }
         public string ClassName { get; set; }
         public string Namespace { get; set; }
+        public bool AutoRegister { get; set; } = true;
     }
     
     /// <summary>

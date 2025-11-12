@@ -136,7 +136,8 @@ namespace MCPForUnity.Editor.Helpers
                 var info = $"Discovered {tools.Count} custom tools:\n";
                 foreach (var tool in tools)
                 {
-                    info += $"  - {tool.Name}: {tool.Description}\n";
+                    string status = tool.AutoRegister ? "enabled" : "disabled";
+                    info += $"  - {tool.Name} ({status}): {tool.Description}\n";
                 }
                 
                 return info;
