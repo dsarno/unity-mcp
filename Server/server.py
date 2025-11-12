@@ -5,13 +5,14 @@ from logging.handlers import RotatingFileHandler
 import os
 import argparse
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Dict, Any, List
+from typing import AsyncIterator, Dict, Any
 from config import config
 from tools import register_all_tools
 from resources import register_all_resources
 from unity_connection import get_unity_connection_pool, UnityConnectionPool
 from unity_instance_middleware import UnityInstanceMiddleware, set_unity_instance_middleware
 import time
+from custom_tool_service import CustomToolService
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -68,8 +69,8 @@ except Exception:
 # Global connection pool
 _unity_connection_pool: UnityConnectionPool = None
 
-# In-memory registry of custom tools (keyed by project_id:name)
-_registered_tools: Dict[str, Dict[str, Any]] = {}
+# In-memory custom tool service initialized after MCP construction
+custom_tool_service: CustomToolService | None = None
 
 
 @asynccontextmanager
@@ -228,71 +229,33 @@ Menu Items:
 """
 )
 
+custom_tool_service = CustomToolService(mcp)
 
-def _register_custom_tool(project_id: str, tool: Dict[str, Any]) -> None:
-    name = tool.get("name")
-    if not name:
-        return
-    key = f"{project_id}:{name}"
-    _registered_tools[key] = {
-        "project_id": project_id,
-        "name": name,
-        "description": tool.get("description"),
-        "structured_output": tool.get("structured_output", True),
-        "parameters": tool.get("parameters", []),
+
+@mcp.tool()
+async def get_registered_custom_tools() -> Dict[str, Any]:
+    return custom_tool_service.list_registered_tools()
+
+
+@mcp.tool()
+async def unregister_project_custom_tools(project_id: str) -> Dict[str, Any]:
+    removed = custom_tool_service.unregister_project(project_id)
+    return {
+        "success": True,
+        "unregistered": removed,
+        "message": f"Unregistered {len(removed)} tool(s) from project {project_id}"
     }
 
 
-def _unregister_project(project_id: str) -> List[str]:
-    removed = []
-    keys = [k for k in _registered_tools if k.startswith(f"{project_id}:")]
-    for key in keys:
-        removed.append(_registered_tools.pop(key)["name"])
-    return removed
+@mcp.tool()
+async def custom_tool_registry_health() -> Dict[str, Any]:
+    import time
 
-
-def _list_registered_tools() -> Dict[str, Any]:
-    tools = list(_registered_tools.values())
-    return {"success": True, "tools": tools, "count": len(tools)}
-
-
-@mcp.custom_route("/register-tools", methods=["POST"])
-async def register_tools_http(request: Request) -> JSONResponse:
-    try:
-        payload = await request.json()
-    except Exception as exc:
-        return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
-
-    project_id = payload.get("project_id")
-    tools = payload.get("tools", [])
-    if not project_id or not isinstance(tools, list):
-        return JSONResponse({"success": False, "error": "project_id and tools are required"}, status_code=400)
-
-    for tool in tools:
-        if isinstance(tool, dict):
-            _register_custom_tool(project_id, tool)
-
-    return JSONResponse({
-        "success": True,
-        "registered": [t.get("name") for t in tools if isinstance(t, dict)],
-        "message": f"Registered {len(tools)} tools"
-    })
-
-
-@mcp.custom_route("/tools", methods=["GET"])
-async def list_tools_http(_: Request) -> JSONResponse:
-    return JSONResponse(_list_registered_tools())
-
-
-@mcp.custom_route("/tools/{project_id}", methods=["DELETE"])
-async def unregister_project_http(request: Request) -> JSONResponse:
-    project_id = request.path_params.get("project_id", "")
-    removed = _unregister_project(project_id)
-    return JSONResponse({
-        "success": True,
-        "unregistered": removed,
-        "message": f"Unregistered {len(removed)} tools from project {project_id}"
-    })
+    return {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "message": "Custom tool registry is operational"
+    }
 
 
 @mcp.custom_route("/health", methods=["GET"])
@@ -302,9 +265,8 @@ async def health_http(_: Request) -> JSONResponse:
     return JSONResponse({
         "status": "healthy",
         "timestamp": time.time(),
-        "message": "Custom tool registry is operational"
+        "message": "MCP for Unity server is running"
     })
-
 # Initialize and register middleware for session-based Unity instance routing
 unity_middleware = UnityInstanceMiddleware()
 set_unity_instance_middleware(unity_middleware)
