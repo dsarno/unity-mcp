@@ -11,6 +11,7 @@ using MCPForUnity.Editor.Data;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Services;
+using MCPForUnity.Editor.Constants;
 
 namespace MCPForUnity.Editor.Windows
 {
@@ -234,10 +235,10 @@ namespace MCPForUnity.Editor.Windows
         {
             // Settings Section
             UpdateVersionLabel();
-            debugLogsToggle.value = EditorPrefs.GetBool("MCPForUnity.DebugLogs", false);
+            debugLogsToggle.value = EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false);
 
             validationLevelField.Init(ValidationLevel.Standard);
-            int savedLevel = EditorPrefs.GetInt("MCPForUnity.ValidationLevel", 1);
+            int savedLevel = EditorPrefs.GetInt(EditorPrefKeys.ValidationLevel, 1);
             currentValidationLevel = (ValidationLevel)Mathf.Clamp(savedLevel, 0, 3);
             validationLevelField.value = currentValidationLevel;
             UpdateValidationDescription();
@@ -246,18 +247,18 @@ namespace MCPForUnity.Editor.Windows
             advancedSettingsFoldout.value = false;
             
             // Load Git URL override
-            gitUrlOverride.value = EditorPrefs.GetString("MCPForUnity.GitUrlOverride", "");
+            gitUrlOverride.value = EditorPrefs.GetString(EditorPrefKeys.GitUrlOverride, "");
 
             // Connection Section
             transportDropdown.Init(TransportProtocol.HTTP);
-            bool useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
+            bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
             transportDropdown.value = useHttpTransport ? TransportProtocol.HTTP : TransportProtocol.Stdio;
             
             // HTTP configuration
             httpUrlField.value = HttpEndpointUtility.GetBaseUrl();
             
             // Unity socket port (editable)
-            int unityPort = EditorPrefs.GetInt("MCPForUnity.UnitySocketPort", 0);
+            int unityPort = EditorPrefs.GetInt(EditorPrefKeys.UnitySocketPort, 0);
             if (unityPort == 0)
             {
                 unityPort = MCPServiceLocator.Bridge.CurrentPort;
@@ -287,13 +288,13 @@ namespace MCPForUnity.Editor.Windows
             // Settings callbacks
             debugLogsToggle.RegisterValueChangedCallback(evt =>
             {
-                EditorPrefs.SetBool("MCPForUnity.DebugLogs", evt.newValue);
+                EditorPrefs.SetBool(EditorPrefKeys.DebugLogs, evt.newValue);
             });
 
             validationLevelField.RegisterValueChangedCallback(evt =>
             {
                 currentValidationLevel = (ValidationLevel)evt.newValue;
-                EditorPrefs.SetInt("MCPForUnity.ValidationLevel", (int)currentValidationLevel);
+                EditorPrefs.SetInt(EditorPrefKeys.ValidationLevel, (int)currentValidationLevel);
                 UpdateValidationDescription();
             });
             
@@ -301,7 +302,7 @@ namespace MCPForUnity.Editor.Windows
             transportDropdown.RegisterValueChangedCallback(evt =>
             {
                 bool useHttp = (TransportProtocol)evt.newValue == TransportProtocol.HTTP;
-                EditorPrefs.SetBool("MCPForUnity.UseHttpTransport", useHttp);
+                EditorPrefs.SetBool(EditorPrefKeys.UseHttpTransport, useHttp);
                 UpdateHttpFieldVisibility();
                 UpdateManualConfiguration(); // Refresh config display
                 McpLog.Info($"Transport changed to: {evt.newValue}");
@@ -318,7 +319,7 @@ namespace MCPForUnity.Editor.Windows
             {
                 if (int.TryParse(evt.newValue, out int port))
                 {
-                    EditorPrefs.SetInt("MCPForUnity.UnitySocketPort", port);
+                    EditorPrefs.SetInt(EditorPrefKeys.UnitySocketPort, port);
                 }
             });
 
@@ -332,11 +333,11 @@ namespace MCPForUnity.Editor.Windows
                 string url = evt.newValue?.Trim();
                 if (string.IsNullOrEmpty(url))
                 {
-                    EditorPrefs.DeleteKey("MCPForUnity.GitUrlOverride");
+                    EditorPrefs.DeleteKey(EditorPrefKeys.GitUrlOverride);
                 }
                 else
                 {
-                    EditorPrefs.SetString("MCPForUnity.GitUrlOverride", url);
+                    EditorPrefs.SetString(EditorPrefKeys.GitUrlOverride, url);
                 }
                 UpdateManualConfiguration(); // Refresh config display
             });
@@ -344,7 +345,7 @@ namespace MCPForUnity.Editor.Windows
             clearGitUrlButton.clicked += () =>
             {
                 gitUrlOverride.value = string.Empty;
-                EditorPrefs.DeleteKey("MCPForUnity.GitUrlOverride");
+                EditorPrefs.DeleteKey(EditorPrefKeys.GitUrlOverride);
                 UpdateManualConfiguration();
             };
 
@@ -413,7 +414,7 @@ namespace MCPForUnity.Editor.Windows
             }
 
             // Update ports
-            int savedPort = EditorPrefs.GetInt("MCPForUnity.UnitySocketPort", 0);
+            int savedPort = EditorPrefs.GetInt(EditorPrefKeys.UnitySocketPort, 0);
             if (savedPort == 0)
             {
                 unityPortField.value = bridgeService.CurrentPort.ToString();
@@ -559,7 +560,7 @@ namespace MCPForUnity.Editor.Windows
             }
 
             // Git URL Override - refresh from EditorPrefs
-            gitUrlOverride.value = EditorPrefs.GetString("MCPForUnity.GitUrlOverride", "");
+            gitUrlOverride.value = EditorPrefs.GetString(EditorPrefKeys.GitUrlOverride, "");
         }
 
         // Button callbacks

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
+using MCPForUnity.Editor.Constants;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -11,8 +12,8 @@ namespace MCPForUnity.Editor.Helpers
     /// </summary>
     public static class TelemetryHelper
     {
-        private const string TELEMETRY_DISABLED_KEY = "MCPForUnity.TelemetryDisabled";
-        private const string CUSTOMER_UUID_KEY = "MCPForUnity.CustomerUUID";
+        private const string TELEMETRY_DISABLED_KEY = EditorPrefKeys.TelemetryDisabled;
+        private const string CUSTOMER_UUID_KEY = EditorPrefKeys.CustomerUuid;
         private static Action<Dictionary<string, object>> s_sender;
 
         /// <summary>
@@ -213,7 +214,7 @@ namespace MCPForUnity.Editor.Helpers
         {
             try
             {
-                return UnityEditor.EditorPrefs.GetBool("MCPForUnity.DebugLogs", false);
+                return UnityEditor.EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false);
             }
             catch
             {

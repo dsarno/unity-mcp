@@ -7,6 +7,7 @@ using MCPForUnity.Editor.Services;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
+using MCPForUnity.Editor.Constants;
 
 namespace MCPForUnity.Editor.Migrations
 {
@@ -16,7 +17,7 @@ namespace MCPForUnity.Editor.Migrations
     [InitializeOnLoad]
     internal static class StdIoVersionMigration
     {
-        private const string LastUpgradeKey = "MCPForUnity.LastStdIoUpgradeVersion";
+        private const string LastUpgradeKey = EditorPrefKeys.LastStdIoUpgradeVersion;
 
         static StdIoVersionMigration()
         {

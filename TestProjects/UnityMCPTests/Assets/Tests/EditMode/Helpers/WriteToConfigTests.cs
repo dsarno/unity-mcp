@@ -7,13 +7,14 @@ using NUnit.Framework;
 using UnityEditor;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
+using MCPForUnity.Editor.Constants;
 
 namespace MCPForUnityTests.Editor.Helpers
 {
     public class WriteToConfigTests
     {
-        private const string UseHttpTransportPrefKey = "MCPForUnity.UseHttpTransport";
-        private const string HttpUrlPrefKey = "MCPForUnity.HttpUrl";
+        private const string UseHttpTransportPrefKey = EditorPrefKeys.UseHttpTransport;
+        private const string HttpUrlPrefKey = EditorPrefKeys.HttpBaseUrl;
 
         private string _tempRoot;
         private string _fakeUvPath;
@@ -43,11 +44,11 @@ namespace MCPForUnityTests.Editor.Helpers
             File.WriteAllText(Path.Combine(_serverSrcDir, "server.py"), "# dummy server\n");
 
             // Point the editor to our server dir (so ResolveServerSrc() uses this)
-            EditorPrefs.SetString("MCPForUnity.ServerSrc", _serverSrcDir);
+            EditorPrefs.SetString(EditorPrefKeys.ServerSrc, _serverSrcDir);
             // Ensure no lock is enabled
-            EditorPrefs.SetBool("MCPForUnity.LockCursorConfig", false);
+            EditorPrefs.SetBool(EditorPrefKeys.LockCursorConfig, false);
             // Disable auto-registration to avoid hitting user configs during tests
-            EditorPrefs.SetBool("MCPForUnity.AutoRegisterEnabled", false);
+            EditorPrefs.SetBool(EditorPrefKeys.AutoRegisterEnabled, false);
             // Force HTTP transport defaults so expectations match current behavior
             EditorPrefs.SetBool(UseHttpTransportPrefKey, true);
             EditorPrefs.SetString(HttpUrlPrefKey, "http://localhost:8080");
@@ -57,9 +58,9 @@ namespace MCPForUnityTests.Editor.Helpers
         public void TearDown()
         {
             // Clean up editor preferences set during SetUp
-            EditorPrefs.DeleteKey("MCPForUnity.ServerSrc");
-            EditorPrefs.DeleteKey("MCPForUnity.LockCursorConfig");
-            EditorPrefs.DeleteKey("MCPForUnity.AutoRegisterEnabled");
+            EditorPrefs.DeleteKey(EditorPrefKeys.ServerSrc);
+            EditorPrefs.DeleteKey(EditorPrefKeys.LockCursorConfig);
+            EditorPrefs.DeleteKey(EditorPrefKeys.AutoRegisterEnabled);
             EditorPrefs.DeleteKey(UseHttpTransportPrefKey);
             EditorPrefs.DeleteKey(HttpUrlPrefKey);
 

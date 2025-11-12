@@ -1,6 +1,7 @@
 using System;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Services;
+using MCPForUnity.Editor.Constants;
 using UnityEditor;
 using UnityEngine;
 
@@ -12,8 +13,8 @@ namespace MCPForUnity.Editor.Migrations
     [InitializeOnLoad]
     internal static class LegacyServerSrcMigration
     {
-        private const string ServerSrcKey = "MCPForUnity.ServerSrc";
-        private const string UseEmbeddedKey = "MCPForUnity.UseEmbeddedServer";
+        private const string ServerSrcKey = EditorPrefKeys.ServerSrc;
+        private const string UseEmbeddedKey = EditorPrefKeys.UseEmbeddedServer;
 
         static LegacyServerSrcMigration()
         {

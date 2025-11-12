@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using MCPForUnity.Editor.Constants;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -11,7 +12,7 @@ namespace MCPForUnity.Editor.Helpers
 
         private static bool IsDebugEnabled()
         {
-            try { return EditorPrefs.GetBool("MCPForUnity.DebugLogs", false); } catch { return false; }
+            try { return EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false); } catch { return false; }
         }
 
         public static void Info(string message, bool always = true)

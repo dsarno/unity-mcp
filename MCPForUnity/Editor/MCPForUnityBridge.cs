@@ -11,6 +11,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
+using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Tools;
@@ -71,7 +72,7 @@ namespace MCPForUnity.Editor
         // Debug helpers
         private static bool IsDebugEnabled()
         {
-            try { return EditorPrefs.GetBool("MCPForUnity.DebugLogs", false); } catch { return false; }
+            try { return EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false); } catch { return false; }
         }
 
         private static void LogBreadcrumb(string stage)

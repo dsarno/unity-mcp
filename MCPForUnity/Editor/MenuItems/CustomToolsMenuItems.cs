@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEngine;
 using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Constants;
 
 namespace MCPForUnity.Editor.MenuItems
 {
@@ -35,7 +36,7 @@ namespace MCPForUnity.Editor.MenuItems
         public static void EnableRegistration()
         {
             CustomToolRegistrationProcessor.IsRegistrationEnabled = true;
-            EditorPrefs.SetBool("MCPForUnity.CustomToolRegistrationEnabled", true);
+            EditorPrefs.SetBool(EditorPrefKeys.CustomToolRegistrationEnabled, true);
             Debug.Log("MCP Custom Tool Registration enabled");
         }
         
@@ -43,7 +44,7 @@ namespace MCPForUnity.Editor.MenuItems
         public static void DisableRegistration()
         {
             CustomToolRegistrationProcessor.IsRegistrationEnabled = false;
-            EditorPrefs.SetBool("MCPForUnity.CustomToolRegistrationEnabled", false);
+            EditorPrefs.SetBool(EditorPrefKeys.CustomToolRegistrationEnabled, false);
             Debug.Log("MCP Custom Tool Registration disabled");
         }
         

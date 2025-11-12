@@ -3,6 +3,7 @@ using System.IO;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
+using MCPForUnity.Editor.Constants;
 using PackageInfo = UnityEditor.PackageManager.PackageInfo;
 using MCPForUnity.Editor.Services;
 
@@ -159,7 +160,7 @@ namespace MCPForUnity.Editor.Helpers
         public static string GetMcpServerGitUrl()
         {
             // Check for Git URL override first
-            string gitUrlOverride = EditorPrefs.GetString("MCPForUnity.GitUrlOverride", "");
+            string gitUrlOverride = EditorPrefs.GetString(EditorPrefKeys.GitUrlOverride, "");
             if (!string.IsNullOrEmpty(gitUrlOverride))
             {
                 return gitUrlOverride;

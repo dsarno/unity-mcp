@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using UnityEditor;
+using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
 
 namespace MCPForUnity.Editor.Services
@@ -33,7 +34,7 @@ namespace MCPForUnity.Editor.Services
         public void Start()
         {
             // Check transport mode from EditorPrefs
-            _useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
+            _useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
 
             if (_useHttpTransport)
             {

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using MCPForUnity.Editor.Data;
 using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Models;
 using Newtonsoft.Json;
 using UnityEditor;
@@ -176,7 +177,7 @@ namespace MCPForUnity.Editor.Services
 
                             if (rewriteResult == "Configured successfully")
                             {
-                                bool debugLogsEnabled = EditorPrefs.GetBool("MCPForUnity.DebugLogs", false);
+                                bool debugLogsEnabled = EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false);
                                 if (debugLogsEnabled)
                                 {
                                     McpLog.Info($"Auto-updated MCP config for '{client.name}' to new version: {expectedUvxUrl}", always: false);

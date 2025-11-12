@@ -1,5 +1,6 @@
 using System;
 using UnityEditor;
+using MCPForUnity.Editor.Constants;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -10,7 +11,7 @@ namespace MCPForUnity.Editor.Helpers
     /// </summary>
     public static class HttpEndpointUtility
     {
-        private const string PrefKey = "MCPForUnity.HttpUrl";
+        private const string PrefKey = EditorPrefKeys.HttpBaseUrl;
         private const string DefaultBaseUrl = "http://localhost:8080";
 
         /// <summary>

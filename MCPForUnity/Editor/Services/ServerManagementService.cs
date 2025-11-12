@@ -1,6 +1,7 @@
 using System;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Data;
+using MCPForUnity.Editor.Constants;
 using UnityEditor;
 using UnityEngine;
 
@@ -17,7 +18,7 @@ namespace MCPForUnity.Editor.Services
         public bool StartLocalHttpServer()
         {
             // Check if HTTP transport is enabled
-            bool useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
+            bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
             if (!useHttpTransport)
             {
                 EditorUtility.DisplayDialog(
@@ -133,7 +134,7 @@ namespace MCPForUnity.Editor.Services
         /// </summary>
         public bool CanStartLocalServer()
         {
-            bool useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
+            bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
             return useHttpTransport && IsLocalUrl();
         }
         

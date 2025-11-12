@@ -11,6 +11,7 @@ using MCPForUnity.Editor.Dependencies;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Services;
+using MCPForUnity.Editor.Constants;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -20,7 +21,7 @@ namespace MCPForUnity.Editor.Helpers
     /// </summary>
     public static class McpConfigurationHelper
     {
-        private const string LOCK_CONFIG_KEY = "MCPForUnity.LockCursorConfig";
+        private const string LOCK_CONFIG_KEY = EditorPrefKeys.LockCursorConfig;
 
         /// <summary>
         /// Writes MCP configuration to the specified path using sophisticated logic

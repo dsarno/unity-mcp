@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEngine;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Services;
+using MCPForUnity.Editor.Constants;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -16,7 +17,7 @@ namespace MCPForUnity.Editor.Helpers
         static CustomToolRegistrationProcessor()
         {
             // Load saved preference
-            _isRegistrationEnabled = EditorPrefs.GetBool("MCPForUnity.CustomToolRegistrationEnabled", true);
+            _isRegistrationEnabled = EditorPrefs.GetBool(EditorPrefKeys.CustomToolRegistrationEnabled, true);
         }
         
         /// <summary>
@@ -28,7 +29,7 @@ namespace MCPForUnity.Editor.Helpers
             set 
             {
                 _isRegistrationEnabled = value;
-                EditorPrefs.SetBool("MCPForUnity.CustomToolRegistrationEnabled", value);
+                EditorPrefs.SetBool(EditorPrefKeys.CustomToolRegistrationEnabled, value);
             }
         }
         

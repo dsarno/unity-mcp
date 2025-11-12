@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
+using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
 using System.Threading;
 using System.Security.Cryptography;
@@ -1933,7 +1934,7 @@ namespace MCPForUnity.Editor.Tools
         /// </summary>
         private static ValidationLevel GetValidationLevelFromGUI()
         {
-            int savedLevel = EditorPrefs.GetInt("MCPForUnity.ValidationLevel", (int)ValidationLevel.Standard);
+            int savedLevel = EditorPrefs.GetInt(EditorPrefKeys.ValidationLevel, (int)ValidationLevel.Standard);
             return (ValidationLevel)Mathf.Clamp(savedLevel, 0, 3);
         }
 

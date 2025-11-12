@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Constants;
 using UnityEditor;
 
 namespace MCPForUnity.Editor.Helpers
@@ -53,7 +54,7 @@ namespace MCPForUnity.Editor.Helpers
         private static void PopulateUnityNode(JObject unity, string uvPath, McpClient client, bool isVSCode)
         {
             // Get transport preference (default to HTTP)
-            bool useHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", true);
+            bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
             bool isWindsurf = client?.mcpType == McpTypes.Windsurf;
             
             if (useHttpTransport)
