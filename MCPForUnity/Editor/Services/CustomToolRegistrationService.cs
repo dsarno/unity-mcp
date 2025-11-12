@@ -18,11 +18,15 @@ namespace MCPForUnity.Editor.Services
             _discoveryService = discoveryService ?? new ToolDiscoveryService();
         }
         
-        public async Task<bool> RegisterAllToolsAsync()
+        public async Task<bool> RegisterAllToolsAsync(string projectId = null)
         {
             try
             {
-                string projectId = GetProjectId();
+                // If projectId not provided, capture it on main thread
+                if (string.IsNullOrEmpty(projectId))
+                {
+                    projectId = GetProjectId();
+                }
                 
                 // Discover tools via reflection
                 var tools = _discoveryService.DiscoverAllTools();
@@ -76,7 +80,35 @@ namespace MCPForUnity.Editor.Services
         
         public bool RegisterAllTools()
         {
-            return RegisterAllToolsAsync().GetAwaiter().GetResult();
+            // Capture Unity API values on main thread before going async
+            string projectId = GetProjectId();
+            
+            // Use async void pattern to avoid deadlock (similar to startup registration)
+            bool success = false;
+            System.Exception error = null;
+            
+            var task = Task.Run(async () =>
+            {
+                try
+                {
+                    return await RegisterAllToolsAsync(projectId);
+                }
+                catch (System.Exception ex)
+                {
+                    error = ex;
+                    return false;
+                }
+            });
+            
+            // Wait for completion
+            task.Wait();
+            
+            if (error != null)
+            {
+                throw error;
+            }
+            
+            return task.Result;
         }
         
         private string GetProjectId()

@@ -12,7 +12,7 @@ namespace MCPForUnity.Editor.MenuItems
         [MenuItem("Window/MCP For Unity/Custom Tools/Register All Tools")]
         public static void RegisterAllTools()
         {
-            CustomToolRegistrationProcessor.RegisterAllToolsSync();
+            CustomToolRegistrationProcessor.RegisterAllTools();
         }
         
         [MenuItem("Window/MCP For Unity/Custom Tools/Force Re-registration")]

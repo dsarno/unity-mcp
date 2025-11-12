@@ -10,7 +10,8 @@ namespace MCPForUnity.Editor.Services
         /// <summary>
         /// Registers all discovered tools with the MCP server
         /// </summary>
-        Task<bool> RegisterAllToolsAsync();
+        /// <param name="projectId">Optional pre-captured project ID (for thread safety)</param>
+        Task<bool> RegisterAllToolsAsync(string projectId = null);
         
         /// <summary>
         /// Registers all discovered tools with the MCP server (synchronous)
