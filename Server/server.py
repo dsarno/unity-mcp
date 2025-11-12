@@ -232,32 +232,6 @@ Menu Items:
 custom_tool_service = CustomToolService(mcp)
 
 
-@mcp.tool()
-async def get_registered_custom_tools() -> Dict[str, Any]:
-    return custom_tool_service.list_registered_tools()
-
-
-@mcp.tool()
-async def unregister_project_custom_tools(project_id: str) -> Dict[str, Any]:
-    removed = custom_tool_service.unregister_project(project_id)
-    return {
-        "success": True,
-        "unregistered": removed,
-        "message": f"Unregistered {len(removed)} tool(s) from project {project_id}"
-    }
-
-
-@mcp.tool()
-async def custom_tool_registry_health() -> Dict[str, Any]:
-    import time
-
-    return {
-        "status": "healthy",
-        "timestamp": time.time(),
-        "message": "Custom tool registry is operational"
-    }
-
-
 @mcp.custom_route("/health", methods=["GET"])
 async def health_http(_: Request) -> JSONResponse:
     import time
@@ -267,6 +241,8 @@ async def health_http(_: Request) -> JSONResponse:
         "timestamp": time.time(),
         "message": "MCP for Unity server is running"
     })
+
+
 # Initialize and register middleware for session-based Unity instance routing
 unity_middleware = UnityInstanceMiddleware()
 set_unity_instance_middleware(unity_middleware)
