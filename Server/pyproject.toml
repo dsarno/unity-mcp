@@ -30,8 +30,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 py-modules = [
     "config",
-    "custom_tools_manager",
-    "fastmcp_tool_registry",
     "models",
     "module_discovery",
     "port_discovery",
