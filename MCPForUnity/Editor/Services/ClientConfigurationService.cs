@@ -50,14 +50,8 @@ namespace MCPForUnity.Editor.Services
             {
                 try
                 {
-                    // Skip if already configured
+                    // Always re-run configuration so core fields stay current
                     CheckClientStatus(client, attemptAutoRewrite: false);
-                    if (client.status == McpStatus.Configured)
-                    {
-                        summary.SkippedCount++;
-                        summary.Messages.Add($"✓ {client.name}: Already configured");
-                        continue;
-                    }
 
                     // Check if required tools are available
                     if (client.mcpType == McpTypes.ClaudeCode)
@@ -69,9 +63,11 @@ namespace MCPForUnity.Editor.Services
                             continue;
                         }
 
+                        // Force a fresh registration so transport settings stay current
+                        UnregisterClaudeCode();
                         RegisterClaudeCode();
                         summary.SuccessCount++;
-                        summary.Messages.Add($"✓ {client.name}: Registered successfully");
+                        summary.Messages.Add($"✓ {client.name}: Re-registered successfully");
                     }
                     else
                     {
