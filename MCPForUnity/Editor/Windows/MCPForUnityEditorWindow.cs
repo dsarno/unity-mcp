@@ -33,6 +33,7 @@ namespace MCPForUnity.Editor.Windows
         private TextField uvxPathOverride;
         private Button browseUvxButton;
         private Button clearUvxButton;
+        private Button clearUvxCacheButton;
         private VisualElement uvxPathStatus;
         private TextField gitUrlOverride;
         private Button clearGitUrlButton;
@@ -40,7 +41,9 @@ namespace MCPForUnity.Editor.Windows
         // Connection UI Elements
         private EnumField transportDropdown;
         private VisualElement httpUrlRow;
+        private VisualElement startHttpRow;
         private TextField httpUrlField;
+        private Button startHttpServerButton;
         private VisualElement unitySocketPortRow;
         private TextField unityPortField;
         private VisualElement statusIndicator;
@@ -183,6 +186,8 @@ namespace MCPForUnity.Editor.Windows
                 UpdateManualConfiguration();
                 UpdateClaudeCliPathVisibility();
             }
+
+            UpdateStartHttpButtonState();
         }
 
         private void CacheUIElements()
@@ -199,11 +204,14 @@ namespace MCPForUnity.Editor.Windows
             uvxPathStatus = rootVisualElement.Q<VisualElement>("uv-path-status");
             gitUrlOverride = rootVisualElement.Q<TextField>("git-url-override");
             clearGitUrlButton = rootVisualElement.Q<Button>("clear-git-url-button");
+            clearUvxCacheButton = rootVisualElement.Q<Button>("clear-uvx-cache-button");
 
             // Connection
             transportDropdown = rootVisualElement.Q<EnumField>("transport-dropdown");
             httpUrlRow = rootVisualElement.Q<VisualElement>("http-url-row");
+            startHttpRow = rootVisualElement.Q<VisualElement>("start-http-row");
             httpUrlField = rootVisualElement.Q<TextField>("http-url");
+            startHttpServerButton = rootVisualElement.Q<Button>("start-http-server-button");
             unitySocketPortRow = rootVisualElement.Q<VisualElement>("unity-socket-port-row");
             unityPortField = rootVisualElement.Q<TextField>("unity-port");
             statusIndicator = rootVisualElement.Q<VisualElement>("status-indicator");
@@ -267,6 +275,7 @@ namespace MCPForUnity.Editor.Windows
             
             // Update HTTP field visibility
             UpdateHttpFieldVisibility();
+            UpdateStartHttpButtonState();
 
             // Client Configuration
             var clientNames = mcpClients.clients.Select(c => c.name).ToList();
@@ -427,9 +436,35 @@ namespace MCPForUnity.Editor.Windows
             
             // Show HTTP URL only in HTTP mode
             httpUrlRow.style.display = useHttp ? DisplayStyle.Flex : DisplayStyle.None;
+            if (startHttpRow != null)
+            {
+                startHttpRow.style.display = useHttp ? DisplayStyle.Flex : DisplayStyle.None;
+            }
             
             // Show Unity Socket Port only in stdio mode (HTTP uses the same URL/port as MCP client)
             unitySocketPortRow.style.display = useHttp ? DisplayStyle.None : DisplayStyle.Flex;
+
+            UpdateStartHttpButtonState();
+        }
+
+        private void UpdateStartHttpButtonState()
+        {
+            if (startHttpServerButton == null)
+                return;
+
+            bool useHttp = transportDropdown != null && (TransportProtocol)transportDropdown.value == TransportProtocol.HTTP;
+            if (!useHttp)
+            {
+                startHttpServerButton.SetEnabled(false);
+                startHttpServerButton.tooltip = string.Empty;
+                return;
+            }
+
+            bool canStart = MCPServiceLocator.Server.CanStartLocalServer();
+            startHttpServerButton.SetEnabled(canStart);
+            startHttpServerButton.tooltip = canStart
+                ? string.Empty
+                : "Start Local HTTP Server is available only for localhost URLs.";
         }
 
         private void UpdateClientStatus()
@@ -727,6 +762,30 @@ namespace MCPForUnity.Editor.Windows
             MCPServiceLocator.Paths.ClearUvxPathOverride();
             UpdatePathOverrides();
             McpLog.Info("UV path override cleared");
+        }
+
+        private void OnClearUvxCacheClicked()
+        {
+            if (EditorUtility.DisplayDialog("Clear UVX Cache",
+                "This will clear the local uvx cache for the MCP server package. The server will be re-downloaded on next launch.\n\nContinue?",
+                "Clear Cache",
+                "Cancel"))
+            {
+                bool success = MCPServiceLocator.Cache.ClearUvxCache();
+
+                if (success)
+                {
+                    EditorUtility.DisplayDialog("Success",
+                        "UVX cache cleared successfully. The server will be re-downloaded on next launch.",
+                        "OK");
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog("Error",
+                        "Failed to clear UVX cache. Check the console for details.",
+                        "OK");
+                }
+            }
         }
 
         private void OnBrowseClaudeClicked()
