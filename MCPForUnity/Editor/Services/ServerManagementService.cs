@@ -28,7 +28,7 @@ namespace MCPForUnity.Editor.Services
             }
             
             // Get the HTTP URL
-            string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
+            string httpUrl = HttpEndpointUtility.GetBaseUrl();
             
             // Check if it's a local URL
             if (!IsLocalUrl())
@@ -105,7 +105,7 @@ namespace MCPForUnity.Editor.Services
         /// </summary>
         public bool IsLocalUrl()
         {
-            string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
+            string httpUrl = HttpEndpointUtility.GetBaseUrl();
             return IsLocalUrl(httpUrl);
         }
         

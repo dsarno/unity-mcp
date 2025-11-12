@@ -13,8 +13,6 @@ namespace MCPForUnity.Editor.Services
 {
     public class CustomToolRegistrationService : ICustomToolRegistrationService
     {
-        private const string DefaultServerUrl = "http://localhost:8080";
-        private const string RegisterEndpointPath = "/register-tools";
         private static readonly HttpClient HttpClient = new HttpClient();
         private readonly IToolDiscoveryService _discoveryService;
         
@@ -37,7 +35,7 @@ namespace MCPForUnity.Editor.Services
                 }
                 
                 var request = BuildRegisterRequest(projectId, tools);
-                string endpoint = GetRegisterEndpoint();
+                string endpoint = HttpEndpointUtility.GetRegisterToolsUrl();
                 var response = await SendRegistrationAsync(endpoint, request);
                 
                 if (response.success)
@@ -113,17 +111,6 @@ namespace MCPForUnity.Editor.Services
                 McpLog.Error($"Tool registration HTTP request failed: {ex.Message}");
                 return new RegisterToolsResponse { success = false, error = ex.Message };
             }
-        }
-        
-        private string GetRegisterEndpoint()
-        {
-            string baseUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", DefaultServerUrl);
-            if (string.IsNullOrWhiteSpace(baseUrl))
-            {
-                baseUrl = DefaultServerUrl;
-            }
-            
-            return $"{baseUrl.TrimEnd('/')}{RegisterEndpointPath}";
         }
         
         private string GetProjectId()

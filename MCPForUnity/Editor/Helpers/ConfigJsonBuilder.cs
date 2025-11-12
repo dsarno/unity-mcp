@@ -58,7 +58,7 @@ namespace MCPForUnity.Editor.Helpers
             if (useHttpTransport)
             {
                 // HTTP mode: Use URL, no command
-                string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
+                string httpUrl = HttpEndpointUtility.GetMcpRpcUrl();
                 unity["url"] = httpUrl;
                 
                 // Remove command/args if they exist from previous config

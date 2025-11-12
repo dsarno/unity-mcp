@@ -49,14 +49,14 @@ namespace MCPForUnity.Editor.Services
         {
             try
             {
-                string httpUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
-                McpLog.Info($"Starting HTTP MCP session to {httpUrl}");
+                string rpcUrl = HttpEndpointUtility.GetMcpRpcUrl();
+                McpLog.Info($"Starting HTTP MCP session to {rpcUrl}");
 
                 // Dispose existing client if any
                 _httpClient?.Dispose();
 
                 // Create new HTTP client
-                _httpClient = new HttpMcpClient(httpUrl);
+                _httpClient = new HttpMcpClient(rpcUrl);
 
                 // Initialize MCP session asynchronously
                 System.Threading.Tasks.Task.Run(async () =>

@@ -254,7 +254,7 @@ namespace MCPForUnity.Editor.Windows
             transportDropdown.value = useHttpTransport ? TransportProtocol.HTTP : TransportProtocol.Stdio;
             
             // HTTP configuration
-            httpUrlField.value = EditorPrefs.GetString("MCPForUnity.HttpUrl", "http://localhost:8080");
+            httpUrlField.value = HttpEndpointUtility.GetBaseUrl();
             
             // Unity socket port (editable)
             int unityPort = EditorPrefs.GetInt("MCPForUnity.UnitySocketPort", 0);
@@ -309,8 +309,8 @@ namespace MCPForUnity.Editor.Windows
             
             httpUrlField.RegisterValueChangedCallback(evt =>
             {
-                // Save URL as-is, no automatic modifications
-                EditorPrefs.SetString("MCPForUnity.HttpUrl", evt.newValue);
+                HttpEndpointUtility.SaveBaseUrl(evt.newValue);
+                httpUrlField.value = HttpEndpointUtility.GetBaseUrl();
                 UpdateManualConfiguration(); // Refresh config display
             });
             
