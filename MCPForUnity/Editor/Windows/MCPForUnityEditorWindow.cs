@@ -533,26 +533,29 @@ namespace MCPForUnity.Editor.Windows
             var pathService = MCPServiceLocator.Paths;
 
             // UV Path
-            string uvxPath = pathService.GetUvxPath();
-            if (pathService.HasUvxPathOverride)
-            {
-                uvxPathOverride.value = uvxPath ?? "(override set but invalid)";
-            }
-            else
-            {
-                uvxPathOverride.value = uvxPath ?? "(auto-detected)";
-            }
+            bool hasOverride = pathService.HasUvxPathOverride;
+            string uvxPath = hasOverride ? pathService.GetUvxPath() : null;
+            uvxPathOverride.value = hasOverride
+                ? (uvxPath ?? "(override set but invalid)")
+                : "uvx (uses PATH)";
 
             // Update status indicator
             uvxPathStatus.RemoveFromClassList("valid");
             uvxPathStatus.RemoveFromClassList("invalid");
-            if (!string.IsNullOrEmpty(uvxPath) && File.Exists(uvxPath))
+            if (hasOverride)
             {
-                uvxPathStatus.AddToClassList("valid");
+                if (!string.IsNullOrEmpty(uvxPath) && File.Exists(uvxPath))
+                {
+                    uvxPathStatus.AddToClassList("valid");
+                }
+                else
+                {
+                    uvxPathStatus.AddToClassList("invalid");
+                }
             }
             else
             {
-                uvxPathStatus.AddToClassList("invalid");
+                uvxPathStatus.AddToClassList("valid");
             }
 
             // Git URL Override - refresh from EditorPrefs

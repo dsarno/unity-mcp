@@ -112,12 +112,6 @@ namespace MCPForUnity.Editor.Helpers
             EnsureConfigDirectoryExists(configPath);
             WriteAtomicFile(configPath, mergedJson);
 
-            try
-            {
-                if (File.Exists(uvxPath)) EditorPrefs.SetString("MCPForUnity.UvxPath", uvxPath);
-            }
-            catch { }
-
             return "Configured successfully";
         }
 
@@ -164,12 +158,6 @@ namespace MCPForUnity.Editor.Helpers
 
             EnsureConfigDirectoryExists(configPath);
             WriteAtomicFile(configPath, updatedToml);
-
-            try
-            {
-                if (File.Exists(uvxPath)) EditorPrefs.SetString("MCPForUnity.UvxPath", uvxPath);
-            }
-            catch { }
 
             return "Configured successfully";
         }
