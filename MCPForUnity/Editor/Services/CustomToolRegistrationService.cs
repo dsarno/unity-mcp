@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Text;
 using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
 using MCPForUnity.Editor.Helpers;
+using Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine;
 
@@ -11,6 +13,9 @@ namespace MCPForUnity.Editor.Services
 {
     public class CustomToolRegistrationService : ICustomToolRegistrationService
     {
+        private const string DefaultServerUrl = "http://localhost:8080";
+        private const string RegisterEndpointPath = "/register-tools";
+        private static readonly HttpClient HttpClient = new HttpClient();
         private readonly IToolDiscoveryService _discoveryService;
         
         public CustomToolRegistrationService(IToolDiscoveryService discoveryService = null)
@@ -22,54 +27,27 @@ namespace MCPForUnity.Editor.Services
         {
             try
             {
-                // If projectId not provided, capture it on main thread
-                if (string.IsNullOrEmpty(projectId))
-                {
-                    projectId = GetProjectId();
-                }
+                projectId ??= GetProjectId();
                 
-                // Discover tools via reflection
                 var tools = _discoveryService.DiscoverAllTools();
-                
                 if (tools.Count == 0)
                 {
                     McpLog.Info("No tools found, skipping registration");
                     return true;
                 }
                 
-                // Convert to registration format
-                var toolDefinitions = tools.Select(t => new
-                {
-                    name = t.Name,
-                    description = t.Description,
-                    structured_output = t.StructuredOutput,
-                    parameters = t.Parameters.Select(p => new
-                    {
-                        name = p.Name,
-                        description = p.Description,
-                        type = p.Type,
-                        required = p.Required,
-                        default_value = p.DefaultValue
-                    }).ToList()
-                }).ToList();
+                var request = BuildRegisterRequest(projectId, tools);
+                string endpoint = GetRegisterEndpoint();
+                var response = await SendRegistrationAsync(endpoint, request);
                 
-                // Call the FastMCP tool registration endpoint
-                var result = await CallMcpToolAsync("register_custom_tools", new
+                if (response.success)
                 {
-                    project_id = projectId,
-                    tools = toolDefinitions
-                });
-                
-                if (result != null && result.success == true)
-                {
-                    McpLog.Info($"Successfully registered {result.registered?.Count ?? 0} tools with MCP server");
+                    McpLog.Info($"Successfully registered {response.registered?.Count ?? 0} tools with MCP server");
                     return true;
                 }
-                else
-                {
-                    McpLog.Error($"Failed to register tools: {result?.error ?? "Unknown error"}");
-                    return false;
-                }
+                
+                McpLog.Error($"Failed to register tools: {response.error ?? "Unknown error"}");
+                return false;
             }
             catch (Exception ex)
             {
@@ -78,42 +56,78 @@ namespace MCPForUnity.Editor.Services
             }
         }
         
-        public bool RegisterAllTools()
+        private RegisterToolsRequest BuildRegisterRequest(string projectId, List<ToolMetadata> tools)
         {
-            // Capture Unity API values on main thread before going async
-            string projectId = GetProjectId();
-            
-            // Use async void pattern to avoid deadlock (similar to startup registration)
-            bool success = false;
-            System.Exception error = null;
-            
-            var task = Task.Run(async () =>
+            return new RegisterToolsRequest
             {
+                project_id = projectId,
+                tools = tools.Select(t => new ToolDefinition
+                {
+                    name = t.Name,
+                    description = t.Description,
+                    structured_output = t.StructuredOutput,
+                    parameters = (t.Parameters ?? new List<ParameterMetadata>()).Select(p => new ParameterDefinition
+                    {
+                        name = p.Name,
+                        description = p.Description,
+                        type = p.Type,
+                        required = p.Required,
+                        default_value = p.DefaultValue
+                    }).ToList()
+                }).ToList()
+            };
+        }
+        
+        private async Task<RegisterToolsResponse> SendRegistrationAsync(string endpoint, RegisterToolsRequest request)
+        {
+            try
+            {
+                string payload = JsonConvert.SerializeObject(request);
+                using var content = new StringContent(payload, Encoding.UTF8, "application/json");
+                var response = await HttpClient.PostAsync(endpoint, content);
+                string responseText = await response.Content.ReadAsStringAsync();
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    McpLog.Error($"Tool registration failed: HTTP {(int)response.StatusCode} {response.ReasonPhrase} - {responseText}");
+                    return new RegisterToolsResponse
+                    {
+                        success = false,
+                        error = responseText
+                    };
+                }
+                
                 try
                 {
-                    return await RegisterAllToolsAsync(projectId);
+                    var parsed = JsonConvert.DeserializeObject<RegisterToolsResponse>(responseText);
+                    return parsed ?? new RegisterToolsResponse { success = false, error = "Empty response from server" };
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
-                    error = ex;
-                    return false;
+                    McpLog.Error($"Failed to parse tool registration response: {ex.Message}");
+                    return new RegisterToolsResponse { success = false, error = ex.Message };
                 }
-            });
-            
-            // Wait for completion
-            task.Wait();
-            
-            if (error != null)
+            }
+            catch (HttpRequestException ex)
             {
-                throw error;
+                McpLog.Error($"Tool registration HTTP request failed: {ex.Message}");
+                return new RegisterToolsResponse { success = false, error = ex.Message };
+            }
+        }
+        
+        private string GetRegisterEndpoint()
+        {
+            string baseUrl = EditorPrefs.GetString("MCPForUnity.HttpUrl", DefaultServerUrl);
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                baseUrl = DefaultServerUrl;
             }
             
-            return task.Result;
+            return $"{baseUrl.TrimEnd('/')}{RegisterEndpointPath}";
         }
         
         private string GetProjectId()
         {
-            // Use project name + path hash as unique identifier
             string projectName = Application.productName;
             string projectPath = Application.dataPath;
             string combined = $"{projectName}:{projectPath}";
@@ -125,91 +139,37 @@ namespace MCPForUnity.Editor.Services
             }
         }
         
-        private async Task<dynamic> CallMcpToolAsync(string toolName, object parameters)
+        [Serializable]
+        private class RegisterToolsRequest
         {
-            try
-            {
-                // For HTTP transport mode, we can make direct HTTP calls to FastMCP
-                // For stdio transport mode, we need to use the bridge
-                bool isHttpTransport = EditorPrefs.GetBool("MCPForUnity.UseHttpTransport", false);
-                
-                if (isHttpTransport)
-                {
-                    // Make direct HTTP call to FastMCP HTTP endpoint
-                    return await CallFastMcpHttpAsync(toolName, parameters);
-                }
-                else
-                {
-                    // Use the existing MCP bridge for stdio transport
-                    return await CallMcpBridgeAsync(toolName, parameters);
-                }
-            }
-            catch (Exception ex)
-            {
-                McpLog.Error($"Error calling MCP tool {toolName}: {ex.Message}");
-                return new { success = false, error = ex.Message };
-            }
+            public string project_id;
+            public List<ToolDefinition> tools;
         }
         
-        private async Task<dynamic> CallFastMcpHttpAsync(string toolName, object parameters)
+        [Serializable]
+        private class ToolDefinition
         {
-            try
-            {
-                // Use the HttpMcpClient from the bridge service to make proper MCP tool calls
-                var bridgeService = MCPServiceLocator.Bridge;
-                var httpClient = bridgeService.GetHttpClient();
-                
-                if (httpClient == null)
-                {
-                    McpLog.Error("HTTP MCP client not available - ensure session is started");
-                    return new { success = false, error = "HTTP MCP client not initialized" };
-                }
-                
-                // Convert parameters to JObject
-                string jsonParams = Newtonsoft.Json.JsonConvert.SerializeObject(parameters);
-                JObject paramsObj = JObject.Parse(jsonParams);
-                
-                // Execute tool via MCP protocol
-                var result = await httpClient.ExecuteToolAsync(toolName, paramsObj);
-                
-                // Convert JObject result to dynamic
-                return Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(result.ToString());
-            }
-            catch (Exception ex)
-            {
-                McpLog.Error($"HTTP MCP tool call exception: {ex.Message}");
-                return new { success = false, error = ex.Message };
-            }
+            public string name;
+            public string description;
+            public bool structured_output;
+            public List<ParameterDefinition> parameters;
         }
         
-        private async Task<dynamic> CallMcpBridgeAsync(string toolName, object parameters)
+        [Serializable]
+        private class ParameterDefinition
         {
-            // Use the existing MCP bridge for stdio transport
-            // This would send the tool call through the Unity socket bridge
-            try
-            {
-                // For stdio mode, we need to send through the bridge
-                // The bridge service would handle the MCP protocol communication
-                var bridgeService = MCPServiceLocator.Bridge;
-                
-                if (!bridgeService.IsRunning)
-                {
-                    return new { success = false, error = "Bridge is not running" };
-                }
-                
-                // Serialize the tool call
-                string jsonParams = Newtonsoft.Json.JsonConvert.SerializeObject(parameters);
-                
-                // Send via bridge (this is a simplified version - actual implementation may vary)
-                // For now, return a placeholder indicating stdio mode needs the server running
-                await Task.Delay(100);
-                return new { success = true, registered = new List<string>(), message = "Stdio mode: Tools will be registered when server starts" };
-            }
-            catch (Exception ex)
-            {
-                McpLog.Error($"Bridge call exception: {ex.Message}");
-                return new { success = false, error = ex.Message };
-            }
+            public string name;
+            public string description;
+            public string type;
+            public bool required;
+            public string default_value;
+        }
+        
+        private class RegisterToolsResponse
+        {
+            public bool success;
+            public string error;
+            public List<string> registered;
         }
     }
 }

@@ -26,7 +26,7 @@ namespace MCPForUnity.Editor.Services
         public static IPackageUpdateService Updates => _packageUpdateService ??= new PackageUpdateService();
         public static IPlatformService Platform => _platformService ??= new PlatformService();
         public static IToolDiscoveryService ToolDiscovery => _toolDiscoveryService ??= new ToolDiscoveryService();
-        public static ICustomToolRegistrationService CustomToolRegistration => _customToolRegistrationService ??= new CustomToolRegistrationService();
+        public static ICustomToolRegistrationService CustomToolRegistration => _customToolRegistrationService ??= new CustomToolRegistrationService(ToolDiscovery);
         public static ICacheManagementService Cache => _cacheManagementService ??= new CacheManagementService();
         public static IServerManagementService Server => _serverManagementService ??= new ServerManagementService();
 

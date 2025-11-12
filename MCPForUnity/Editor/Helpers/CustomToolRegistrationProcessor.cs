@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 using MCPForUnity.Editor.Helpers;
@@ -50,39 +49,6 @@ namespace MCPForUnity.Editor.Helpers
                 
                 var registrationService = MCPServiceLocator.CustomToolRegistration;
                 bool success = await registrationService.RegisterAllToolsAsync();
-                
-                if (success)
-                {
-                    McpLog.Info("Custom tool registration completed successfully");
-                }
-                else
-                {
-                    McpLog.Warn("Custom tool registration failed - check server logs for details");
-                }
-            }
-            catch (System.Exception ex)
-            {
-                McpLog.Error($"Error during custom tool registration: {ex.Message}");
-            }
-        }
-        
-        /// <summary>
-        /// Register all tools synchronously
-        /// </summary>
-        public static void RegisterAllToolsSync()
-        {
-            if (!_isRegistrationEnabled)
-            {
-                McpLog.Info("Custom tool registration is disabled");
-                return;
-            }
-            
-            try
-            {
-                McpLog.Info("Starting custom tool registration (sync)...");
-                
-                var registrationService = MCPServiceLocator.CustomToolRegistration;
-                bool success = registrationService.RegisterAllTools();
                 
                 if (success)
                 {
