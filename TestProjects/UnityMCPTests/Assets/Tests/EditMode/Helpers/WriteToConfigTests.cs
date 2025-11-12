@@ -12,6 +12,9 @@ namespace MCPForUnityTests.Editor.Helpers
 {
     public class WriteToConfigTests
     {
+        private const string UseHttpTransportPrefKey = "MCPForUnity.UseHttpTransport";
+        private const string HttpUrlPrefKey = "MCPForUnity.HttpUrl";
+
         private string _tempRoot;
         private string _fakeUvPath;
         private string _serverSrcDir;
@@ -45,6 +48,9 @@ namespace MCPForUnityTests.Editor.Helpers
             EditorPrefs.SetBool("MCPForUnity.LockCursorConfig", false);
             // Disable auto-registration to avoid hitting user configs during tests
             EditorPrefs.SetBool("MCPForUnity.AutoRegisterEnabled", false);
+            // Force HTTP transport defaults so expectations match current behavior
+            EditorPrefs.SetBool(UseHttpTransportPrefKey, true);
+            EditorPrefs.SetString(HttpUrlPrefKey, "http://localhost:8080");
         }
 
         [TearDown]
@@ -54,6 +60,8 @@ namespace MCPForUnityTests.Editor.Helpers
             EditorPrefs.DeleteKey("MCPForUnity.ServerSrc");
             EditorPrefs.DeleteKey("MCPForUnity.LockCursorConfig");
             EditorPrefs.DeleteKey("MCPForUnity.AutoRegisterEnabled");
+            EditorPrefs.DeleteKey(UseHttpTransportPrefKey);
+            EditorPrefs.DeleteKey(HttpUrlPrefKey);
 
             // Remove temp files
             try { if (Directory.Exists(_tempRoot)) Directory.Delete(_tempRoot, true); } catch { }
@@ -76,6 +84,7 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity["env"], "env should be present for all clients");
             Assert.IsTrue(unity["env"]!.Type == JTokenType.Object, "env should be an object");
             Assert.AreEqual(false, (bool)unity["disabled"], "disabled:false should be set for Windsurf when missing");
+            AssertTransportConfiguration(unity, isVSCode: false);
         }
 
         [Test]
@@ -93,6 +102,7 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity["env"], "env should be present for all clients");
             Assert.IsTrue(unity["env"]!.Type == JTokenType.Object, "env should be an object");
             Assert.AreEqual(false, (bool)unity["disabled"], "disabled:false should be set for Kiro when missing");
+            AssertTransportConfiguration(unity, isVSCode: false);
         }
 
         [Test]
@@ -109,6 +119,7 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity, "Expected mcpServers.unityMCP node");
             Assert.IsNull(unity["env"], "env should not be added for non-Windsurf/Kiro clients");
             Assert.IsNull(unity["disabled"], "disabled should not be added for non-Windsurf/Kiro clients");
+            AssertTransportConfiguration(unity, isVSCode: false);
         }
 
         [Test]
@@ -125,7 +136,7 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity, "Expected servers.unityMCP node");
             Assert.IsNull(unity["env"], "env should not be added for VSCode client");
             Assert.IsNull(unity["disabled"], "disabled should not be added for VSCode client");
-            Assert.AreEqual("stdio", (string)unity["type"], "VSCode entry should include type=stdio");
+            AssertTransportConfiguration(unity, isVSCode: true);
         }
 
         [Test]
@@ -147,6 +158,7 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity, "Expected mcpServers.unityMCP node");
             Assert.IsNull(unity["env"], "env should not be added for Trae client");
             Assert.IsNull(unity["disabled"], "disabled should not be added for Trae client");
+            AssertTransportConfiguration(unity, isVSCode: false);
         }
 
         [Test]
@@ -178,6 +190,43 @@ namespace MCPForUnityTests.Editor.Helpers
             Assert.NotNull(unity, "Expected mcpServers.unityMCP node");
             Assert.AreEqual("bar", (string)unity["env"]!["FOO"], "Existing env should be preserved");
             Assert.AreEqual(true, (bool)unity["disabled"], "Existing disabled value should be preserved");
+            AssertTransportConfiguration(unity, isVSCode: false);
+        }
+
+        [Test]
+        public void UsesStdioTransport_ForNonVSCodeClients_WhenPreferenceDisabled()
+        {
+            var configPath = Path.Combine(_tempRoot, "stdio-non-vscode.json");
+            WriteInitialConfig(configPath, isVSCode: false, command: _fakeUvPath, directory: "/old/path");
+
+            WithTransportPreference(false, () =>
+            {
+                var client = new McpClient { name = "Windsurf", mcpType = McpTypes.Windsurf };
+                InvokeWriteToConfig(configPath, client);
+
+                var root = JObject.Parse(File.ReadAllText(configPath));
+                var unity = (JObject)root.SelectToken("mcpServers.unityMCP");
+                Assert.NotNull(unity, "Expected mcpServers.unityMCP node");
+                AssertTransportConfiguration(unity, isVSCode: false);
+            });
+        }
+
+        [Test]
+        public void UsesStdioTransport_ForVSCode_WhenPreferenceDisabled()
+        {
+            var configPath = Path.Combine(_tempRoot, "stdio-vscode.json");
+            WriteInitialConfig(configPath, isVSCode: true, command: _fakeUvPath, directory: "/old/path");
+
+            WithTransportPreference(false, () =>
+            {
+                var client = new McpClient { name = "VSCode", mcpType = McpTypes.VSCode };
+                InvokeWriteToConfig(configPath, client);
+
+                var root = JObject.Parse(File.ReadAllText(configPath));
+                var unity = (JObject)root.SelectToken("servers.unityMCP");
+                Assert.NotNull(unity, "Expected servers.unityMCP node");
+                AssertTransportConfiguration(unity, isVSCode: true);
+            });
         }
 
         // --- Helpers ---
@@ -242,6 +291,72 @@ namespace MCPForUnityTests.Editor.Helpers
             var result = McpConfigurationHelper.WriteMcpConfiguration(configPath, client);
 
             Assert.AreEqual("Configured successfully", result, "WriteMcpConfiguration should return success");
+        }
+
+        private static void AssertTransportConfiguration(JObject unity, bool isVSCode)
+        {
+            bool useHttp = EditorPrefs.GetBool(UseHttpTransportPrefKey, true);
+
+            if (useHttp)
+            {
+                Assert.AreEqual(HttpEndpointUtility.GetMcpRpcUrl(), (string)unity["url"],
+                    "HTTP transport should set url to the MCP endpoint");
+                Assert.IsNull(unity["command"], "HTTP transport should remove command");
+                Assert.IsNull(unity["args"], "HTTP transport should remove args");
+
+                if (isVSCode)
+                {
+                    Assert.AreEqual("http", (string)unity["type"],
+                        "VSCode entries should advertise HTTP transport");
+                }
+                else
+                {
+                    Assert.IsNull(unity["type"],
+                        "Non-VSCode entries should not include type metadata in HTTP mode");
+                }
+            }
+            else
+            {
+                Assert.IsNull(unity["url"], "stdio transport should not include a url");
+
+                string command = (string)unity["command"];
+                Assert.False(string.IsNullOrEmpty(command), "stdio transport should include a command");
+
+                var args = (unity["args"] as JArray)?.ToObject<string[]>();
+                Assert.NotNull(args, "stdio transport should include args array");
+
+                int transportIndex = Array.IndexOf(args, "--transport");
+                Assert.GreaterOrEqual(transportIndex, 0, "args should include --transport flag");
+                Assert.Less(transportIndex + 1, args.Length,
+                    "--transport flag should be followed by a mode value");
+                Assert.AreEqual("stdio", args[transportIndex + 1],
+                    "--transport should be followed by stdio mode");
+
+                if (isVSCode)
+                {
+                    Assert.AreEqual("stdio", (string)unity["type"],
+                        "VSCode entries should advertise stdio transport");
+                }
+                else
+                {
+                    Assert.IsNull(unity["type"],
+                        "Non-VSCode entries should not include type metadata in stdio mode");
+                }
+            }
+        }
+
+        private static void WithTransportPreference(bool useHttp, Action action)
+        {
+            bool original = EditorPrefs.GetBool(UseHttpTransportPrefKey, true);
+            EditorPrefs.SetBool(UseHttpTransportPrefKey, useHttp);
+            try
+            {
+                action();
+            }
+            finally
+            {
+                EditorPrefs.SetBool(UseHttpTransportPrefKey, original);
+            }
         }
     }
 }
