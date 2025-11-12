@@ -1,3 +1,4 @@
+import inspect
 import logging
 from typing import Dict, List
 
@@ -148,11 +149,35 @@ class CustomToolService:
                 return response
             return {"success": False, "message": str(response)}
 
+        dynamic_tool.__signature__ = self._build_signature(
+            definition.parameters)
+
         wrapped = telemetry_tool(tool_name)(dynamic_tool)
         tool = self._mcp.tool(
             name=tool_name, description=definition.description)(wrapped)
         tool.parameters = self._build_input_schema(definition.parameters)
         return tool
+
+    def _build_signature(self, parameters: List[ToolParameterModel]) -> inspect.Signature:
+        sig_params = [
+            inspect.Parameter(
+                "ctx",
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                annotation=Context,
+            )
+        ]
+
+        for param in parameters:
+            default = inspect._empty if param.required else None
+            sig_params.append(
+                inspect.Parameter(
+                    param.name,
+                    inspect.Parameter.KEYWORD_ONLY,
+                    default=default,
+                )
+            )
+
+        return inspect.Signature(parameters=sig_params)
 
     def _build_input_schema(self, parameters: List[ToolParameterModel]) -> Dict[str, object]:
         schema = {"type": "object", "properties": {},
