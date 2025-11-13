@@ -62,6 +62,7 @@ namespace MCPForUnity.Editor
         private static int mainThreadId;
         private static int currentUnityPort = 6400; // Dynamic port, starts with default
         private static bool isAutoConnectMode = false;
+        private static bool shouldRestartAfterReload = false;
         private const ulong MaxFrameBytes = 64UL * 1024 * 1024; // 64 MiB hard cap for framed payloads
         private const int FrameIOTimeoutMs = 30000; // Per-read timeout to avoid stalled clients
 
@@ -173,19 +174,28 @@ namespace MCPForUnity.Editor
             {
                 return;
             }
-            // Defer start until the editor is idle and not compiling
-            ScheduleInitRetry();
-            // Add a safety net update hook in case delayCall is missed during reload churn
-            if (!ensureUpdateHooked)
+            if (ShouldAutoStartBridge())
             {
-                ensureUpdateHooked = true;
-                EditorApplication.update += EnsureStartedOnEditorIdle;
+                // Defer start until the editor is idle and not compiling
+                ScheduleInitRetry();
+                // Add a safety net update hook in case delayCall is missed during reload churn
+                if (!ensureUpdateHooked)
+                {
+                    ensureUpdateHooked = true;
+                    EditorApplication.update += EnsureStartedOnEditorIdle;
+                }
             }
             EditorApplication.quitting += Stop;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
-            // Also coalesce play mode transitions into a deferred init
-            EditorApplication.playModeStateChanged += _ => ScheduleInitRetry();
+            // Also coalesce play mode transitions into a deferred init when stdio is preferred
+            EditorApplication.playModeStateChanged += _ =>
+            {
+                if (ShouldAutoStartBridge())
+                {
+                    ScheduleInitRetry();
+                }
+            };
         }
 
         /// <summary>
@@ -231,6 +241,20 @@ namespace MCPForUnity.Editor
             }
             // Keep the original delayCall as a secondary path
             EditorApplication.delayCall += InitializeAfterCompilation;
+        }
+
+        private static bool ShouldAutoStartBridge()
+        {
+            try
+            {
+                bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
+                return !useHttpTransport;
+            }
+            catch
+            {
+                // Fall back to auto-starting so existing behavior remains if prefs are unavailable
+                return true;
+            }
         }
 
         // Safety net: ensure the bridge starts shortly after domain reload when editor is idle
@@ -1192,6 +1216,10 @@ namespace MCPForUnity.Editor
         // Heartbeat/status helpers
         private static void OnBeforeAssemblyReload()
         {
+            if (isRunning)
+            {
+                shouldRestartAfterReload = true;
+            }
             // Stop cleanly before reload so sockets close and clients see 'reloading'
             try { Stop(); } catch { }
             // Avoid file I/O or heavy work here
@@ -1202,8 +1230,16 @@ namespace MCPForUnity.Editor
             // Will be overwritten by Start(), but mark as alive quickly
             WriteHeartbeat(false, "idle");
             LogBreadcrumb("Idle");
-            // Schedule a safe restart after reload to avoid races during compilation
-            ScheduleInitRetry();
+            bool shouldResume = ShouldAutoStartBridge() || shouldRestartAfterReload;
+            if (shouldRestartAfterReload)
+            {
+                shouldRestartAfterReload = false;
+            }
+            if (shouldResume)
+            {
+                // Schedule a safe restart after reload to avoid races during compilation
+                ScheduleInitRetry();
+            }
         }
 
         private static void WriteHeartbeat(bool reloading, string reason = null)
