@@ -37,6 +37,7 @@ py-modules = [
     "server",
     "plugin_hub",
     "plugin_registry",
+    "stdio_port_registry",
     "custom_tool_service",
     "telemetry",
     "telemetry_decorator",
