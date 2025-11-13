@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -91,27 +92,41 @@ namespace MCPForUnity.Editor.Services
                 using var content = new StringContent(payload, Encoding.UTF8, "application/json");
                 var response = await HttpClient.PostAsync(endpoint, content);
                 string responseText = await response.Content.ReadAsStringAsync();
-                
-                if (!response.IsSuccessStatusCode)
-                {
-                    McpLog.Error($"Tool registration failed: HTTP {(int)response.StatusCode} {response.ReasonPhrase} - {responseText}");
-                    return new RegisterToolsResponse
-                    {
-                        success = false,
-                        error = responseText
-                    };
-                }
-                
+
+                RegisterToolsResponse parsedResponse = null;
                 try
                 {
-                    var parsed = JsonConvert.DeserializeObject<RegisterToolsResponse>(responseText);
-                    return parsed ?? new RegisterToolsResponse { success = false, error = "Empty response from server" };
+                    parsedResponse = JsonConvert.DeserializeObject<RegisterToolsResponse>(responseText);
                 }
                 catch (Exception ex)
                 {
                     McpLog.Error($"Failed to parse tool registration response: {ex.Message}");
-                    return new RegisterToolsResponse { success = false, error = ex.Message };
                 }
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return parsedResponse ?? new RegisterToolsResponse { success = false, error = "Empty response from server" };
+                }
+
+                if (response.StatusCode == HttpStatusCode.Conflict)
+                {
+                    var duplicates = parsedResponse?.duplicates ?? new List<string>();
+                    string duplicateList = duplicates.Count > 0 ? string.Join(", ", duplicates) : "existing tools";
+                    McpLog.Info($"Tool registration skipped - already registered ({duplicateList})");
+                    return new RegisterToolsResponse
+                    {
+                        success = true,
+                        registered = duplicates
+                    };
+                }
+
+                string errorText = parsedResponse?.error ?? responseText;
+                McpLog.Error($"Tool registration failed: HTTP {(int)response.StatusCode} {response.ReasonPhrase} - {responseText}");
+                return new RegisterToolsResponse
+                {
+                    success = false,
+                    error = errorText
+                };
             }
             catch (HttpRequestException ex)
             {
@@ -164,6 +179,7 @@ namespace MCPForUnity.Editor.Services
             public bool success;
             public string error;
             public List<string> registered;
+            public List<string> duplicates;
         }
     }
 }
