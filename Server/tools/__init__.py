@@ -1,15 +1,18 @@
-"""
-MCP Tools package - Auto-discovers and registers all tools in this directory.
-"""
+"""MCP tools package - auto-discovery and Unity routing helpers."""
+
+import importlib
+import inspect
 import logging
+import os
+import pkgutil
 from pathlib import Path
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable, Iterable, Optional, TypeVar
 
 from fastmcp import Context, FastMCP
-from telemetry_decorator import telemetry_tool
-
-from registry import get_registered_tools
-from module_discovery import discover_modules
+from telemetry_decorator import telemetry_resource, telemetry_tool
+from config import config
+from unity_connection import send_command_with_retry, async_send_command_with_retry
+from plugin_hub import PluginHub, send_command_to_plugin
 
 logger = logging.getLogger("mcp-for-unity-server")
 
@@ -88,6 +91,21 @@ def send_with_unity_instance(
 ) -> T:
     """Call a transport function, attaching instance_id only when provided."""
 
+    if _is_http_transport():
+        if not args:
+            raise ValueError("HTTP transport requires command arguments")
+        command_type = args[0]
+        params = args[1] if len(args) > 1 else kwargs.get("params")
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            raise TypeError("Command parameters must be a dict for HTTP transport")
+        return send_command_to_plugin(
+            unity_instance=unity_instance,
+            command_type=command_type,
+            params=params,
+        )
+
     if unity_instance:
         kwargs.setdefault("instance_id", unity_instance)
     return send_fn(*args, **kwargs)
@@ -101,9 +119,28 @@ async def async_send_with_unity_instance(
 ) -> T:
     """Async variant of send_with_unity_instance."""
 
+    if _is_http_transport():
+        if not args:
+            raise ValueError("HTTP transport requires command arguments")
+        command_type = args[0]
+        params = args[1] if len(args) > 1 else kwargs.get("params")
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            raise TypeError("Command parameters must be a dict for HTTP transport")
+        return await PluginHub.send_command_for_instance(
+            unity_instance,
+            command_type,
+            params,
+        )
+
     if unity_instance:
         kwargs.setdefault("instance_id", unity_instance)
     return await send_fn(*args, **kwargs)
+
+
+def _is_http_transport() -> bool:
+    return os.environ.get("UNITY_MCP_TRANSPORT", "stdio").lower() == "http"
 
 
 def with_unity_instance(

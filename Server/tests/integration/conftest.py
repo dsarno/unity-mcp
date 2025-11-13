@@ -1,6 +1,11 @@
 import os
 import sys
 import types
+from pathlib import Path
+
+SERVER_ROOT = Path(__file__).resolve().parents[2]
+if str(SERVER_ROOT) not in sys.path:
+    sys.path.insert(0, str(SERVER_ROOT))
 
 # Ensure telemetry is disabled during test collection and execution to avoid
 # any background network or thread startup that could slow or block pytest.
@@ -27,11 +32,17 @@ telemetry.get_package_version = lambda: "0.0.0"
 sys.modules.setdefault("telemetry", telemetry)
 
 telemetry_decorator = types.ModuleType("telemetry_decorator")
-def telemetry_tool(*dargs, **dkwargs):
+
+
+def _noop_decorator(*_dargs, **_dkwargs):
     def _wrap(fn):
         return fn
+
     return _wrap
-telemetry_decorator.telemetry_tool = telemetry_tool
+
+
+telemetry_decorator.telemetry_tool = _noop_decorator
+telemetry_decorator.telemetry_resource = _noop_decorator
 sys.modules.setdefault("telemetry_decorator", telemetry_decorator)
 
 # Stub fastmcp module (not mcp.server.fastmcp)

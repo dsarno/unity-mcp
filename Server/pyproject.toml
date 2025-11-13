@@ -35,6 +35,8 @@ py-modules = [
     "port_discovery",
     "reload_sentinel",
     "server",
+    "plugin_hub",
+    "plugin_registry",
     "custom_tool_service",
     "telemetry",
     "telemetry_decorator",

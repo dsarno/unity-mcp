@@ -1,3 +1,4 @@
+import asyncio
 from telemetry import record_telemetry, record_milestone, RecordType, MilestoneType
 from fastmcp import FastMCP
 import logging
@@ -15,6 +16,10 @@ import time
 from custom_tool_service import CustomToolService
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.routing import WebSocketRoute
+
+from plugin_registry import PluginRegistry
+from plugin_hub import PluginHub
 
 # Configure logging using settings from config
 logging.basicConfig(
@@ -67,7 +72,8 @@ except Exception:
     pass
 
 # Global connection pool
-_unity_connection_pool: UnityConnectionPool = None
+_unity_connection_pool: UnityConnectionPool | None = None
+_plugin_registry: PluginRegistry | None = None
 
 # In-memory custom tool service initialized after MCP construction
 custom_tool_service: CustomToolService | None = None
@@ -93,6 +99,12 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
             f"HTTP tool registry will be available on http://{http_host}:{http_port}")
     else:
         logger.info("HTTP server disabled - using stdio transport")
+
+    global _plugin_registry
+    if _plugin_registry is None:
+        _plugin_registry = PluginRegistry()
+        loop = asyncio.get_running_loop()
+        PluginHub.configure(_plugin_registry, loop)
 
     # Record server startup telemetry
     start_time = time.time()
@@ -183,9 +195,11 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
         )).start()
 
     try:
-        # Yield the connection pool so it can be attached to the context
-        # Note: Tools will use get_unity_connection_pool() directly
-        yield {"pool": _unity_connection_pool}
+        # Yield shared state for lifespan consumers (e.g., middleware)
+        yield {
+            "pool": _unity_connection_pool,
+            "plugin_registry": _plugin_registry,
+        }
     finally:
         if _unity_connection_pool:
             _unity_connection_pool.disconnect_all()
@@ -243,11 +257,21 @@ async def health_http(_: Request) -> JSONResponse:
     })
 
 
+@mcp.custom_route("/plugin/sessions", methods=["GET"])
+async def plugin_sessions_route(_: Request) -> JSONResponse:
+    data = await PluginHub.get_sessions()
+    return JSONResponse(data)
+
+
 # Initialize and register middleware for session-based Unity instance routing
 unity_middleware = UnityInstanceMiddleware()
 set_unity_instance_middleware(unity_middleware)
 mcp.add_middleware(unity_middleware)
 logger.info("Registered Unity instance middleware for session-based routing")
+
+# Mount plugin websocket hub at /hub/plugin when HTTP transport is active
+if not any(isinstance(route, WebSocketRoute) and route.path == "/hub/plugin" for route in mcp.app.router.routes):
+    mcp.app.router.routes.append(WebSocketRoute("/hub/plugin", PluginHub))
 
 # Register all tools
 register_all_tools(mcp)
