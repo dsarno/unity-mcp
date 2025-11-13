@@ -1,4 +1,5 @@
 using UnityEditor;
+using UnityEditor.Callbacks;
 using UnityEngine;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Services;
@@ -12,27 +13,26 @@ namespace MCPForUnity.Editor.Helpers
     public static class CustomToolRegistrationProcessor
     {
         private static bool _isRegistrationEnabled = true;
-        private static bool _hasRegisteredOnStartup = false;
-        
+
         static CustomToolRegistrationProcessor()
         {
             // Load saved preference
             _isRegistrationEnabled = EditorPrefs.GetBool(EditorPrefKeys.CustomToolRegistrationEnabled, true);
         }
-        
+
         /// <summary>
         /// Enable or disable automatic tool registration
         /// </summary>
         public static bool IsRegistrationEnabled
         {
             get => _isRegistrationEnabled;
-            set 
+            set
             {
                 _isRegistrationEnabled = value;
                 EditorPrefs.SetBool(EditorPrefKeys.CustomToolRegistrationEnabled, value);
             }
         }
-        
+
         /// <summary>
         /// Register all discovered tools with the MCP server
         /// </summary>
@@ -43,14 +43,14 @@ namespace MCPForUnity.Editor.Helpers
                 McpLog.Info("Custom tool registration is disabled");
                 return;
             }
-            
+
             try
             {
                 McpLog.Info("Starting custom tool registration...");
-                
+
                 var registrationService = MCPServiceLocator.CustomToolRegistration;
                 bool success = await registrationService.RegisterAllToolsAsync();
-                
+
                 if (success)
                 {
                     McpLog.Info("Custom tool registration completed successfully");
@@ -65,60 +65,39 @@ namespace MCPForUnity.Editor.Helpers
                 McpLog.Error($"Error during custom tool registration: {ex.Message}");
             }
         }
-        
-        /// <summary>
-        /// Called when Unity editor starts up
-        /// </summary>
-        [InitializeOnLoadMethod]
-        private static void OnEditorStartup()
-        {
-            // Delay registration to allow editor to fully initialize
-            EditorApplication.delayCall += () =>
-            {
-                if (!_hasRegisteredOnStartup && _isRegistrationEnabled)
-                {
-                    // Wait a bit more for MCP server to potentially start
-                    EditorApplication.delayCall += () =>
-                    {
-                        RegisterAllTools();
-                        _hasRegisteredOnStartup = true;
-                    };
-                }
-            };
-        }
-        
+
         /// <summary>
         /// Called when scripts are reloaded
         /// </summary>
-        [UnityEditor.Callbacks.DidReloadScripts]
+        [DidReloadScripts]
         private static void OnScriptsReloaded()
         {
             // Invalidate discovery cache to pick up new tools
             var discoveryService = MCPServiceLocator.ToolDiscovery;
             discoveryService.InvalidateCache();
-            
+
             // Re-register tools after a delay
             if (_isRegistrationEnabled)
             {
                 EditorApplication.delayCall += RegisterAllTools;
             }
         }
-        
+
         /// <summary>
         /// Force re-registration of all tools
         /// </summary>
         public static void ForceReregistration()
         {
             McpLog.Info("Force re-registering custom tools...");
-            
+
             // Invalidate cache
             var discoveryService = MCPServiceLocator.ToolDiscovery;
             discoveryService.InvalidateCache();
-            
+
             // Re-register
             RegisterAllTools();
         }
-        
+
         /// <summary>
         /// Get information about discovered tools
         /// </summary>
@@ -128,19 +107,19 @@ namespace MCPForUnity.Editor.Helpers
             {
                 var discoveryService = MCPServiceLocator.ToolDiscovery;
                 var tools = discoveryService.DiscoverAllTools();
-                
+
                 if (tools.Count == 0)
                 {
                     return "No custom tools discovered";
                 }
-                
+
                 var info = $"Discovered {tools.Count} custom tools:\n";
                 foreach (var tool in tools)
                 {
                     string status = tool.AutoRegister ? "enabled" : "disabled";
                     info += $"  - {tool.Name} ({status}): {tool.Description}\n";
                 }
-                
+
                 return info;
             }
             catch (System.Exception ex)
