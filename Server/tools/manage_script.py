@@ -367,7 +367,7 @@ async def apply_text_edits(
 
 
 @mcp_for_unity_tool(description=("Create a new C# script at the given project path."))
-def create_script(
+async def create_script(
     ctx: Context,
     path: Annotated[str, "Path under Assets/ to create the script at, e.g., 'Assets/Scripts/My.cs'"],
     contents: Annotated[str, "Contents of the script to create. Note, this is Base64 encoded over transport."],
@@ -411,7 +411,7 @@ def create_script(
 
 
 @mcp_for_unity_tool(description=("Delete a C# script by URI or Assets-relative path."))
-def delete_script(
+async def delete_script(
     ctx: Context,
     uri: Annotated[str, "URI of the script to delete under Assets/ directory, unity://path/Assets/... or file://... or Assets/..."],
 ) -> dict[str, Any]:
