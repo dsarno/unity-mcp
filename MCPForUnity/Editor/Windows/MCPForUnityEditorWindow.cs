@@ -253,7 +253,7 @@ namespace MCPForUnity.Editor.Windows
 
             // Advanced settings starts collapsed
             advancedSettingsFoldout.value = false;
-            
+
             // Load Git URL override
             gitUrlOverride.value = EditorPrefs.GetString(EditorPrefKeys.GitUrlOverride, "");
 
@@ -261,10 +261,10 @@ namespace MCPForUnity.Editor.Windows
             transportDropdown.Init(TransportProtocol.HTTP);
             bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
             transportDropdown.value = useHttpTransport ? TransportProtocol.HTTP : TransportProtocol.Stdio;
-            
+
             // HTTP configuration
             httpUrlField.value = HttpEndpointUtility.GetBaseUrl();
-            
+
             // Unity socket port (editable)
             int unityPort = EditorPrefs.GetInt(EditorPrefKeys.UnitySocketPort, 0);
             if (unityPort == 0)
@@ -272,7 +272,7 @@ namespace MCPForUnity.Editor.Windows
                 unityPort = MCPServiceLocator.Bridge.CurrentPort;
             }
             unityPortField.value = unityPort.ToString();
-            
+
             // Update HTTP field visibility
             UpdateHttpFieldVisibility();
             UpdateStartHttpButtonState();
@@ -306,7 +306,7 @@ namespace MCPForUnity.Editor.Windows
                 EditorPrefs.SetInt(EditorPrefKeys.ValidationLevel, (int)currentValidationLevel);
                 UpdateValidationDescription();
             });
-            
+
             // Transport callbacks
             transportDropdown.RegisterValueChangedCallback(evt =>
             {
@@ -316,14 +316,19 @@ namespace MCPForUnity.Editor.Windows
                 UpdateManualConfiguration(); // Refresh config display
                 McpLog.Info($"Transport changed to: {evt.newValue}");
             });
-            
+
             httpUrlField.RegisterValueChangedCallback(evt =>
             {
                 HttpEndpointUtility.SaveBaseUrl(evt.newValue);
                 httpUrlField.value = HttpEndpointUtility.GetBaseUrl();
                 UpdateManualConfiguration(); // Refresh config display
             });
-            
+
+            if (startHttpServerButton != null)
+            {
+                startHttpServerButton.clicked += OnStartLocalHttpServerClicked;
+            }
+
             unityPortField.RegisterCallback<FocusOutEvent>(_ => PersistUnityPortFromField());
             unityPortField.RegisterCallback<KeyDownEvent>(evt =>
             {
@@ -337,7 +342,7 @@ namespace MCPForUnity.Editor.Windows
             // Advanced settings callbacks
             browseUvxButton.clicked += OnBrowseUvxClicked;
             clearUvxButton.clicked += OnClearUvxClicked;
-            
+
             // Git URL override callbacks
             gitUrlOverride.RegisterValueChangedCallback(evt =>
             {
@@ -352,7 +357,7 @@ namespace MCPForUnity.Editor.Windows
                 }
                 UpdateManualConfiguration(); // Refresh config display
             });
-            
+
             clearGitUrlButton.clicked += () =>
             {
                 gitUrlOverride.value = string.Empty;
@@ -379,6 +384,18 @@ namespace MCPForUnity.Editor.Windows
             copyPathButton.clicked += OnCopyPathClicked;
             openFileButton.clicked += OnOpenFileClicked;
             copyJsonButton.clicked += OnCopyJsonClicked;
+        }
+
+        private void OnStartLocalHttpServerClicked()
+        {
+            try
+            {
+                MCPServiceLocator.Server.StartLocalHttpServer();
+            }
+            finally
+            {
+                UpdateStartHttpButtonState();
+            }
         }
 
         private void UpdateValidationDescription()
@@ -431,18 +448,18 @@ namespace MCPForUnity.Editor.Windows
                 unityPortField.value = bridgeService.CurrentPort.ToString();
             }
         }
-        
+
         private void UpdateHttpFieldVisibility()
         {
             bool useHttp = (TransportProtocol)transportDropdown.value == TransportProtocol.HTTP;
-            
+
             // Show HTTP URL only in HTTP mode
             httpUrlRow.style.display = useHttp ? DisplayStyle.Flex : DisplayStyle.None;
             if (startHttpRow != null)
             {
                 startHttpRow.style.display = useHttp ? DisplayStyle.Flex : DisplayStyle.None;
             }
-            
+
             // Show Unity Socket Port only in stdio mode (HTTP uses the same URL/port as MCP client)
             unitySocketPortRow.style.display = useHttp ? DisplayStyle.None : DisplayStyle.Flex;
 
