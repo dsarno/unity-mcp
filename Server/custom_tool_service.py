@@ -9,8 +9,11 @@ from starlette.responses import JSONResponse
 
 from registry import mcp_for_unity_tool
 from telemetry_decorator import telemetry_tool
-from tools import get_unity_instance_from_context, send_with_unity_instance
-from unity_connection import send_command_with_retry
+from tools import (
+    get_unity_instance_from_context,
+    async_send_with_unity_instance,
+)
+from unity_connection import async_send_command_with_retry
 
 logger = logging.getLogger("mcp-for-unity-server")
 
@@ -139,11 +142,11 @@ class CustomToolService:
         tool_name = definition.name
 
         @mcp_for_unity_tool(name=tool_name, description=definition.description)
-        def dynamic_tool(ctx: Context, **kwargs):
+        async def dynamic_tool(ctx: Context, **kwargs):
             unity_instance = get_unity_instance_from_context(ctx)
             params = {k: v for k, v in kwargs.items() if v is not None}
-            response = send_with_unity_instance(
-                send_command_with_retry, unity_instance, tool_name, params
+            response = await async_send_with_unity_instance(
+                async_send_command_with_retry, unity_instance, tool_name, params
             )
             if isinstance(response, dict):
                 return response
