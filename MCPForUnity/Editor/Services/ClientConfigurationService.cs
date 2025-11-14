@@ -7,6 +7,7 @@ using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Models;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -119,21 +120,35 @@ namespace MCPForUnity.Editor.Services
                 string configJson = File.ReadAllText(configPath);
                 // Check configuration based on client type
                 string[] args = null;
+                string configuredUrl = null;
                 bool configExists = false;
 
                 switch (client.mcpType)
                 {
                     case McpTypes.VSCode:
-                        dynamic vsConfig = JsonConvert.DeserializeObject(configJson);
-                        if (vsConfig?.servers?.unityMCP != null)
+                        var vsConfig = JsonConvert.DeserializeObject<JToken>(configJson) as JObject;
+                        if (vsConfig != null)
                         {
-                            args = vsConfig.servers.unityMCP.args.ToObject<string[]>();
-                            configExists = true;
-                        }
-                        else if (vsConfig?.mcp?.servers?.unityMCP != null)
-                        {
-                            args = vsConfig.mcp.servers.unityMCP.args.ToObject<string[]>();
-                            configExists = true;
+                            var unityToken =
+                                vsConfig["servers"]?["unityMCP"]
+                                ?? vsConfig["mcp"]?["servers"]?["unityMCP"];
+
+                            if (unityToken is JObject unityObj)
+                            {
+                                configExists = true;
+
+                                var argsToken = unityObj["args"];
+                                if (argsToken is JArray)
+                                {
+                                    args = argsToken.ToObject<string[]>();
+                                }
+
+                                var urlToken = unityObj["url"] ?? unityObj["serverUrl"];
+                                if (urlToken != null && urlToken.Type != JTokenType.Null)
+                                {
+                                    configuredUrl = urlToken.ToString();
+                                }
+                            }
                         }
                         break;
 
@@ -157,10 +172,20 @@ namespace MCPForUnity.Editor.Services
 
                 if (configExists)
                 {
-                    string expectedUvxUrl = AssetPathUtility.GetMcpServerGitUrl();
-                    string configuredUvxUrl = McpConfigurationHelper.ExtractUvxUrl(args);
-                    bool matches = !string.IsNullOrEmpty(configuredUvxUrl) &&
-                                   McpConfigurationHelper.PathsEqual(configuredUvxUrl, expectedUvxUrl);
+                    bool matches = false;
+
+                    if (args != null && args.Length > 0)
+                    {
+                        string expectedUvxUrl = AssetPathUtility.GetMcpServerGitUrl();
+                        string configuredUvxUrl = McpConfigurationHelper.ExtractUvxUrl(args);
+                        matches = !string.IsNullOrEmpty(configuredUvxUrl) &&
+                                  McpConfigurationHelper.PathsEqual(configuredUvxUrl, expectedUvxUrl);
+                    }
+                    else if (!string.IsNullOrEmpty(configuredUrl))
+                    {
+                        string expectedUrl = HttpEndpointUtility.GetMcpRpcUrl();
+                        matches = UrlsEqual(configuredUrl, expectedUrl);
+                    }
 
                     if (matches)
                     {
@@ -180,7 +205,10 @@ namespace MCPForUnity.Editor.Services
                                 bool debugLogsEnabled = EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false);
                                 if (debugLogsEnabled)
                                 {
-                                    McpLog.Info($"Auto-updated MCP config for '{client.name}' to new version: {expectedUvxUrl}", always: false);
+                                    string targetDescriptor = args != null && args.Length > 0
+                                        ? AssetPathUtility.GetMcpServerGitUrl()
+                                        : HttpEndpointUtility.GetMcpRpcUrl();
+                                    McpLog.Info($"Auto-updated MCP config for '{client.name}' to new version: {targetDescriptor}", always: false);
                                 }
                                 client.SetStatus(McpStatus.Configured);
                             }
@@ -483,6 +511,29 @@ namespace MCPForUnity.Editor.Services
             {
                 client.SetStatus(McpStatus.Error, ex.Message);
             }
+        }
+
+        private static bool UrlsEqual(string a, string b)
+        {
+            if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b))
+            {
+                return false;
+            }
+
+            if (Uri.TryCreate(a.Trim(), UriKind.Absolute, out var uriA) &&
+                Uri.TryCreate(b.Trim(), UriKind.Absolute, out var uriB))
+            {
+                return Uri.Compare(
+                           uriA,
+                           uriB,
+                           UriComponents.HttpRequestUrl,
+                           UriFormat.SafeUnescaped,
+                           StringComparison.OrdinalIgnoreCase) == 0;
+            }
+
+            string Normalize(string value) => value.Trim().TrimEnd('/');
+
+            return string.Equals(Normalize(a), Normalize(b), StringComparison.OrdinalIgnoreCase);
         }
     }
 }
