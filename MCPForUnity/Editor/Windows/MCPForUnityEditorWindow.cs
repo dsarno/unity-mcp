@@ -324,11 +324,13 @@ namespace MCPForUnity.Editor.Windows
                 UpdateManualConfiguration(); // Refresh config display
             });
             
-            unityPortField.RegisterValueChangedCallback(evt =>
+            unityPortField.RegisterCallback<FocusOutEvent>(_ => PersistUnityPortFromField());
+            unityPortField.RegisterCallback<KeyDownEvent>(evt =>
             {
-                if (int.TryParse(evt.newValue, out int port))
+                if (evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter)
                 {
-                    EditorPrefs.SetInt(EditorPrefKeys.UnitySocketPort, port);
+                    PersistUnityPortFromField();
+                    evt.StopPropagation();
                 }
             });
 
@@ -532,6 +534,33 @@ namespace MCPForUnity.Editor.Windows
             // Get installation steps
             string steps = MCPServiceLocator.Client.GetInstallationSteps(client);
             installationStepsLabel.text = steps;
+        }
+
+        private void PersistUnityPortFromField()
+        {
+            if (unityPortField == null)
+            {
+                return;
+            }
+
+            string input = unityPortField.text?.Trim();
+            if (!int.TryParse(input, out int requestedPort) || requestedPort <= 0)
+            {
+                unityPortField.value = MCPServiceLocator.Bridge.CurrentPort.ToString();
+                return;
+            }
+
+            try
+            {
+                int storedPort = PortManager.SetPreferredPort(requestedPort);
+                EditorPrefs.SetInt(EditorPrefKeys.UnitySocketPort, storedPort);
+                unityPortField.value = storedPort.ToString();
+            }
+            catch (Exception ex)
+            {
+                McpLog.Warn($"Failed to persist Unity socket port: {ex.Message}");
+                unityPortField.value = MCPServiceLocator.Bridge.CurrentPort.ToString();
+            }
         }
 
         private void UpdateClaudeCliPathVisibility()
