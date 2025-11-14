@@ -68,28 +68,30 @@ namespace MCPForUnity.Editor.Services
 
         public bool IsAutoConnectMode => StdioBridgeHost.IsAutoConnectMode();
 
-        public void Start()
+        public async Task<bool> StartAsync()
         {
             var mode = ResolvePreferredMode();
             try
             {
-                bool started = _transportManager.StartAsync(mode).GetAwaiter().GetResult();
+                bool started = await _transportManager.StartAsync(mode);
                 if (!started)
                 {
                     McpLog.Warn($"Failed to start MCP transport: {mode}");
                 }
+                return started;
             }
             catch (Exception ex)
             {
                 McpLog.Error($"Error starting MCP transport {mode}: {ex.Message}");
+                return false;
             }
         }
 
-        public void Stop()
+        public async Task StopAsync()
         {
             try
             {
-                _transportManager.StopAsync().GetAwaiter().GetResult();
+                await _transportManager.StopAsync();
             }
             catch (Exception ex)
             {

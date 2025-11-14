@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.UIElements; // For Unity 2021 compatibility
 using UnityEngine;
@@ -69,6 +70,7 @@ namespace MCPForUnity.Editor.Windows
         private TextField configJsonField;
         private Button copyJsonButton;
         private Label installationStepsLabel;
+        private bool connectionToggleInProgress;
 
         // Data
         private readonly McpClients mcpClients = new();
@@ -649,29 +651,49 @@ namespace MCPForUnity.Editor.Windows
         }
 
         // Button callbacks
-        private void OnConnectionToggleClicked()
+        private async void OnConnectionToggleClicked()
         {
-            var bridgeService = MCPServiceLocator.Bridge;
-
-            if (bridgeService.IsRunning)
+            if (connectionToggleInProgress)
             {
-                bridgeService.Stop();
+                return;
             }
-            else
-            {
-                bridgeService.Start();
 
-                // Verify connection after starting (Option C: verify on connect)
-                EditorApplication.delayCall += async () =>
+            var bridgeService = MCPServiceLocator.Bridge;
+            connectionToggleInProgress = true;
+            connectionToggleButton?.SetEnabled(false);
+
+            try
+            {
+                if (bridgeService.IsRunning)
                 {
-                    if (bridgeService.IsRunning)
+                    await bridgeService.StopAsync();
+                }
+                else
+                {
+                    bool started = await bridgeService.StartAsync();
+                    if (started)
                     {
                         await VerifyBridgeConnectionAsync();
                     }
-                };
+                    else
+                    {
+                        McpLog.Warn("Failed to start MCP bridge");
+                    }
+                }
             }
-
-            UpdateConnectionStatus();
+            catch (Exception ex)
+            {
+                McpLog.Error($"Connection toggle failed: {ex.Message}");
+                EditorUtility.DisplayDialog("Connection Error",
+                    $"Failed to toggle the MCP connection:\n\n{ex.Message}",
+                    "OK");
+            }
+            finally
+            {
+                connectionToggleInProgress = false;
+                connectionToggleButton?.SetEnabled(true);
+                UpdateConnectionStatus();
+            }
         }
 
         private async void OnTestConnectionClicked()
@@ -679,7 +701,7 @@ namespace MCPForUnity.Editor.Windows
             await VerifyBridgeConnectionAsync();
         }
 
-        private async System.Threading.Tasks.Task VerifyBridgeConnectionAsync()
+        private async Task VerifyBridgeConnectionAsync()
         {
             var bridgeService = MCPServiceLocator.Bridge;
 

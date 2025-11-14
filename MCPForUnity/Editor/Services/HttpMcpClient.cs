@@ -84,7 +84,7 @@ namespace MCPForUnity.Editor.Services
                     request.Headers.Add("Mcp-Session-Id", _sessionId);
                 }
 
-                var response = await _httpClient.SendAsync(request);
+                var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
                 string responseText = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
@@ -153,7 +153,7 @@ namespace MCPForUnity.Editor.Services
                     request.Headers.Add("Mcp-Session-Id", _sessionId);
                 }
 
-                var response = await _httpClient.SendAsync(request);
+                var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -192,7 +192,7 @@ namespace MCPForUnity.Editor.Services
                 request.Headers.Add("Mcp-Session-Id", _sessionId);
                 request.Headers.Add("MCP-Protocol-Version", "2024-11-05");
 
-                var response = await _httpClient.SendAsync(request);
+                var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
 
                 if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
                 {
@@ -255,7 +255,7 @@ namespace MCPForUnity.Editor.Services
                     request.Headers.Add("Mcp-Session-Id", _sessionId);
                 }
 
-                var response = await _httpClient.SendAsync(request);
+                var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
                 string responseText = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)

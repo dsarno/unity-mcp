@@ -23,14 +23,15 @@ namespace MCPForUnity.Editor.Services
         bool IsAutoConnectMode { get; }
 
         /// <summary>
-        /// Starts the MCP for Unity Bridge
+        /// Starts the MCP for Unity Bridge asynchronously
         /// </summary>
-        void Start();
+        /// <returns>True if the bridge started successfully</returns>
+        Task<bool> StartAsync();
 
         /// <summary>
-        /// Stops the MCP for Unity Bridge
+        /// Stops the MCP for Unity Bridge asynchronously
         /// </summary>
-        void Stop();
+        Task StopAsync();
 
         /// <summary>
         /// Verifies the bridge connection by sending a ping and waiting for a pong response
