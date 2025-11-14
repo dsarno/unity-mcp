@@ -15,11 +15,14 @@ from plugin_hub import PluginHub
 # with it to set or clear the active unity instance.
 _unity_instance_middleware = None
 
+
 def get_unity_instance_middleware() -> 'UnityInstanceMiddleware':
     """Get the global Unity instance middleware."""
     if _unity_instance_middleware is None:
-        raise RuntimeError("UnityInstanceMiddleware not initialized. Call set_unity_instance_middleware first.")
+        raise RuntimeError(
+            "UnityInstanceMiddleware not initialized. Call set_unity_instance_middleware first.")
     return _unity_instance_middleware
+
 
 def set_unity_instance_middleware(middleware: 'UnityInstanceMiddleware') -> None:
     """Set the global Unity instance middleware (called during server initialization)."""

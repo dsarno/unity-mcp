@@ -20,10 +20,16 @@ os.environ.setdefault("MCP_DISABLE_TELEMETRY", "true")
 
 # Stub telemetry modules to avoid file I/O during import of tools package
 telemetry = types.ModuleType("telemetry")
+
+
 def _noop(*args, **kwargs):
     pass
+
+
 class MilestoneType:
     pass
+
+
 telemetry.record_resource_usage = _noop
 telemetry.record_tool_usage = _noop
 telemetry.record_milestone = _noop
@@ -48,19 +54,24 @@ sys.modules.setdefault("telemetry_decorator", telemetry_decorator)
 # Stub fastmcp module (not mcp.server.fastmcp)
 fastmcp = types.ModuleType("fastmcp")
 
+
 class _DummyFastMCP:
     pass
 
+
 class _DummyContext:
     pass
+
 
 class _DummyMiddleware:
     """Base middleware class stub."""
     pass
 
+
 class _DummyMiddlewareContext:
     """Middleware context stub."""
     pass
+
 
 fastmcp.FastMCP = _DummyFastMCP
 fastmcp.Context = _DummyContext

@@ -99,7 +99,8 @@ def send_with_unity_instance(
         if params is None:
             params = {}
         if not isinstance(params, dict):
-            raise TypeError("Command parameters must be a dict for HTTP transport")
+            raise TypeError(
+                "Command parameters must be a dict for HTTP transport")
         return send_command_to_plugin(
             unity_instance=unity_instance,
             command_type=command_type,
@@ -127,7 +128,8 @@ async def async_send_with_unity_instance(
         if params is None:
             params = {}
         if not isinstance(params, dict):
-            raise TypeError("Command parameters must be a dict for HTTP transport")
+            raise TypeError(
+                "Command parameters must be a dict for HTTP transport")
         return await PluginHub.send_command_for_instance(
             unity_instance,
             command_type,
