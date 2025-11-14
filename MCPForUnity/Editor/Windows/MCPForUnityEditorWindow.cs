@@ -342,6 +342,10 @@ namespace MCPForUnity.Editor.Windows
             // Advanced settings callbacks
             browseUvxButton.clicked += OnBrowseUvxClicked;
             clearUvxButton.clicked += OnClearUvxClicked;
+            if (clearUvxCacheButton != null)
+            {
+                clearUvxCacheButton.clicked += OnClearUvxCacheClicked;
+            }
 
             // Git URL override callbacks
             gitUrlOverride.RegisterValueChangedCallback(evt =>
