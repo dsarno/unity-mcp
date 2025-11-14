@@ -9,10 +9,8 @@ from starlette.responses import JSONResponse
 
 from registry import mcp_for_unity_tool
 from telemetry_decorator import telemetry_tool
-from tools import (
-    get_unity_instance_from_context,
-    async_send_with_unity_instance,
-)
+from tools import get_unity_instance_from_context
+from unity_transport import async_send_with_unity_instance
 from unity_connection import async_send_command_with_retry
 
 logger = logging.getLogger("mcp-for-unity-server")
