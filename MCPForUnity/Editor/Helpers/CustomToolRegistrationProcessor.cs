@@ -3,6 +3,7 @@ using UnityEditor.Callbacks;
 using UnityEngine;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Services;
+using MCPForUnity.Editor.Services.Transport;
 using MCPForUnity.Editor.Constants;
 
 namespace MCPForUnity.Editor.Helpers
@@ -41,6 +42,23 @@ namespace MCPForUnity.Editor.Helpers
             if (!_isRegistrationEnabled)
             {
                 McpLog.Info("Custom tool registration is disabled");
+                return;
+            }
+
+            var transportManager = MCPServiceLocator.TransportManager;
+            var activeMode = transportManager.ActiveMode;
+            bool isHttpMode = activeMode == TransportMode.Http || activeMode == TransportMode.HttpPush;
+
+            if (!isHttpMode)
+            {
+                McpLog.Info("Skipping custom tool registration: HTTP transport is not active");
+                return;
+            }
+
+            var transportState = transportManager.GetState();
+            if (!transportState.IsConnected)
+            {
+                McpLog.Info("Skipping custom tool registration: MCP transport not connected");
                 return;
             }
 
