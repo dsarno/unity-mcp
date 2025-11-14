@@ -51,7 +51,7 @@ namespace MCPForUnity.Editor.Helpers
 
                 // Fallback to AssetDatabase for Asset Store installs (Assets/MCPForUnity)
                 string[] guids = AssetDatabase.FindAssets($"t:Script {nameof(AssetPathUtility)}");
-                
+
                 if (guids.Length == 0)
                 {
                     McpLog.Warn("Could not find AssetPathUtility script in AssetDatabase");
@@ -59,11 +59,11 @@ namespace MCPForUnity.Editor.Helpers
                 }
 
                 string scriptPath = AssetDatabase.GUIDToAssetPath(guids[0]);
-                
+
                 // Script is at: {packageRoot}/Editor/Helpers/AssetPathUtility.cs
                 // Extract {packageRoot}
                 int editorIndex = scriptPath.IndexOf("/Editor/", StringComparison.Ordinal);
-                
+
                 if (editorIndex >= 0)
                 {
                     return scriptPath.Substring(0, editorIndex);
@@ -148,7 +148,7 @@ namespace MCPForUnity.Editor.Helpers
             {
                 return "uvx";
             }
-            
+
             return $"uvx --from git+https://github.com/CoplayDev/unity-mcp@v{version}#subdirectory=Server";
         }
 
@@ -165,14 +165,14 @@ namespace MCPForUnity.Editor.Helpers
             {
                 return gitUrlOverride;
             }
-            
+
             // Fall back to default package version
             string version = GetPackageVersion();
             if (version == "unknown")
             {
                 return "";
             }
-            
+
             return $"git+https://github.com/CoplayDev/unity-mcp@v{version}#subdirectory=Server";
         }
 
@@ -185,7 +185,7 @@ namespace MCPForUnity.Editor.Helpers
             string uvxPath = MCPServiceLocator.Paths.GetUvxPath() ?? "uvx";
             string fromUrl = GetMcpServerGitUrl();
             string packageName = "mcp-for-unity";
-            
+
             return (uvxPath, fromUrl, packageName);
         }
 

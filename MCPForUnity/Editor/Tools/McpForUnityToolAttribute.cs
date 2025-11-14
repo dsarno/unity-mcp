@@ -12,12 +12,12 @@ namespace MCPForUnity.Editor.Tools
         /// Tool name (if null, derived from class name)
         /// </summary>
         public string Name { get; set; }
-        
+
         /// <summary>
         /// Tool description for LLM
         /// </summary>
         public string Description { get; set; }
-        
+
         /// <summary>
         /// Whether this tool returns structured output
         /// </summary>
@@ -29,14 +29,14 @@ namespace MCPForUnity.Editor.Tools
         /// for legacy/built-in tools that already exist server-side.
         /// </summary>
         public bool AutoRegister { get; set; } = true;
-        
+
         /// <summary>
         /// The command name used to route requests to this tool.
         /// If not specified, defaults to the PascalCase class name converted to snake_case.
         /// Kept for backward compatibility.
         /// </summary>
-        public string CommandName 
-        { 
+        public string CommandName
+        {
             get => Name;
             set => Name = value;
         }
@@ -60,7 +60,7 @@ namespace MCPForUnity.Editor.Tools
             Name = name;
         }
     }
-    
+
     /// <summary>
     /// Describes a tool parameter
     /// </summary>
@@ -71,22 +71,22 @@ namespace MCPForUnity.Editor.Tools
         /// Parameter name (if null, derived from property/field name)
         /// </summary>
         public string Name { get; }
-        
+
         /// <summary>
         /// Parameter description for LLM
         /// </summary>
         public string Description { get; set; }
-        
+
         /// <summary>
         /// Whether this parameter is required
         /// </summary>
         public bool Required { get; set; } = true;
-        
+
         /// <summary>
         /// Default value (as string)
         /// </summary>
         public string DefaultValue { get; set; }
-        
+
         public ToolParameterAttribute(string description)
         {
             Description = description;

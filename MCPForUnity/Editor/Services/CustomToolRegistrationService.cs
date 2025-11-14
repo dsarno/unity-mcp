@@ -16,25 +16,25 @@ namespace MCPForUnity.Editor.Services
     {
         private static readonly HttpClient HttpClient = new HttpClient();
         private readonly IToolDiscoveryService _discoveryService;
-        
+
         public CustomToolRegistrationService(IToolDiscoveryService discoveryService = null)
         {
             _discoveryService = discoveryService ?? new ToolDiscoveryService();
         }
-        
+
         public async Task<bool> RegisterAllToolsAsync(string projectId = null)
         {
             try
             {
                 projectId ??= GetProjectId();
-                
+
                 var tools = _discoveryService.DiscoverAllTools();
                 if (tools.Count == 0)
                 {
                     McpLog.Info("No tools found, skipping registration");
                     return true;
                 }
-                
+
                 var candidates = tools.Where(t => t.AutoRegister).ToList();
                 if (candidates.Count == 0)
                 {
@@ -45,13 +45,13 @@ namespace MCPForUnity.Editor.Services
                 var request = BuildRegisterRequest(projectId, candidates);
                 string endpoint = HttpEndpointUtility.GetRegisterToolsUrl();
                 var response = await SendRegistrationAsync(endpoint, request);
-                
+
                 if (response.success)
                 {
                     McpLog.Info($"Successfully registered {response.registered?.Count ?? 0} tools with MCP server");
                     return true;
                 }
-                
+
                 McpLog.Error($"Failed to register tools: {response.error ?? "Unknown error"}");
                 return false;
             }
@@ -61,7 +61,7 @@ namespace MCPForUnity.Editor.Services
                 return false;
             }
         }
-        
+
         private RegisterToolsRequest BuildRegisterRequest(string projectId, List<ToolMetadata> tools)
         {
             return new RegisterToolsRequest
@@ -83,7 +83,7 @@ namespace MCPForUnity.Editor.Services
                 }).ToList()
             };
         }
-        
+
         private async Task<RegisterToolsResponse> SendRegistrationAsync(string endpoint, RegisterToolsRequest request)
         {
             try
@@ -134,27 +134,27 @@ namespace MCPForUnity.Editor.Services
                 return new RegisterToolsResponse { success = false, error = ex.Message };
             }
         }
-        
+
         private string GetProjectId()
         {
             string projectName = Application.productName;
             string projectPath = Application.dataPath;
             string combined = $"{projectName}:{projectPath}";
-            
+
             using (var sha256 = System.Security.Cryptography.SHA256.Create())
             {
                 byte[] hash = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(combined));
                 return BitConverter.ToString(hash).Replace("-", "").Substring(0, 16);
             }
         }
-        
+
         [Serializable]
         private class RegisterToolsRequest
         {
             public string project_id;
             public List<ToolDefinition> tools;
         }
-        
+
         [Serializable]
         private class ToolDefinition
         {
@@ -163,7 +163,7 @@ namespace MCPForUnity.Editor.Services
             public bool structured_output;
             public List<ParameterDefinition> parameters;
         }
-        
+
         [Serializable]
         private class ParameterDefinition
         {
@@ -173,7 +173,7 @@ namespace MCPForUnity.Editor.Services
             public bool required;
             public string default_value;
         }
-        
+
         private class RegisterToolsResponse
         {
             public bool success;

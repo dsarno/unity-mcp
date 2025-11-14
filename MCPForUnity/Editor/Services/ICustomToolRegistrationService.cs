@@ -12,6 +12,6 @@ namespace MCPForUnity.Editor.Services
         /// </summary>
         /// <param name="projectId">Optional pre-captured project ID (for thread safety)</param>
         Task<bool> RegisterAllToolsAsync(string projectId = null);
-        
+
     }
 }

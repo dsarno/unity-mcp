@@ -56,7 +56,7 @@ namespace MCPForUnity.Editor.Helpers
             // Get transport preference (default to HTTP)
             bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
             bool isWindsurf = client?.mcpType == McpTypes.Windsurf;
-            
+
             if (useHttpTransport)
             {
                 // HTTP mode: Use URL, no command
@@ -70,11 +70,11 @@ namespace MCPForUnity.Editor.Helpers
                 {
                     unity.Remove(staleProperty);
                 }
-                
+
                 // Remove command/args if they exist from previous config
                 if (unity["command"] != null) unity.Remove("command");
                 if (unity["args"] != null) unity.Remove("args");
-                
+
                 if (isVSCode)
                 {
                     unity["type"] = "http";
@@ -84,31 +84,31 @@ namespace MCPForUnity.Editor.Helpers
             {
                 // Stdio mode: Use uvx command
                 var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
-                
+
                 unity["command"] = uvxPath;
-                
+
                 var args = new List<string> { packageName };
                 if (!string.IsNullOrEmpty(fromUrl))
                 {
                     args.Insert(0, fromUrl);
                     args.Insert(0, "--from");
                 }
-                
+
                 args.Add("--transport");
                 args.Add("stdio");
-                
+
                 unity["args"] = JArray.FromObject(args.ToArray());
-                
+
                 // Remove url/serverUrl if they exist from previous config
                 if (unity["url"] != null) unity.Remove("url");
                 if (unity["serverUrl"] != null) unity.Remove("serverUrl");
-                
+
                 if (isVSCode)
                 {
                     unity["type"] = "stdio";
                 }
             }
-            
+
             // Remove type for non-VSCode clients
             if (!isVSCode && unity["type"] != null)
             {

@@ -21,10 +21,10 @@ namespace MCPForUnity.Editor.Helpers
 
             // Use structured uvx command parts for proper TOML formatting
             var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
-            
+
             var unityMCP = new TomlTable();
             unityMCP["command"] = uvxPath;
-            
+
             var args = new TomlArray();
             if (!string.IsNullOrEmpty(fromUrl))
             {
@@ -32,7 +32,7 @@ namespace MCPForUnity.Editor.Helpers
                 args.Add(new TomlString { Value = fromUrl });
             }
             args.Add(new TomlString { Value = packageName });
-            
+
             unityMCP["args"] = args;
 
             // Add Windows-specific environment configuration, see: https://github.com/CoplayDev/unity-mcp/issues/315
@@ -131,7 +131,7 @@ namespace MCPForUnity.Editor.Helpers
         private static TomlTable CreateUnityMcpTable(string uvPath)
         {
             var unityMCP = new TomlTable();
-            
+
             // Use structured uvx command parts for proper TOML formatting
             var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
             unityMCP["command"] = new TomlString { Value = uvxPath };

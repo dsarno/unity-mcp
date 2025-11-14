@@ -30,6 +30,6 @@ namespace MCPForUnity.Editor
         {
             MCPForUnityEditorWindow.ShowWindow();
         }
-        
+
     }
 }

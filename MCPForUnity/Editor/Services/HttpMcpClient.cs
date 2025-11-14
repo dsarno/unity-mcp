@@ -69,7 +69,7 @@ namespace MCPForUnity.Editor.Services
 
                 string jsonContent = JsonConvert.SerializeObject(initRequest);
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-                
+
                 // Add required headers
                 var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl)
                 {
@@ -77,7 +77,7 @@ namespace MCPForUnity.Editor.Services
                 };
                 request.Headers.Add("Accept", "application/json, text/event-stream");
                 request.Headers.Add("MCP-Protocol-Version", "2024-11-05");
-                
+
                 // Add session ID if we have one
                 if (!string.IsNullOrEmpty(_sessionId))
                 {
@@ -99,7 +99,7 @@ namespace MCPForUnity.Editor.Services
                     {
                         McpLog.Info("MCP session initialized (no session ID provided by server)");
                     }
-                    
+
                     _isConnected = true;
                     return true;
                 }
@@ -140,21 +140,21 @@ namespace MCPForUnity.Editor.Services
 
                 string jsonContent = JsonConvert.SerializeObject(pingRequest);
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-                
+
                 var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl)
                 {
                     Content = content
                 };
                 request.Headers.Add("Accept", "application/json, text/event-stream");
                 request.Headers.Add("MCP-Protocol-Version", "2024-11-05");
-                
+
                 if (!string.IsNullOrEmpty(_sessionId))
                 {
                     request.Headers.Add("Mcp-Session-Id", _sessionId);
                 }
 
                 var response = await _httpClient.SendAsync(request);
-                
+
                 if (response.IsSuccessStatusCode)
                 {
                     McpLog.Info("MCP ping successful");
@@ -193,7 +193,7 @@ namespace MCPForUnity.Editor.Services
                 request.Headers.Add("MCP-Protocol-Version", "2024-11-05");
 
                 var response = await _httpClient.SendAsync(request);
-                
+
                 if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
                 {
                     // 405 means server doesn't support explicit session termination, which is fine
@@ -241,7 +241,7 @@ namespace MCPForUnity.Editor.Services
 
                 string jsonContent = JsonConvert.SerializeObject(mcpRequest);
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-                
+
                 // Create request with proper MCP headers
                 var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl)
                 {
@@ -249,7 +249,7 @@ namespace MCPForUnity.Editor.Services
                 };
                 request.Headers.Add("Accept", "application/json, text/event-stream");
                 request.Headers.Add("MCP-Protocol-Version", "2024-11-05");
-                
+
                 if (!string.IsNullOrEmpty(_sessionId))
                 {
                     request.Headers.Add("Mcp-Session-Id", _sessionId);
@@ -262,7 +262,7 @@ namespace MCPForUnity.Editor.Services
                 {
                     // Parse JSON-RPC response
                     var jsonResponse = JObject.Parse(responseText);
-                    
+
                     // Check for JSON-RPC error
                     if (jsonResponse["error"] != null)
                     {
@@ -273,7 +273,7 @@ namespace MCPForUnity.Editor.Services
                             ["error"] = jsonResponse["error"].ToString()
                         };
                     }
-                    
+
                     // Return the result
                     return jsonResponse["result"] as JObject ?? jsonResponse;
                 }

@@ -15,7 +15,7 @@ namespace MCPForUnity.Editor.Services
         public string Namespace { get; set; }
         public bool AutoRegister { get; set; } = true;
     }
-    
+
     /// <summary>
     /// Metadata for a tool parameter
     /// </summary>
@@ -27,7 +27,7 @@ namespace MCPForUnity.Editor.Services
         public bool Required { get; set; }
         public string DefaultValue { get; set; }
     }
-    
+
     /// <summary>
     /// Service for discovering MCP tools via reflection
     /// </summary>
@@ -37,12 +37,12 @@ namespace MCPForUnity.Editor.Services
         /// Discovers all tools marked with [McpForUnityTool]
         /// </summary>
         List<ToolMetadata> DiscoverAllTools();
-        
+
         /// <summary>
         /// Gets metadata for a specific tool
         /// </summary>
         ToolMetadata GetToolMetadata(string toolName);
-        
+
         /// <summary>
         /// Invalidates the tool discovery cache
         /// </summary>

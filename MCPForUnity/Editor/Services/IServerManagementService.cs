@@ -10,13 +10,13 @@ namespace MCPForUnity.Editor.Services
         /// </summary>
         /// <returns>True if server was started successfully, false otherwise</returns>
         bool StartLocalHttpServer();
-        
+
         /// <summary>
         /// Check if the configured HTTP URL is a local address
         /// </summary>
         /// <returns>True if URL is local (localhost, 127.0.0.1, etc.)</returns>
         bool IsLocalUrl();
-        
+
         /// <summary>
         /// Check if the local HTTP server can be started
         /// </summary>

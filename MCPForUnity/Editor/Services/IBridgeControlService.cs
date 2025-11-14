@@ -11,46 +11,46 @@ namespace MCPForUnity.Editor.Services
         /// Gets whether the bridge is currently running
         /// </summary>
         bool IsRunning { get; }
-        
+
         /// <summary>
         /// Gets the current port the bridge is listening on
         /// </summary>
         int CurrentPort { get; }
-        
+
         /// <summary>
         /// Gets whether the bridge is in auto-connect mode
         /// </summary>
         bool IsAutoConnectMode { get; }
-        
+
         /// <summary>
         /// Starts the MCP for Unity Bridge
         /// </summary>
         void Start();
-        
+
         /// <summary>
         /// Stops the MCP for Unity Bridge
         /// </summary>
         void Stop();
-        
+
         /// <summary>
         /// Verifies the bridge connection by sending a ping and waiting for a pong response
         /// </summary>
         /// <param name="port">The port to verify</param>
         /// <returns>Verification result with detailed status</returns>
         BridgeVerificationResult Verify(int port);
-        
+
         /// <summary>
         /// Verifies the connection asynchronously (works for both HTTP and stdio transports)
         /// </summary>
         /// <returns>Verification result with detailed status</returns>
         Task<BridgeVerificationResult> VerifyAsync();
-        
+
         /// <summary>
         /// Gets the HTTP client instance (null if not in HTTP mode)
         /// </summary>
         HttpMcpClient GetHttpClient();
     }
-    
+
     /// <summary>
     /// Result of a bridge verification attempt
     /// </summary>
@@ -60,17 +60,17 @@ namespace MCPForUnity.Editor.Services
         /// Whether the verification was successful
         /// </summary>
         public bool Success { get; set; }
-        
+
         /// <summary>
         /// Human-readable message about the verification result
         /// </summary>
         public string Message { get; set; }
-        
+
         /// <summary>
         /// Whether the handshake was valid (FRAMING=1 protocol)
         /// </summary>
         public bool HandshakeValid { get; set; }
-        
+
         /// <summary>
         /// Whether the ping/pong exchange succeeded
         /// </summary>

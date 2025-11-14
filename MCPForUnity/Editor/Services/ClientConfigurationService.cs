@@ -23,7 +23,7 @@ namespace MCPForUnity.Editor.Services
         {
             var pathService = MCPServiceLocator.Paths;
             string uvxPath = pathService.GetUvxPath();
-            
+
             string configPath = McpConfigurationHelper.GetClientConfigPath(client);
             McpConfigurationHelper.EnsureConfigDirectoryExists(configPath);
 
@@ -223,7 +223,7 @@ namespace MCPForUnity.Editor.Services
 
             // Use structured uvx command parts for proper quoting
             var (uvxPath, gitUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
-            
+
             string args = $"mcp add UnityMCP -- \"{uvxPath}\" --from \"{gitUrl}\" {packageName}";
             string projectDir = Path.GetDirectoryName(Application.dataPath);
 
