@@ -43,6 +43,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         private Uri _endpointUri;
         private string _sessionId;
         private TimeSpan _keepAliveInterval = DefaultKeepAliveInterval;
+        private TimeSpan _socketKeepAliveInterval = DefaultKeepAliveInterval;
         private volatile bool _isConnected;
         private volatile bool _isReconnecting;
         private TransportState _state = TransportState.Disconnected(TransportDisplayName, "Transport not started");
@@ -160,13 +161,8 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         private async Task<bool> EstablishConnectionAsync(CancellationToken token)
         {
             _socket?.Dispose();
-            _socket = new ClientWebSocket
-            {
-                Options =
-                {
-                    KeepAliveInterval = _keepAliveInterval
-                }
-            };
+            _socket = new ClientWebSocket();
+            _socket.Options.KeepAliveInterval = _socketKeepAliveInterval;
 
             try
             {
@@ -308,12 +304,15 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
             if (keepAliveSeconds.HasValue && keepAliveSeconds.Value > 0)
             {
                 _keepAliveInterval = TimeSpan.FromSeconds(keepAliveSeconds.Value);
+                _socketKeepAliveInterval = _keepAliveInterval;
             }
 
             int? serverTimeoutSeconds = payload.Value<int?>("serverTimeout");
             if (serverTimeoutSeconds.HasValue)
             {
-                _socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(Math.Min(serverTimeoutSeconds.Value, Math.Max(keepAliveSeconds ?? serverTimeoutSeconds.Value, 5)));
+                int sourceSeconds = keepAliveSeconds ?? serverTimeoutSeconds.Value;
+                int safeSeconds = Math.Max(5, Math.Min(serverTimeoutSeconds.Value, sourceSeconds));
+                _socketKeepAliveInterval = TimeSpan.FromSeconds(safeSeconds);
             }
         }
 
