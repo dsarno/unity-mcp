@@ -3,13 +3,12 @@
     "rootNamespace": "MCPForUnity.Editor",
     "references": [
         "MCPForUnity.Runtime",
-        "GUID:560b04d1a97f54a46a2660c3cc343a6f" 
+        "GUID:560b04d1a97f54a46a2660c3cc343a6f"
     ],
     "includePlatforms": [
         "Editor"
     ],
     "excludePlatforms": [],
-    "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [
         "Newtonsoft.Json.dll"
@@ -18,4 +17,4 @@
     "defineConstraints": [],
     "versionDefines": [],
     "noEngineReferences": false
-} 
+}

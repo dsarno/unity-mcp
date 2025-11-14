@@ -16,6 +16,7 @@ using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Tools;
 using MCPForUnity.Editor.Tools.Prefabs;
+using MCPForUnity.Editor.Services.Transport;
 
 namespace MCPForUnity.Editor
 {
@@ -909,126 +910,97 @@ namespace MCPForUnity.Editor
                     string commandText = queuedCommand.CommandJson;
                     TaskCompletionSource<string> tcs = queuedCommand.Tcs;
 
-                    try
+                    if (string.IsNullOrWhiteSpace(commandText))
                     {
-                        // Special case handling
-                        if (string.IsNullOrEmpty(commandText))
-                        {
-                            var emptyResponse = new
-                            {
-                                status = "error",
-                                error = "Empty command received",
-                            };
-                            tcs.SetResult(JsonConvert.SerializeObject(emptyResponse));
-                            // Remove quickly under lock
-                            lock (lockObj) { commandQueue.Remove(id); }
-                            continue;
-                        }
-
-                        // Trim the command text to remove any whitespace
-                        commandText = commandText.Trim();
-
-                        // Non-JSON direct commands handling (like ping)
-                        if (commandText == "ping")
-                        {
-                            var pingResponse = new
-                            {
-                                status = "success",
-                                result = new { message = "pong" },
-                            };
-                            tcs.SetResult(JsonConvert.SerializeObject(pingResponse));
-                            lock (lockObj) { commandQueue.Remove(id); }
-                            continue;
-                        }
-
-                        // Check if the command is valid JSON before attempting to deserialize
-                        if (!IsValidJson(commandText))
-                        {
-                            var invalidJsonResponse = new
-                            {
-                                status = "error",
-                                error = "Invalid JSON format",
-                                receivedText = commandText.Length > 50
-                                    ? commandText[..50] + "..."
-                                    : commandText,
-                            };
-                            tcs.SetResult(JsonConvert.SerializeObject(invalidJsonResponse));
-                            lock (lockObj) { commandQueue.Remove(id); }
-                            continue;
-                        }
-
-                        // Normal JSON command processing
-                        Command command = JsonConvert.DeserializeObject<Command>(commandText);
-
-                        if (command == null)
-                        {
-                            var nullCommandResponse = new
-                            {
-                                status = "error",
-                                error = "Command deserialized to null",
-                                details = "The command was valid JSON but could not be deserialized to a Command object",
-                            };
-                            tcs.SetResult(JsonConvert.SerializeObject(nullCommandResponse));
-                        }
-                        else
-                        {
-                            // Use JObject for parameters as handlers expect this
-                            JObject paramsObject = command.@params ?? new JObject();
-
-                            // Execute command (may be sync or async)
-                            object result = CommandRegistry.ExecuteCommand(command.type, paramsObject, tcs);
-
-                            // If result is null, it means async execution - TCS will be completed by the awaited task
-                            // In this case, DON'T remove from queue yet, DON'T complete TCS
-                            if (result == null)
-                            {
-                                // Async command - the task continuation will complete the TCS
-                                // Setup cleanup when TCS completes - schedule on next frame to avoid race conditions
-                                string asyncCommandId = id;
-                                _ = tcs.Task.ContinueWith(_ =>
-                                {
-                                    // Use EditorApplication.delayCall to schedule cleanup on main thread, next frame
-                                    EditorApplication.delayCall += () =>
-                                    {
-                                        lock (lockObj)
-                                        {
-                                            commandQueue.Remove(asyncCommandId);
-                                        }
-                                    };
-                                });
-                                continue; // Skip the queue removal below
-                            }
-
-                            // Synchronous result - complete TCS now
-                            var response = new { status = "success", result };
-                            tcs.SetResult(JsonConvert.SerializeObject(response));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        McpLog.Error($"Error processing command: {ex.Message}\n{ex.StackTrace}");
-
-                        var response = new
+                        var emptyResponse = new
                         {
                             status = "error",
-                            error = ex.Message,
-                            commandType = "Unknown (error during processing)",
-                            receivedText = commandText?.Length > 50
+                            error = "Empty command received",
+                        };
+                        tcs.SetResult(JsonConvert.SerializeObject(emptyResponse));
+                        lock (lockObj) { commandQueue.Remove(id); }
+                        continue;
+                    }
+
+                    commandText = commandText.Trim();
+                    if (commandText == "ping")
+                    {
+                        var pingResponse = new
+                        {
+                            status = "success",
+                            result = new { message = "pong" },
+                        };
+                        tcs.SetResult(JsonConvert.SerializeObject(pingResponse));
+                        lock (lockObj) { commandQueue.Remove(id); }
+                        continue;
+                    }
+
+                    if (!IsValidJson(commandText))
+                    {
+                        var invalidJsonResponse = new
+                        {
+                            status = "error",
+                            error = "Invalid JSON format",
+                            receivedText = commandText.Length > 50
                                 ? commandText[..50] + "..."
                                 : commandText,
                         };
-                        string responseJson = JsonConvert.SerializeObject(response);
-                        tcs.SetResult(responseJson);
+                        tcs.SetResult(JsonConvert.SerializeObject(invalidJsonResponse));
+                        lock (lockObj) { commandQueue.Remove(id); }
+                        continue;
                     }
 
-                    // Remove from queue (only for sync commands - async ones skip with 'continue' above)
-                    lock (lockObj) { commandQueue.Remove(id); }
+                    ExecuteQueuedCommand(id, commandText, tcs);
                 }
             }
             finally
             {
                 Interlocked.Exchange(ref processingCommands, 0);
             }
+        }
+
+        private static void ExecuteQueuedCommand(string commandId, string payload, TaskCompletionSource<string> completionSource)
+        {
+            async void Runner()
+            {
+                try
+                {
+                    using var cts = new CancellationTokenSource(FrameIOTimeoutMs);
+                    string response = await TransportCommandDispatcher.ExecuteCommandJsonAsync(payload, cts.Token).ConfigureAwait(true);
+                    completionSource.TrySetResult(response);
+                }
+                catch (OperationCanceledException)
+                {
+                    var timeoutResponse = new
+                    {
+                        status = "error",
+                        error = $"Command processing timed out after {FrameIOTimeoutMs} ms",
+                    };
+                    completionSource.TrySetResult(JsonConvert.SerializeObject(timeoutResponse));
+                }
+                catch (Exception ex)
+                {
+                    McpLog.Error($"Error processing command: {ex.Message}\n{ex.StackTrace}");
+                    var response = new
+                    {
+                        status = "error",
+                        error = ex.Message,
+                        receivedText = payload?.Length > 50
+                            ? payload[..50] + "..."
+                            : payload,
+                    };
+                    completionSource.TrySetResult(JsonConvert.SerializeObject(response));
+                }
+                finally
+                {
+                    lock (lockObj)
+                    {
+                        commandQueue.Remove(commandId);
+                    }
+                }
+            }
+
+            Runner();
         }
 
         // Invoke the given function on the Unity main thread and wait up to timeoutMs for the result.
@@ -1118,99 +1090,6 @@ namespace MCPForUnity.Editor
             }
 
             return false;
-        }
-
-        private static string ExecuteCommand(Command command)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(command.type))
-                {
-                    var errorResponse = new
-                    {
-                        status = "error",
-                        error = "Command type cannot be empty",
-                        details = "A valid command type is required for processing",
-                    };
-                    return JsonConvert.SerializeObject(errorResponse);
-                }
-
-                // Handle ping command for connection verification
-                if (command.type.Equals("ping", StringComparison.OrdinalIgnoreCase))
-                {
-                    var pingResponse = new
-                    {
-                        status = "success",
-                        result = new { message = "pong" },
-                    };
-                    return JsonConvert.SerializeObject(pingResponse);
-                }
-
-                // Use JObject for parameters as the new handlers likely expect this
-                JObject paramsObject = command.@params ?? new JObject();
-                object result = CommandRegistry.GetHandler(command.type)(paramsObject);
-
-                // Standard success response format
-                var response = new { status = "success", result };
-                return JsonConvert.SerializeObject(response);
-            }
-            catch (Exception ex)
-            {
-                // Log the detailed error in Unity for debugging
-                McpLog.Error($"Error executing command '{command?.type ?? "Unknown"}': {ex.Message}\n{ex.StackTrace}");
-
-                // Standard error response format
-                var response = new
-                {
-                    status = "error",
-                    error = ex.Message, // Provide the specific error message
-                    command = command?.type ?? "Unknown", // Include the command type if available
-                    stackTrace = ex.StackTrace, // Include stack trace for detailed debugging
-                    paramsSummary = command?.@params != null
-                        ? GetParamsSummary(command.@params)
-                        : "No parameters", // Summarize parameters for context
-                };
-                return JsonConvert.SerializeObject(response);
-            }
-        }
-
-        private static object HandleManageScene(JObject paramsObject)
-        {
-            try
-            {
-                if (IsDebugEnabled()) McpLog.Info("[MCP] manage_scene: dispatching to main thread");
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                var r = InvokeOnMainThreadWithTimeout(() => ManageScene.HandleCommand(paramsObject), FrameIOTimeoutMs);
-                sw.Stop();
-                if (IsDebugEnabled()) McpLog.Info($"[MCP] manage_scene: completed in {sw.ElapsedMilliseconds} ms");
-                return r ?? Response.Error("manage_scene returned null (timeout or error)");
-            }
-            catch (Exception ex)
-            {
-                return Response.Error($"manage_scene dispatch error: {ex.Message}");
-            }
-        }
-
-        // Helper method to get a summary of parameters for error reporting
-        private static string GetParamsSummary(JObject @params)
-        {
-            try
-            {
-                return @params == null || !@params.HasValues
-                    ? "No parameters"
-                    : string.Join(
-                        ", ",
-                        @params
-                            .Properties()
-                            .Select(static p =>
-                                $"{p.Name}: {p.Value?.ToString()?[..Math.Min(20, p.Value?.ToString()?.Length ?? 0)]}"
-                            )
-                    );
-            }
-            catch
-            {
-                return "Could not summarize parameters";
-            }
         }
 
         // Heartbeat/status helpers

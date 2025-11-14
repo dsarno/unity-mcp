@@ -1,5 +1,7 @@
 using System;
 using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Services.Transport;
+using MCPForUnity.Editor.Services.Transport.Transports;
 
 namespace MCPForUnity.Editor.Services
 {
@@ -18,6 +20,7 @@ namespace MCPForUnity.Editor.Services
         private static ICustomToolRegistrationService _customToolRegistrationService;
         private static ICacheManagementService _cacheManagementService;
         private static IServerManagementService _serverManagementService;
+        private static TransportManager _transportManager;
 
         public static IBridgeControlService Bridge => _bridgeService ??= new BridgeControlService();
         public static IClientConfigurationService Client => _clientService ??= new ClientConfigurationService();
@@ -29,6 +32,7 @@ namespace MCPForUnity.Editor.Services
         public static ICustomToolRegistrationService CustomToolRegistration => _customToolRegistrationService ??= new CustomToolRegistrationService(ToolDiscovery);
         public static ICacheManagementService Cache => _cacheManagementService ??= new CacheManagementService();
         public static IServerManagementService Server => _serverManagementService ??= new ServerManagementService();
+        public static TransportManager TransportManager => _transportManager ??= new TransportManager();
 
         /// <summary>
         /// Registers a custom implementation for a service (useful for testing)
@@ -57,6 +61,8 @@ namespace MCPForUnity.Editor.Services
                 _cacheManagementService = cm;
             else if (implementation is IServerManagementService sm)
                 _serverManagementService = sm;
+            else if (implementation is TransportManager tm)
+                _transportManager = tm;
         }
 
         /// <summary>
@@ -74,6 +80,7 @@ namespace MCPForUnity.Editor.Services
             (_customToolRegistrationService as IDisposable)?.Dispose();
             (_cacheManagementService as IDisposable)?.Dispose();
             (_serverManagementService as IDisposable)?.Dispose();
+            (_transportManager as IDisposable)?.Dispose();
 
             _bridgeService = null;
             _clientService = null;
@@ -85,6 +92,7 @@ namespace MCPForUnity.Editor.Services
             _customToolRegistrationService = null;
             _cacheManagementService = null;
             _serverManagementService = null;
+            _transportManager = null;
         }
     }
 }

@@ -15,6 +15,8 @@ namespace MCPForUnity.Editor.Constants
         internal const string ClaudeCliPathOverride = "MCPForUnity.ClaudeCliPath";
 
         internal const string HttpBaseUrl = "MCPForUnity.HttpUrl";
+        internal const string WebSocketSessionId = "MCPForUnity.WebSocketSessionId";
+        internal const string WebSocketUrlOverride = "MCPForUnity.WebSocketUrl";
         internal const string GitUrlOverride = "MCPForUnity.GitUrlOverride";
 
         internal const string ServerSrc = "MCPForUnity.ServerSrc";
