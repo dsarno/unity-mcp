@@ -14,6 +14,7 @@ namespace MCPForUnity.Editor.Helpers
     public static class CustomToolRegistrationProcessor
     {
         private static bool _isRegistrationEnabled = true;
+        private static bool _autoRegistrationPending = false;
 
         static CustomToolRegistrationProcessor()
         {
@@ -94,11 +95,23 @@ namespace MCPForUnity.Editor.Helpers
             var discoveryService = MCPServiceLocator.ToolDiscovery;
             discoveryService.InvalidateCache();
 
-            // Re-register tools after a delay
-            if (_isRegistrationEnabled)
+            _autoRegistrationPending = true;
+        }
+
+        internal static void NotifyHttpConnectionHealthy()
+        {
+            if (!_isRegistrationEnabled)
             {
-                EditorApplication.delayCall += RegisterAllTools;
+                return;
             }
+
+            if (!_autoRegistrationPending)
+            {
+                return;
+            }
+
+            _autoRegistrationPending = false;
+            RegisterAllTools();
         }
 
         /// <summary>

@@ -14,6 +14,7 @@ using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Services;
 using MCPForUnity.Editor.Constants;
+using MCPForUnity.Editor.Services.Transport;
 
 namespace MCPForUnity.Editor.Windows
 {
@@ -710,7 +711,6 @@ namespace MCPForUnity.Editor.Windows
         private async Task VerifyBridgeConnectionAsync()
         {
             var bridgeService = MCPServiceLocator.Bridge;
-
             if (!bridgeService.IsRunning)
             {
                 healthStatusLabel.text = "Disconnected";
@@ -733,6 +733,12 @@ namespace MCPForUnity.Editor.Windows
                 healthStatusLabel.text = "Healthy";
                 healthIndicator.AddToClassList("healthy");
                 McpLog.Debug($"Connection verification successful: {result.Message}");
+
+                var mode = bridgeService.ActiveMode;
+                if (mode == TransportMode.Http || mode == TransportMode.HttpPush)
+                {
+                    CustomToolRegistrationProcessor.NotifyHttpConnectionHealthy();
+                }
             }
             else if (result.HandshakeValid)
             {
