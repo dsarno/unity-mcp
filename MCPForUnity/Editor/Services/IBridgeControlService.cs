@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using MCPForUnity.Editor.Services.Transport;
 
 namespace MCPForUnity.Editor.Services
 {
@@ -21,6 +22,11 @@ namespace MCPForUnity.Editor.Services
         /// Gets whether the bridge is in auto-connect mode
         /// </summary>
         bool IsAutoConnectMode { get; }
+
+        /// <summary>
+        /// Gets the currently active transport mode, if any
+        /// </summary>
+        TransportMode? ActiveMode { get; }
 
         /// <summary>
         /// Starts the MCP for Unity Bridge asynchronously
