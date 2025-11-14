@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -71,6 +72,7 @@ namespace MCPForUnity.Editor.Windows
         private Button copyJsonButton;
         private Label installationStepsLabel;
         private bool connectionToggleInProgress;
+        private static readonly HashSet<MCPForUnityEditorWindow> OpenWindows = new();
 
         // Data
         private readonly McpClients mcpClients = new();
@@ -140,11 +142,13 @@ namespace MCPForUnity.Editor.Windows
         private void OnEnable()
         {
             EditorApplication.update += OnEditorUpdate;
+            OpenWindows.Add(this);
         }
 
         private void OnDisable()
         {
             EditorApplication.update -= OnEditorUpdate;
+            OpenWindows.Remove(this);
         }
 
         private void OnFocus()
@@ -940,5 +944,24 @@ namespace MCPForUnity.Editor.Windows
             }
         }
 
+        internal static void RequestHealthVerification()
+        {
+            foreach (var window in OpenWindows.ToArray())
+            {
+                window?.ScheduleHealthCheck();
+            }
+        }
+
+        private void ScheduleHealthCheck()
+        {
+            EditorApplication.delayCall += async () =>
+            {
+                if (this == null)
+                {
+                    return;
+                }
+                await VerifyBridgeConnectionAsync();
+            };
+        }
     }
 }

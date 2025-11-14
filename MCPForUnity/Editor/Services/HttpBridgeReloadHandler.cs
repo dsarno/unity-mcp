@@ -4,6 +4,7 @@ using UnityEditor;
 using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Services.Transport;
+using MCPForUnity.Editor.Windows;
 
 namespace MCPForUnity.Editor.Services
 {
@@ -84,6 +85,10 @@ namespace MCPForUnity.Editor.Services
                     if (!started)
                     {
                         McpLog.Warn("Failed to resume HTTP MCP bridge after domain reload");
+                    }
+                    else
+                    {
+                        MCPForUnityEditorWindow.RequestHealthVerification();
                     }
                 }
                 catch (Exception ex)
