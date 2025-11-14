@@ -217,7 +217,7 @@ jobs:
               -stackTraceLogType Full \
               -projectPath /workspace/TestProjects/UnityMCPTests \
               "${manual_args[@]}" \
-              -executeMethod MCPForUnity.Editor.MCPForUnityBridge.StartAutoConnect
+              -executeMethod MCPForUnity.Editor.Services.Transport.Transports.StdioBridgeHost.StartAutoConnect
 
       # ---------- Wait for Unity bridge ----------
       - name: Wait for Unity bridge (robust)

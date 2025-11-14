@@ -11,7 +11,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
     {
         private TransportState _state = TransportState.Disconnected("stdio");
 
-        public bool IsConnected => MCPForUnityBridge.IsRunning;
+        public bool IsConnected => StdioBridgeHost.IsRunning;
         public string TransportName => "stdio";
         public TransportState State => _state;
 
@@ -19,8 +19,8 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         {
             try
             {
-                MCPForUnityBridge.StartAutoConnect();
-                _state = TransportState.Connected("stdio", port: MCPForUnityBridge.GetCurrentPort());
+                StdioBridgeHost.StartAutoConnect();
+                _state = TransportState.Connected("stdio", port: StdioBridgeHost.GetCurrentPort());
                 return Task.FromResult(true);
             }
             catch (Exception ex)
@@ -32,16 +32,16 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
 
         public Task StopAsync()
         {
-            MCPForUnityBridge.Stop();
+            StdioBridgeHost.Stop();
             _state = TransportState.Disconnected("stdio");
             return Task.CompletedTask;
         }
 
         public Task<bool> VerifyAsync()
         {
-            bool running = MCPForUnityBridge.IsRunning;
+            bool running = StdioBridgeHost.IsRunning;
             _state = running
-                ? TransportState.Connected("stdio", port: MCPForUnityBridge.GetCurrentPort())
+                ? TransportState.Connected("stdio", port: StdioBridgeHost.GetCurrentPort())
                 : TransportState.Disconnected("stdio", "Bridge not running");
             return Task.FromResult(running);
         }

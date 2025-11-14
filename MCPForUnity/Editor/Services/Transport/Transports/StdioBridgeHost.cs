@@ -18,12 +18,8 @@ using MCPForUnity.Editor.Tools;
 using MCPForUnity.Editor.Tools.Prefabs;
 using MCPForUnity.Editor.Services.Transport;
 
-namespace MCPForUnity.Editor
+namespace MCPForUnity.Editor.Services.Transport.Transports
 {
-
-    /// <summary>
-    /// Outbound message structure for the writer thread
-    /// </summary>
     class Outbound
     {
         public byte[] Payload;
@@ -31,24 +27,22 @@ namespace MCPForUnity.Editor
         public int? ReqId;
     }
 
-    /// <summary>
-    /// Queued command structure for main thread processing
-    /// </summary>
     class QueuedCommand
     {
         public string CommandJson;
         public TaskCompletionSource<string> Tcs;
         public bool IsExecuting;
     }
+
     [InitializeOnLoad]
-    public static partial class MCPForUnityBridge
+    public static class StdioBridgeHost
     {
         private static TcpListener listener;
         private static bool isRunning = false;
         private static readonly object lockObj = new();
         private static readonly object startStopLock = new();
         private static readonly object clientsLock = new();
-        private static readonly System.Collections.Generic.HashSet<TcpClient> activeClients = new();
+        private static readonly HashSet<TcpClient> activeClients = new();
         private static readonly BlockingCollection<Outbound> _outbox = new(new ConcurrentQueue<Outbound>());
         private static CancellationTokenSource cts;
         private static Task listenerTask;
@@ -61,17 +55,15 @@ namespace MCPForUnity.Editor
         private static int heartbeatSeq = 0;
         private static Dictionary<string, QueuedCommand> commandQueue = new();
         private static int mainThreadId;
-        private static int currentUnityPort = 6400; // Dynamic port, starts with default
+        private static int currentUnityPort = 6400;
         private static bool isAutoConnectMode = false;
         private static bool shouldRestartAfterReload = false;
-        private const ulong MaxFrameBytes = 64UL * 1024 * 1024; // 64 MiB hard cap for framed payloads
-        private const int FrameIOTimeoutMs = 30000; // Per-read timeout to avoid stalled clients
+        private const ulong MaxFrameBytes = 64UL * 1024 * 1024;
+        private const int FrameIOTimeoutMs = 30000;
 
-        // IO diagnostics
         private static long _ioSeq = 0;
         private static void IoInfo(string s) { McpLog.Info(s, always: false); }
 
-        // Debug helpers
         private static bool IsDebugEnabled()
         {
             try { return EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false); } catch { return false; }
@@ -89,28 +81,21 @@ namespace MCPForUnity.Editor
         public static int GetCurrentPort() => currentUnityPort;
         public static bool IsAutoConnectMode() => isAutoConnectMode;
 
-        /// <summary>
-        /// Start with Auto-Connect mode - discovers new port and saves it
-        /// </summary>
         public static void StartAutoConnect()
         {
-            Stop(); // Stop current connection
+            Stop();
 
             try
             {
-                // Prefer stored project port and start using the robust Start() path (with retries/options)
                 currentUnityPort = PortManager.GetPortWithFallback();
                 Start();
                 isAutoConnectMode = true;
 
-                // Record telemetry for bridge startup
                 TelemetryHelper.RecordBridgeStartup();
             }
             catch (Exception ex)
             {
                 McpLog.Error($"Auto-connect failed: {ex.Message}");
-
-                // Record telemetry for connection failure
                 TelemetryHelper.RecordBridgeConnection(false, ex.Message);
                 throw;
             }
@@ -135,11 +120,9 @@ namespace MCPForUnity.Editor
             return Directory.Exists(fullPath);
         }
 
-        static MCPForUnityBridge()
+        static StdioBridgeHost()
         {
-            // Record the main thread ID for safe thread checks
             try { mainThreadId = Thread.CurrentThread.ManagedThreadId; } catch { mainThreadId = 0; }
-            // Start single writer thread for framed responses
             try
             {
                 var writerThread = new Thread(() =>
@@ -151,10 +134,6 @@ namespace MCPForUnity.Editor
                             long seq = Interlocked.Increment(ref _ioSeq);
                             IoInfo($"[IO] ➜ write start seq={seq} tag={item.Tag} len={(item.Payload?.Length ?? 0)} reqId={(item.ReqId?.ToString() ?? "?")}");
                             var sw = System.Diagnostics.Stopwatch.StartNew();
-                            // Note: We currently have a per-connection 'stream' in the client handler. For simplicity,
-                            // writes are performed inline there. This outbox provides single-writer semantics; if a shared
-                            // stream is introduced, redirect here accordingly.
-                            // No-op: actual write happens in client loop using WriteFrameAsync
                             sw.Stop();
                             IoInfo($"[IO] ✓ write end   tag={item.Tag} len={(item.Payload?.Length ?? 0)} reqId={(item.ReqId?.ToString() ?? "?")} durMs={sw.Elapsed.TotalMilliseconds:F1}");
                         }
@@ -169,17 +148,13 @@ namespace MCPForUnity.Editor
             }
             catch { }
 
-            // Skip bridge in headless/batch environments (CI/builds) unless explicitly allowed via env
-            // CI override: set UNITY_MCP_ALLOW_BATCH=1 to allow the bridge in batch mode
             if (Application.isBatchMode && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("UNITY_MCP_ALLOW_BATCH")))
             {
                 return;
             }
             if (ShouldAutoStartBridge())
             {
-                // Defer start until the editor is idle and not compiling
                 ScheduleInitRetry();
-                // Add a safety net update hook in case delayCall is missed during reload churn
                 if (!ensureUpdateHooked)
                 {
                     ensureUpdateHooked = true;
@@ -189,7 +164,6 @@ namespace MCPForUnity.Editor
             EditorApplication.quitting += Stop;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
-            // Also coalesce play mode transitions into a deferred init when stdio is preferred
             EditorApplication.playModeStateChanged += _ =>
             {
                 if (ShouldAutoStartBridge())
@@ -199,15 +173,10 @@ namespace MCPForUnity.Editor
             };
         }
 
-        /// <summary>
-        /// Initialize the MCP bridge after Unity is fully loaded and compilation is complete.
-        /// This prevents repeated restarts during script compilation that cause port hopping.
-        /// </summary>
         private static void InitializeAfterCompilation()
         {
             initScheduled = false;
 
-            // Play-mode friendly: allow starting in play mode; only defer while compiling
             if (IsCompiling())
             {
                 ScheduleInitRetry();
@@ -219,7 +188,6 @@ namespace MCPForUnity.Editor
                 Start();
                 if (!isRunning)
                 {
-                    // If a race prevented start, retry later
                     ScheduleInitRetry();
                 }
             }
@@ -232,15 +200,12 @@ namespace MCPForUnity.Editor
                 return;
             }
             initScheduled = true;
-            // Debounce: start ~200ms after the last trigger
             nextStartAt = EditorApplication.timeSinceStartup + 0.20f;
-            // Ensure the update pump is active
             if (!ensureUpdateHooked)
             {
                 ensureUpdateHooked = true;
                 EditorApplication.update += EnsureStartedOnEditorIdle;
             }
-            // Keep the original delayCall as a secondary path
             EditorApplication.delayCall += InitializeAfterCompilation;
         }
 
@@ -253,21 +218,17 @@ namespace MCPForUnity.Editor
             }
             catch
             {
-                // Fall back to auto-starting so existing behavior remains if prefs are unavailable
                 return true;
             }
         }
 
-        // Safety net: ensure the bridge starts shortly after domain reload when editor is idle
         private static void EnsureStartedOnEditorIdle()
         {
-            // Do nothing while compiling
             if (IsCompiling())
             {
                 return;
             }
 
-            // If already running, remove the hook
             if (isRunning)
             {
                 EditorApplication.update -= EnsureStartedOnEditorIdle;
@@ -275,7 +236,6 @@ namespace MCPForUnity.Editor
                 return;
             }
 
-            // Debounced start: wait until the scheduled time
             if (nextStartAt > 0 && EditorApplication.timeSinceStartup < nextStartAt)
             {
                 return;
@@ -289,7 +249,6 @@ namespace MCPForUnity.Editor
             isStarting = true;
             try
             {
-                // Attempt start; if it succeeds, remove the hook to avoid overhead
                 Start();
             }
             finally
@@ -303,7 +262,6 @@ namespace MCPForUnity.Editor
             }
         }
 
-        // Helper to check compilation status across Unity versions
         private static bool IsCompiling()
         {
             if (EditorApplication.isCompiling)
@@ -312,7 +270,7 @@ namespace MCPForUnity.Editor
             }
             try
             {
-                System.Type pipeline = System.Type.GetType("UnityEditor.Compilation.CompilationPipeline, UnityEditor");
+                Type pipeline = Type.GetType("UnityEditor.Compilation.CompilationPipeline, UnityEditor");
                 var prop = pipeline?.GetProperty("isCompiling", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
                 if (prop != null)
                 {
@@ -327,25 +285,21 @@ namespace MCPForUnity.Editor
         {
             lock (startStopLock)
             {
-                // Don't restart if already running on a working port
                 if (isRunning && listener != null)
                 {
                     if (IsDebugEnabled())
                     {
-                        McpLog.Info($"MCPForUnityBridge already running on port {currentUnityPort}");
+                        McpLog.Info($"StdioBridgeHost already running on port {currentUnityPort}");
                     }
                     return;
                 }
 
                 Stop();
 
-                // Attempt fast bind with stored-port preference (sticky per-project)
                 try
                 {
-                    // Always consult PortManager first so we prefer the persisted project port
                     currentUnityPort = PortManager.GetPortWithFallback();
 
-                    // Breadcrumb: Start
                     LogBreadcrumb("Start");
 
                     const int maxImmediateRetries = 3;
@@ -368,14 +322,12 @@ namespace MCPForUnity.Editor
                             }
                             catch { }
 #endif
-                            // Minimize TIME_WAIT by sending RST on close
                             try
                             {
                                 listener.Server.LingerState = new LingerOption(true, 0);
                             }
                             catch (Exception)
                             {
-                                // Ignore if not supported on platform
                             }
                             listener.Start();
                             break;
@@ -388,12 +340,9 @@ namespace MCPForUnity.Editor
                         }
                         catch (SocketException se) when (se.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt >= maxImmediateRetries)
                         {
-                            // Port is occupied by another instance, get a new available port
                             int oldPort = currentUnityPort;
                             currentUnityPort = PortManager.GetPortWithFallback();
 
-                            // GetPortWithFallback() may return the same port if it became available during wait
-                            // or a different port if switching to an alternative
                             if (IsDebugEnabled())
                             {
                                 if (currentUnityPort == oldPort)
@@ -435,20 +384,17 @@ namespace MCPForUnity.Editor
                     isAutoConnectMode = false;
                     string platform = Application.platform.ToString();
                     string serverVer = AssetPathUtility.GetPackageVersion();
-                    McpLog.Info($"MCPForUnityBridge started on port {currentUnityPort}. (OS={platform}, server={serverVer})");
-                    // Start background listener with cooperative cancellation
+                    McpLog.Info($"StdioBridgeHost started on port {currentUnityPort}. (OS={platform}, server={serverVer})");
                     cts = new CancellationTokenSource();
                     listenerTask = Task.Run(() => ListenerLoopAsync(cts.Token));
                     CommandRegistry.Initialize();
                     EditorApplication.update += ProcessCommands;
-                    // Ensure lifecycle events are (re)subscribed in case Stop() removed them earlier in-domain
                     try { AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload; } catch { }
                     try { AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload; } catch { }
                     try { AssemblyReloadEvents.afterAssemblyReload -= OnAfterAssemblyReload; } catch { }
                     try { AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload; } catch { }
                     try { EditorApplication.quitting -= Stop; } catch { }
                     try { EditorApplication.quitting += Stop; } catch { }
-                    // Write initial heartbeat immediately
                     heartbeatSeq++;
                     WriteHeartbeat(false, "ready");
                     nextHeartbeatAt = EditorApplication.timeSinceStartup + 0.5f;
@@ -472,10 +418,8 @@ namespace MCPForUnity.Editor
 
                 try
                 {
-                    // Mark as stopping early to avoid accept logging during disposal
                     isRunning = false;
 
-                    // Quiesce background listener quickly
                     var cancel = cts;
                     cts = null;
                     try { cancel?.Cancel(); } catch { }
@@ -483,17 +427,15 @@ namespace MCPForUnity.Editor
                     try { listener?.Stop(); } catch { }
                     listener = null;
 
-                    // Capture background task to wait briefly outside the lock
                     toWait = listenerTask;
                     listenerTask = null;
                 }
                 catch (Exception ex)
                 {
-                    McpLog.Error($"Error stopping MCPForUnityBridge: {ex.Message}");
+                    McpLog.Error($"Error stopping StdioBridgeHost: {ex.Message}");
                 }
             }
 
-            // Proactively close all active client sockets to unblock any pending reads
             TcpClient[] toClose;
             lock (clientsLock)
             {
@@ -505,19 +447,16 @@ namespace MCPForUnity.Editor
                 try { c.Close(); } catch { }
             }
 
-            // Give the background loop a short window to exit without blocking the editor
             if (toWait != null)
             {
                 try { toWait.Wait(100); } catch { }
             }
 
-            // Now unhook editor events safely
             try { EditorApplication.update -= ProcessCommands; } catch { }
             try { AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload; } catch { }
             try { AssemblyReloadEvents.afterAssemblyReload -= OnAfterAssemblyReload; } catch { }
             try { EditorApplication.quitting -= Stop; } catch { }
 
-            // Clean up status file when Unity stops
             try
             {
                 string statusDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".unity-mcp");
@@ -533,7 +472,7 @@ namespace MCPForUnity.Editor
                 if (IsDebugEnabled()) McpLog.Warn($"Failed to delete status file: {ex.Message}");
             }
 
-            if (IsDebugEnabled()) McpLog.Info("MCPForUnityBridge stopped.");
+            if (IsDebugEnabled()) McpLog.Info("StdioBridgeHost stopped.");
         }
 
         private static async Task ListenerLoopAsync(CancellationToken token)
@@ -543,22 +482,18 @@ namespace MCPForUnity.Editor
                 try
                 {
                     TcpClient client = await listener.AcceptTcpClientAsync();
-                    // Enable basic socket keepalive
                     client.Client.SetSocketOption(
                         SocketOptionLevel.Socket,
                         SocketOptionName.KeepAlive,
                         true
                     );
 
-                    // Set longer receive timeout to prevent quick disconnections
-                    client.ReceiveTimeout = 60000; // 60 seconds
+                    client.ReceiveTimeout = 60000;
 
-                    // Fire and forget each client connection
                     _ = Task.Run(() => HandleClientAsync(client, token), token);
                 }
                 catch (ObjectDisposedException)
                 {
-                    // Listener was disposed during stop/reload; exit quietly
                     if (!isRunning || token.IsCancellationRequested)
                     {
                         break;
@@ -586,7 +521,6 @@ namespace MCPForUnity.Editor
                 lock (clientsLock) { activeClients.Add(client); }
                 try
                 {
-                    // Framed I/O only; legacy mode removed
                     try
                     {
                         if (IsDebugEnabled())
@@ -596,7 +530,6 @@ namespace MCPForUnity.Editor
                         }
                     }
                     catch { }
-                    // Strict framing: always require FRAMING=1 and frame all I/O
                     try
                     {
                         client.NoDelay = true;
@@ -610,21 +543,20 @@ namespace MCPForUnity.Editor
 #if NETSTANDARD2_1 || NET6_0_OR_GREATER
                         await stream.WriteAsync(handshakeBytes.AsMemory(0, handshakeBytes.Length), cts.Token).ConfigureAwait(false);
 #else
-                    await stream.WriteAsync(handshakeBytes, 0, handshakeBytes.Length, cts.Token).ConfigureAwait(false);
+                        await stream.WriteAsync(handshakeBytes, 0, handshakeBytes.Length, cts.Token).ConfigureAwait(false);
 #endif
                         if (IsDebugEnabled()) McpLog.Info("Sent handshake FRAMING=1 (strict)", always: false);
                     }
                     catch (Exception ex)
                     {
                         if (IsDebugEnabled()) McpLog.Warn($"Handshake failed: {ex.Message}");
-                        return; // abort this client
+                        return;
                     }
 
                     while (isRunning && !token.IsCancellationRequested)
                     {
                         try
                         {
-                            // Strict framed mode only: enforced framed I/O for this connection
                             string commandText = await ReadFrameAsUtf8Async(stream, FrameIOTimeoutMs, token).ConfigureAwait(false);
 
                             try
@@ -639,12 +571,9 @@ namespace MCPForUnity.Editor
                             string commandId = Guid.NewGuid().ToString();
                             var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-                            // Special handling for ping command to avoid JSON parsing
                             if (commandText.Trim() == "ping")
                             {
-                                // Direct response to ping without going through JSON parsing
                                 byte[] pingResponseBytes = System.Text.Encoding.UTF8.GetBytes(
-                                    /*lang=json,strict*/
                                     "{\"status\":\"success\",\"result\":{\"message\":\"pong\"}}"
                                 );
                                 await WriteFrameAsync(stream, pingResponseBytes);
@@ -661,7 +590,6 @@ namespace MCPForUnity.Editor
                                 };
                             }
 
-                            // Wait for the handler to produce a response, but do not block indefinitely
                             string response;
                             try
                             {
@@ -669,13 +597,11 @@ namespace MCPForUnity.Editor
                                 var completed = await Task.WhenAny(tcs.Task, Task.Delay(FrameIOTimeoutMs, respCts.Token)).ConfigureAwait(false);
                                 if (completed == tcs.Task)
                                 {
-                                    // Got a result from the handler
                                     respCts.Cancel();
                                     response = tcs.Task.Result;
                                 }
                                 else
                                 {
-                                    // Timeout: return a structured error so the client can recover
                                     var timeoutResponse = new
                                     {
                                         status = "error",
@@ -698,8 +624,7 @@ namespace MCPForUnity.Editor
                             {
                                 try { McpLog.Info("[MCP] sending framed response", always: false); } catch { }
                             }
-                            // Crash-proof and self-reporting writer logs (direct write to this client's stream)
-                            long seq = System.Threading.Interlocked.Increment(ref _ioSeq);
+                            long seq = Interlocked.Increment(ref _ioSeq);
                             byte[] responseBytes;
                             try
                             {
@@ -727,12 +652,11 @@ namespace MCPForUnity.Editor
                         }
                         catch (Exception ex)
                         {
-                            // Treat common disconnects/timeouts as benign; only surface hard errors
                             string msg = ex.Message ?? string.Empty;
                             bool isBenign =
                                 msg.IndexOf("Connection closed before reading expected bytes", StringComparison.OrdinalIgnoreCase) >= 0
                                 || msg.IndexOf("Read timed out", StringComparison.OrdinalIgnoreCase) >= 0
-                                || ex is System.IO.IOException;
+                                || ex is IOException;
                             if (isBenign)
                             {
                                 if (IsDebugEnabled()) McpLog.Info($"Client handler: {msg}", always: false);
@@ -752,8 +676,7 @@ namespace MCPForUnity.Editor
             }
         }
 
-        // Timeout-aware exact read helper with cancellation; avoids indefinite stalls and background task leaks
-        private static async System.Threading.Tasks.Task<byte[]> ReadExactAsync(NetworkStream stream, int count, int timeoutMs, CancellationToken cancel = default)
+        private static async Task<byte[]> ReadExactAsync(NetworkStream stream, int count, int timeoutMs, CancellationToken cancel = default)
         {
             byte[] buffer = new byte[count];
             int offset = 0;
@@ -766,10 +689,9 @@ namespace MCPForUnity.Editor
                     ? Timeout.Infinite
                     : timeoutMs - (int)stopwatch.ElapsedMilliseconds;
 
-                // If a finite timeout is configured and already elapsed, fail immediately
                 if (remainingTimeout != Timeout.Infinite && remainingTimeout <= 0)
                 {
-                    throw new System.IO.IOException("Read timed out");
+                    throw new IOException("Read timed out");
                 }
 
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
@@ -787,34 +709,34 @@ namespace MCPForUnity.Editor
 #endif
                     if (read == 0)
                     {
-                        throw new System.IO.IOException("Connection closed before reading expected bytes");
+                        throw new IOException("Connection closed before reading expected bytes");
                     }
                     offset += read;
                 }
                 catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
                 {
-                    throw new System.IO.IOException("Read timed out");
+                    throw new IOException("Read timed out");
                 }
             }
 
             return buffer;
         }
 
-        private static async System.Threading.Tasks.Task WriteFrameAsync(NetworkStream stream, byte[] payload)
+        private static Task WriteFrameAsync(NetworkStream stream, byte[] payload)
         {
             using var cts = new CancellationTokenSource(FrameIOTimeoutMs);
-            await WriteFrameAsync(stream, payload, cts.Token);
+            return WriteFrameAsync(stream, payload, cts.Token);
         }
 
-        private static async System.Threading.Tasks.Task WriteFrameAsync(NetworkStream stream, byte[] payload, CancellationToken cancel)
+        private static async Task WriteFrameAsync(NetworkStream stream, byte[] payload, CancellationToken cancel)
         {
             if (payload == null)
             {
-                throw new System.ArgumentNullException(nameof(payload));
+                throw new ArgumentNullException(nameof(payload));
             }
             if ((ulong)payload.LongLength > MaxFrameBytes)
             {
-                throw new System.IO.IOException($"Frame too large: {payload.LongLength}");
+                throw new IOException($"Frame too large: {payload.LongLength}");
             }
             byte[] header = new byte[8];
             WriteUInt64BigEndian(header, (ulong)payload.LongLength);
@@ -827,19 +749,19 @@ namespace MCPForUnity.Editor
 #endif
         }
 
-        private static async System.Threading.Tasks.Task<string> ReadFrameAsUtf8Async(NetworkStream stream, int timeoutMs, CancellationToken cancel)
+        private static async Task<string> ReadFrameAsUtf8Async(NetworkStream stream, int timeoutMs, CancellationToken cancel)
         {
             byte[] header = await ReadExactAsync(stream, 8, timeoutMs, cancel).ConfigureAwait(false);
             ulong payloadLen = ReadUInt64BigEndian(header);
             if (payloadLen > MaxFrameBytes)
             {
-                throw new System.IO.IOException($"Invalid framed length: {payloadLen}");
+                throw new IOException($"Invalid framed length: {payloadLen}");
             }
             if (payloadLen == 0UL)
-                throw new System.IO.IOException("Zero-length frames are not allowed");
+                throw new IOException("Zero-length frames are not allowed");
             if (payloadLen > int.MaxValue)
             {
-                throw new System.IO.IOException("Frame too large for buffer");
+                throw new IOException("Frame too large for buffer");
             }
             int count = (int)payloadLen;
             byte[] payload = await ReadExactAsync(stream, count, timeoutMs, cancel).ConfigureAwait(false);
@@ -863,7 +785,7 @@ namespace MCPForUnity.Editor
         {
             if (dest == null || dest.Length < 8)
             {
-                throw new System.ArgumentException("Destination buffer too small for UInt64");
+                throw new ArgumentException("Destination buffer too small for UInt64");
             }
             dest[0] = (byte)(value >> 56);
             dest[1] = (byte)(value >> 48);
@@ -878,10 +800,9 @@ namespace MCPForUnity.Editor
         private static void ProcessCommands()
         {
             if (!isRunning) return;
-            if (Interlocked.Exchange(ref processingCommands, 1) == 1) return; // reentrancy guard
+            if (Interlocked.Exchange(ref processingCommands, 1) == 1) return;
             try
             {
-                // Heartbeat without holding the queue lock
                 double now = EditorApplication.timeSinceStartup;
                 if (now >= nextHeartbeatAt)
                 {
@@ -889,7 +810,6 @@ namespace MCPForUnity.Editor
                     nextHeartbeatAt = now + 0.5f;
                 }
 
-                // Snapshot under lock, then process outside to reduce contention
                 List<(string id, QueuedCommand command)> work;
                 lock (lockObj)
                 {
@@ -1003,20 +923,16 @@ namespace MCPForUnity.Editor
             Runner();
         }
 
-        // Invoke the given function on the Unity main thread and wait up to timeoutMs for the result.
-        // Returns null on timeout or error; caller should provide a fallback error response.
         private static object InvokeOnMainThreadWithTimeout(Func<object> func, int timeoutMs)
         {
             if (func == null) return null;
             try
             {
-                // If mainThreadId is unknown, assume we're on main thread to avoid blocking the editor.
                 if (mainThreadId == 0)
                 {
                     try { return func(); }
                     catch (Exception ex) { throw new InvalidOperationException($"Main thread handler error: {ex.Message}", ex); }
                 }
-                // If we are already on the main thread, execute directly to avoid deadlocks
                 try
                 {
                     if (Thread.CurrentThread.ManagedThreadId == mainThreadId)
@@ -1045,11 +961,10 @@ namespace MCPForUnity.Editor
                     }
                 };
 
-                // Wait for completion with timeout (Editor thread will pump delayCall)
                 bool completed = tcs.Task.Wait(timeoutMs);
                 if (!completed)
                 {
-                    return null; // timeout
+                    return null;
                 }
                 if (captured != null)
                 {
@@ -1063,7 +978,6 @@ namespace MCPForUnity.Editor
             }
         }
 
-        // Helper method to check if a string is valid JSON
         private static bool IsValidJson(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -1074,9 +988,9 @@ namespace MCPForUnity.Editor
             text = text.Trim();
             if (
                 (text.StartsWith("{") && text.EndsWith("}"))
-                || // Object
+                ||
                 (text.StartsWith("[") && text.EndsWith("]"))
-            ) // Array
+            )
             {
                 try
                 {
@@ -1092,21 +1006,17 @@ namespace MCPForUnity.Editor
             return false;
         }
 
-        // Heartbeat/status helpers
         private static void OnBeforeAssemblyReload()
         {
             if (isRunning)
             {
                 shouldRestartAfterReload = true;
             }
-            // Stop cleanly before reload so sockets close and clients see 'reloading'
             try { Stop(); } catch { }
-            // Avoid file I/O or heavy work here
         }
 
         private static void OnAfterAssemblyReload()
         {
-            // Will be overwritten by Start(), but mark as alive quickly
             WriteHeartbeat(false, "idle");
             LogBreadcrumb("Idle");
             bool shouldResume = ShouldAutoStartBridge() || shouldRestartAfterReload;
@@ -1116,7 +1026,6 @@ namespace MCPForUnity.Editor
             }
             if (shouldResume)
             {
-                // Schedule a safe restart after reload to avoid races during compilation
                 ScheduleInitRetry();
             }
         }
@@ -1125,7 +1034,6 @@ namespace MCPForUnity.Editor
         {
             try
             {
-                // Allow override of status directory (useful in CI/containers)
                 string dir = Environment.GetEnvironmentVariable("UNITY_MCP_STATUS_DIR");
                 if (string.IsNullOrWhiteSpace(dir))
                 {
@@ -1134,14 +1042,12 @@ namespace MCPForUnity.Editor
                 Directory.CreateDirectory(dir);
                 string filePath = Path.Combine(dir, $"unity-mcp-status-{ComputeProjectHash(Application.dataPath)}.json");
 
-                // Extract project name from path
                 string projectName = "Unknown";
                 try
                 {
                     string projectPath = Application.dataPath;
                     if (!string.IsNullOrEmpty(projectPath))
                     {
-                        // Remove trailing /Assets or \Assets
                         projectPath = projectPath.TrimEnd('/', '\\');
                         if (projectPath.EndsWith("Assets", StringComparison.OrdinalIgnoreCase))
                         {
@@ -1171,7 +1077,6 @@ namespace MCPForUnity.Editor
             }
             catch (Exception)
             {
-                // Best-effort only
             }
         }
 

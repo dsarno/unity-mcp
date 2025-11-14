@@ -62,11 +62,11 @@ namespace MCPForUnity.Editor.Services
                 }
 
                 // Legacy fallback while the stdio bridge is still in play
-                return MCPForUnityBridge.GetCurrentPort();
+                return StdioBridgeHost.GetCurrentPort();
             }
         }
 
-        public bool IsAutoConnectMode => MCPForUnityBridge.IsAutoConnectMode();
+        public bool IsAutoConnectMode => StdioBridgeHost.IsAutoConnectMode();
 
         public void Start()
         {

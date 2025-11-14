@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
 using MCPForUnity.Editor.Constants;
+using MCPForUnity.Editor.Services.Transport.Transports;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -141,8 +142,8 @@ namespace MCPForUnity.Editor.Helpers
         {
             RecordEvent("bridge_startup", new Dictionary<string, object>
             {
-                ["bridge_version"] = "3.0.2",
-                ["auto_connect"] = MCPForUnityBridge.IsAutoConnectMode()
+                ["bridge_version"] = AssetPathUtility.GetPackageVersion(),
+                ["auto_connect"] = StdioBridgeHost.IsAutoConnectMode()
             });
         }
 
