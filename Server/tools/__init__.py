@@ -11,6 +11,8 @@ from typing import Any, Awaitable, Callable, Iterable, Optional, TypeVar
 from fastmcp import Context, FastMCP
 from telemetry_decorator import telemetry_resource, telemetry_tool
 from config import config
+from module_discovery import discover_modules
+from registry import get_registered_tools
 from unity_connection import send_command_with_retry, async_send_command_with_retry
 from plugin_hub import PluginHub, send_command_to_plugin
 

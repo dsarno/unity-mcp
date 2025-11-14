@@ -270,8 +270,12 @@ mcp.add_middleware(unity_middleware)
 logger.info("Registered Unity instance middleware for session-based routing")
 
 # Mount plugin websocket hub at /hub/plugin when HTTP transport is active
-if not any(isinstance(route, WebSocketRoute) and route.path == "/hub/plugin" for route in mcp.app.router.routes):
-    mcp.app.router.routes.append(WebSocketRoute("/hub/plugin", PluginHub))
+existing_routes = [
+    route for route in mcp._get_additional_http_routes()
+    if isinstance(route, WebSocketRoute) and route.path == "/hub/plugin"
+]
+if not existing_routes:
+    mcp._additional_http_routes.append(WebSocketRoute("/hub/plugin", PluginHub))
 
 # Register all tools
 register_all_tools(mcp)
