@@ -8,38 +8,10 @@ from typing import Awaitable, Callable, TypeVar
 
 from fastmcp import Context
 
-from plugin_hub import PluginHub, send_command_to_plugin
+from plugin_hub import PluginHub
 from unity_response import normalize_unity_response
 
 T = TypeVar("T")
-
-
-def send_with_unity_instance(
-    send_fn: Callable[..., T],
-    unity_instance: str | None,
-    *args,
-    **kwargs,
-) -> T:
-    if _is_http_transport():
-        if not args:
-            raise ValueError("HTTP transport requires command arguments")
-        command_type = args[0]
-        params = args[1] if len(args) > 1 else kwargs.get("params")
-        if params is None:
-            params = {}
-        if not isinstance(params, dict):
-            raise TypeError(
-                "Command parameters must be a dict for HTTP transport")
-        raw = send_command_to_plugin(
-            unity_instance=unity_instance,
-            command_type=command_type,
-            params=params,
-        )
-        return normalize_unity_response(raw)
-
-    if unity_instance:
-        kwargs.setdefault("instance_id", unity_instance)
-    return send_fn(*args, **kwargs)
 
 
 def _is_http_transport() -> bool:

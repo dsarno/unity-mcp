@@ -9,11 +9,6 @@ from fastmcp import Context, FastMCP
 from telemetry_decorator import telemetry_tool
 from module_discovery import discover_modules
 from registry import get_registered_tools
-from unity_transport import (
-    send_with_unity_instance,
-    async_send_with_unity_instance,
-    with_unity_instance,
-)
 
 logger = logging.getLogger("mcp-for-unity-server")
 
@@ -21,12 +16,7 @@ logger = logging.getLogger("mcp-for-unity-server")
 __all__ = [
     "register_all_tools",
     "get_unity_instance_from_context",
-    "send_with_unity_instance",
-    "async_send_with_unity_instance",
-    "with_unity_instance",
 ]
-
-T = TypeVar("T")
 
 
 def register_all_tools(mcp: FastMCP):
