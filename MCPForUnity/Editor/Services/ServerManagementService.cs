@@ -27,10 +27,10 @@ namespace MCPForUnity.Editor.Services
                     "OK");
                 return false;
             }
-            
+
             // Get the HTTP URL
             string httpUrl = HttpEndpointUtility.GetBaseUrl();
-            
+
             // Check if it's a local URL
             if (!IsLocalUrl())
             {
@@ -42,10 +42,10 @@ namespace MCPForUnity.Editor.Services
                     "OK");
                 return false;
             }
-            
+
             // Get uvx command parts
             var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
-            
+
             if (string.IsNullOrEmpty(uvxPath))
             {
                 EditorUtility.DisplayDialog(
@@ -54,15 +54,15 @@ namespace MCPForUnity.Editor.Services
                     "OK");
                 return false;
             }
-            
+
             // Build the command
-            string args = string.IsNullOrEmpty(fromUrl) 
+            string args = string.IsNullOrEmpty(fromUrl)
                 ? $"{packageName} --transport http --http-url {httpUrl}"
                 : $"--from {fromUrl} {packageName} --transport http --http-url {httpUrl}";
-            
+
             // Start the server in a terminal
             string command = $"{uvxPath} {args}";
-            
+
             if (EditorUtility.DisplayDialog(
                 "Start Local HTTP Server",
                 $"This will start the MCP server in HTTP mode:\n\n{command}\n\n" +
@@ -76,15 +76,10 @@ namespace MCPForUnity.Editor.Services
                 {
                     // Start the server in a new terminal window (cross-platform)
                     var startInfo = CreateTerminalProcessStartInfo(command);
-                    
+
                     System.Diagnostics.Process.Start(startInfo);
-                    
+
                     McpLog.Info($"Started local HTTP server: {command}");
-                    EditorUtility.DisplayDialog(
-                        "Server Started",
-                        "The MCP server has been started in a new terminal window.\n\n" +
-                        "Close the terminal window to stop the server.",
-                        "OK");
                     return true;
                 }
                 catch (Exception ex)
@@ -97,10 +92,10 @@ namespace MCPForUnity.Editor.Services
                     return false;
                 }
             }
-            
+
             return false;
         }
-        
+
         /// <summary>
         /// Check if the configured HTTP URL is a local address
         /// </summary>
@@ -109,14 +104,14 @@ namespace MCPForUnity.Editor.Services
             string httpUrl = HttpEndpointUtility.GetBaseUrl();
             return IsLocalUrl(httpUrl);
         }
-        
+
         /// <summary>
         /// Check if a URL is local (localhost, 127.0.0.1, 0.0.0.0)
         /// </summary>
         private static bool IsLocalUrl(string url)
         {
             if (string.IsNullOrEmpty(url)) return false;
-            
+
             try
             {
                 var uri = new Uri(url);
@@ -128,7 +123,7 @@ namespace MCPForUnity.Editor.Services
                 return false;
             }
         }
-        
+
         /// <summary>
         /// Check if the local HTTP server can be started
         /// </summary>
@@ -137,7 +132,7 @@ namespace MCPForUnity.Editor.Services
             bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
             return useHttpTransport && IsLocalUrl();
         }
-        
+
         /// <summary>
         /// Creates a ProcessStartInfo for opening a terminal window with the given command
         /// Works cross-platform: macOS, Windows, and Linux

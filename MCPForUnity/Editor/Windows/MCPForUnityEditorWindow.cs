@@ -825,12 +825,11 @@ namespace MCPForUnity.Editor.Windows
 
                 if (success)
                 {
-                    EditorUtility.DisplayDialog("Success",
-                        "UVX cache cleared successfully. The server will be re-downloaded on next launch.",
-                        "OK");
+                    McpLog.Info("UVX cache cleared successfully");
                 }
                 else
                 {
+                    McpLog.Error("Failed to clear UVX cache");
                     EditorUtility.DisplayDialog("Error",
                         "Failed to clear UVX cache. Check the console for details.",
                         "OK");
