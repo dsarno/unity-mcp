@@ -7,7 +7,7 @@ from fastmcp import Context
 
 from registry import mcp_for_unity_tool
 from tools import get_unity_instance_from_context
-from unity_transport import async_send_with_unity_instance
+from unity_transport import send_with_unity_instance
 from unity_connection import async_send_command_with_retry
 
 
@@ -588,7 +588,7 @@ async def script_apply_edits(
             "edits": edits,
             "options": opts2,
         }
-        resp_struct = await async_send_with_unity_instance(
+        resp_struct = await send_with_unity_instance(
             async_send_command_with_retry,
             unity_instance,
             "manage_script",
@@ -728,7 +728,7 @@ async def script_apply_edits(
                     "precondition_sha256": sha,
                     "options": {"refresh": (options or {}).get("refresh", "debounced"), "validate": (options or {}).get("validate", "standard"), "applyMode": ("atomic" if len(at_edits) > 1 else (options or {}).get("applyMode", "sequential"))}
                 }
-                resp_text = await async_send_with_unity_instance(
+                resp_text = await send_with_unity_instance(
                     async_send_command_with_retry,
                     unity_instance,
                     "manage_script",
@@ -753,7 +753,7 @@ async def script_apply_edits(
                 "edits": struct_edits,
                 "options": opts2
             }
-            resp_struct = await async_send_with_unity_instance(
+            resp_struct = await send_with_unity_instance(
                 async_send_command_with_retry,
                 unity_instance,
                 "manage_script",
@@ -886,7 +886,7 @@ async def script_apply_edits(
                     "applyMode": ("atomic" if len(at_edits) > 1 else (options or {}).get("applyMode", "sequential"))
                 }
             }
-            resp = await async_send_with_unity_instance(
+            resp = await send_with_unity_instance(
                 async_send_command_with_retry,
                 unity_instance,
                 "manage_script",
@@ -975,7 +975,7 @@ async def script_apply_edits(
         "options": options or {"validate": "standard", "refresh": "debounced"},
     }
 
-    write_resp = await async_send_with_unity_instance(
+    write_resp = await send_with_unity_instance(
         async_send_command_with_retry,
         unity_instance,
         "manage_script",

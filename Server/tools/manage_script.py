@@ -7,7 +7,7 @@ from fastmcp import FastMCP, Context
 
 from registry import mcp_for_unity_tool
 from tools import get_unity_instance_from_context
-from unity_transport import async_send_with_unity_instance
+from unity_transport import send_with_unity_instance
 import unity_connection
 
 
@@ -106,7 +106,7 @@ async def apply_text_edits(
     warnings: list[str] = []
     if _needs_normalization(edits):
         # Read file to support index->line/col conversion when needed
-        read_resp = await async_send_with_unity_instance(
+        read_resp = await send_with_unity_instance(
             unity_connection.async_send_command_with_retry,
             unity_instance,
             "manage_script",
@@ -312,7 +312,7 @@ async def apply_text_edits(
         "options": opts,
     }
     params = {k: v for k, v in params.items() if v is not None}
-    resp = await async_send_with_unity_instance(
+    resp = await send_with_unity_instance(
         unity_connection.async_send_command_with_retry,
         unity_instance,
         "manage_script",
@@ -401,7 +401,7 @@ async def create_script(
             contents.encode("utf-8")).decode("utf-8")
         params["contentsEncoded"] = True
     params = {k: v for k, v in params.items() if v is not None}
-    resp = await async_send_with_unity_instance(
+    resp = await send_with_unity_instance(
         unity_connection.async_send_command_with_retry,
         unity_instance,
         "manage_script",
@@ -422,7 +422,7 @@ async def delete_script(
     if not directory or directory.split("/")[0].lower() != "assets":
         return {"success": False, "code": "path_outside_assets", "message": "URI must resolve under 'Assets/'."}
     params = {"action": "delete", "name": name, "path": directory}
-    resp = await async_send_with_unity_instance(
+    resp = await send_with_unity_instance(
         unity_connection.async_send_command_with_retry,
         unity_instance,
         "manage_script",
@@ -453,7 +453,7 @@ async def validate_script(
         "path": directory,
         "level": level,
     }
-    resp = await async_send_with_unity_instance(
+    resp = await send_with_unity_instance(
         unity_connection.async_send_command_with_retry,
         unity_instance,
         "manage_script",
@@ -506,7 +506,7 @@ async def manage_script(
 
         params = {k: v for k, v in params.items() if v is not None}
 
-        response = await async_send_with_unity_instance(
+        response = await send_with_unity_instance(
             unity_connection.async_send_command_with_retry,
             unity_instance,
             "manage_script",
@@ -580,7 +580,7 @@ async def get_sha(
     try:
         name, directory = _split_uri(uri)
         params = {"action": "get_sha", "name": name, "path": directory}
-        resp = await async_send_with_unity_instance(
+        resp = await send_with_unity_instance(
             unity_connection.async_send_command_with_retry,
             unity_instance,
             "manage_script",

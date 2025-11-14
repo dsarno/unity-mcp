@@ -6,7 +6,7 @@ from fastmcp import Context
 from models import MCPResponse
 from registry import mcp_for_unity_resource
 from tools import get_unity_instance_from_context
-from unity_transport import async_send_with_unity_instance
+from unity_transport import send_with_unity_instance
 from unity_connection import async_send_command_with_retry
 
 
@@ -26,7 +26,7 @@ async def get_tests(ctx: Context) -> GetTestsResponse | MCPResponse:
     """Provides a list of all tests.
     """
     unity_instance = get_unity_instance_from_context(ctx)
-    response = await async_send_with_unity_instance(
+    response = await send_with_unity_instance(
         async_send_command_with_retry,
         unity_instance,
         "get_tests",
@@ -46,7 +46,7 @@ async def get_tests_for_mode(
         mode: The test mode to filter by (EditMode or PlayMode).
     """
     unity_instance = get_unity_instance_from_context(ctx)
-    response = await async_send_with_unity_instance(
+    response = await send_with_unity_instance(
         async_send_command_with_retry,
         unity_instance,
         "get_tests_for_mode",

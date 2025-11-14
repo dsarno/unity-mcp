@@ -3,7 +3,7 @@ from typing import Annotated, Literal, Any
 from fastmcp import Context
 from registry import mcp_for_unity_tool
 from tools import get_unity_instance_from_context
-from unity_transport import async_send_with_unity_instance
+from unity_transport import send_with_unity_instance
 from unity_connection import async_send_command_with_retry
 
 
@@ -48,7 +48,7 @@ async def manage_scene(
             params["buildIndex"] = coerced_build_index
 
         # Use centralized retry helper with instance routing
-        response = await async_send_with_unity_instance(async_send_command_with_retry, unity_instance, "manage_scene", params)
+        response = await send_with_unity_instance(async_send_command_with_retry, unity_instance, "manage_scene", params)
 
         # Preserve structured failure data; unwrap success into a friendlier shape
         if isinstance(response, dict) and response.get("success"):

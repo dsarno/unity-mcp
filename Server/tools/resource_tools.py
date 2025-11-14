@@ -15,7 +15,7 @@ from fastmcp import Context
 
 from registry import mcp_for_unity_tool
 from tools import get_unity_instance_from_context
-from unity_transport import async_send_with_unity_instance
+from unity_transport import send_with_unity_instance
 from unity_connection import async_send_command_with_retry
 
 
@@ -62,7 +62,7 @@ async def _resolve_project_root(ctx: Context, override: str | None) -> Path:
             return pr
     # 3) Ask Unity via manage_editor.get_project_root
     try:
-        response = await async_send_with_unity_instance(
+        response = await send_with_unity_instance(
             async_send_command_with_retry,
             unity_instance,
             "manage_editor",

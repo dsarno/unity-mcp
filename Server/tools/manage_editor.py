@@ -4,7 +4,7 @@ from fastmcp import Context
 from registry import mcp_for_unity_tool
 from telemetry import is_telemetry_enabled, record_tool_usage
 from tools import get_unity_instance_from_context
-from unity_transport import async_send_with_unity_instance
+from unity_transport import send_with_unity_instance
 from unity_connection import async_send_command_with_retry
 
 
@@ -66,7 +66,7 @@ async def manage_editor(
         params = {k: v for k, v in params.items() if v is not None}
 
         # Send command using centralized retry helper with instance routing
-        response = await async_send_with_unity_instance(async_send_command_with_retry, unity_instance, "manage_editor", params)
+        response = await send_with_unity_instance(async_send_command_with_retry, unity_instance, "manage_editor", params)
 
         # Preserve structured failure data; unwrap success into a friendlier shape
         if isinstance(response, dict) and response.get("success"):

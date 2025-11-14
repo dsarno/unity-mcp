@@ -81,7 +81,7 @@ def with_unity_instance(
     return _decorate
 
 
-async def async_send_with_unity_instance(
+async def send_with_unity_instance(
     send_fn: Callable[..., Awaitable[T]],
     unity_instance: str | None,
     *args,

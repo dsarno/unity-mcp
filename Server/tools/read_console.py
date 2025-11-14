@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from registry import mcp_for_unity_tool
 from tools import get_unity_instance_from_context
-from unity_transport import async_send_with_unity_instance
+from unity_transport import send_with_unity_instance
 from unity_connection import async_send_command_with_retry
 
 
@@ -92,7 +92,7 @@ async def read_console(
         params_dict['count'] = None
 
     # Use centralized retry helper with instance routing
-    resp = await async_send_with_unity_instance(async_send_command_with_retry, unity_instance, "read_console", params_dict)
+    resp = await send_with_unity_instance(async_send_command_with_retry, unity_instance, "read_console", params_dict)
     if isinstance(resp, dict) and resp.get("success") and not include_stacktrace:
         # Strip stacktrace fields from returned lines if present
         try:
