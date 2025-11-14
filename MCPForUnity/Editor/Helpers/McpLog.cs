@@ -11,9 +11,21 @@ namespace MCPForUnity.Editor.Helpers
         private const string WarnPrefix = "<b><color=#cc7a00>MCP-FOR-UNITY</color></b>:";
         private const string ErrorPrefix = "<b><color=#cc3333>MCP-FOR-UNITY</color></b>:";
 
-        private static bool IsDebugEnabled()
+        private static volatile bool _debugEnabled = ReadDebugPreference();
+
+        private static bool IsDebugEnabled() => _debugEnabled;
+
+        private static bool ReadDebugPreference()
         {
-            try { return EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false); } catch { return false; }
+            try { return EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false); }
+            catch { return false; }
+        }
+
+        public static void SetDebugLoggingEnabled(bool enabled)
+        {
+            _debugEnabled = enabled;
+            try { EditorPrefs.SetBool(EditorPrefKeys.DebugLogs, enabled); }
+            catch { }
         }
 
         public static void Debug(string message)

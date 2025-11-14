@@ -157,7 +157,7 @@ namespace MCPForUnity.Editor.Services
 
                 if (response.IsSuccessStatusCode)
                 {
-                    McpLog.Info("MCP ping successful");
+                    McpLog.Debug("MCP ping successful");
                     return true;
                 }
                 else

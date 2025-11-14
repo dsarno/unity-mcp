@@ -245,7 +245,9 @@ namespace MCPForUnity.Editor.Windows
         {
             // Settings Section
             UpdateVersionLabel();
-            debugLogsToggle.value = EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false);
+            bool debugEnabled = EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false);
+            debugLogsToggle.value = debugEnabled;
+            McpLog.SetDebugLoggingEnabled(debugEnabled);
 
             validationLevelField.Init(ValidationLevel.Standard);
             int savedLevel = EditorPrefs.GetInt(EditorPrefKeys.ValidationLevel, 1);
@@ -299,7 +301,7 @@ namespace MCPForUnity.Editor.Windows
             // Settings callbacks
             debugLogsToggle.RegisterValueChangedCallback(evt =>
             {
-                EditorPrefs.SetBool(EditorPrefKeys.DebugLogs, evt.newValue);
+                McpLog.SetDebugLoggingEnabled(evt.newValue);
             });
 
             validationLevelField.RegisterValueChangedCallback(evt =>
@@ -726,7 +728,7 @@ namespace MCPForUnity.Editor.Windows
             {
                 healthStatusLabel.text = "Healthy";
                 healthIndicator.AddToClassList("healthy");
-                McpLog.Info($"Connection verification successful: {result.Message}");
+                McpLog.Debug($"Connection verification successful: {result.Message}");
             }
             else if (result.HandshakeValid)
             {
