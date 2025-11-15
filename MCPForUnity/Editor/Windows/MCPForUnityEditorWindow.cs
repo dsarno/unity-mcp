@@ -850,8 +850,8 @@ namespace MCPForUnity.Editor.Windows
 
         private void OnClearUvxCacheClicked()
         {
-            if (EditorUtility.DisplayDialog("Clear UVX Cache",
-                "This will clear the local uvx cache for the MCP server package. The server will be re-downloaded on next launch.\n\nContinue?",
+            if (EditorUtility.DisplayDialog("Clear uv Cache",
+                "This will clear the local uv cache for the MCP server package. The server will be re-downloaded on next launch.\n\nContinue?",
                 "Clear Cache",
                 "Cancel"))
             {
@@ -859,13 +859,13 @@ namespace MCPForUnity.Editor.Windows
 
                 if (success)
                 {
-                    McpLog.Info("UVX cache cleared successfully");
+                    McpLog.Info("uv cache cleared successfully");
                 }
                 else
                 {
-                    McpLog.Error("Failed to clear UVX cache");
+                    McpLog.Error("Failed to clear uv cache");
                     EditorUtility.DisplayDialog("Error",
-                        "Failed to clear UVX cache. Check the console for details.",
+                        "Failed to clear uv cache. Check the console for details.",
                         "OK");
                 }
             }
