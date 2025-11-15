@@ -815,7 +815,7 @@ namespace MCPForUnity.Editor.Windows
                 McpLog.Debug($"Connection verification successful: {result.Message}");
 
                 var mode = bridgeService.ActiveMode;
-                if (mode == TransportMode.Http || mode == TransportMode.HttpPush)
+                if (mode == TransportMode.Http)
                 {
                     CustomToolRegistrationProcessor.NotifyHttpConnectionHealthy();
                 }

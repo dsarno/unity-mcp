@@ -146,11 +146,6 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
             }
         }
 
-        public Task<string> SendCommandAsync(string commandJson)
-        {
-            throw new NotSupportedException("WebSocket transport does not support client-initiated commands.");
-        }
-
         public void Dispose()
         {
             _sendLock?.Dispose();

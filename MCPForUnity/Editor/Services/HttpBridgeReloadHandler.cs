@@ -25,8 +25,7 @@ namespace MCPForUnity.Editor.Services
             try
             {
                 var bridge = MCPServiceLocator.Bridge;
-                bool shouldResume = bridge.IsRunning &&
-                    (bridge.ActiveMode == TransportMode.Http || bridge.ActiveMode == TransportMode.HttpPush);
+                bool shouldResume = bridge.IsRunning && bridge.ActiveMode == TransportMode.Http;
 
                 if (shouldResume)
                 {

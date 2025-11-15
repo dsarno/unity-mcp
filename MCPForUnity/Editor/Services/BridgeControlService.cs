@@ -126,14 +126,5 @@ namespace MCPForUnity.Editor.Services
             return BuildVerificationResult(state, mode, pingSucceeded);
         }
 
-        public HttpMcpClient GetHttpClient()
-        {
-            if (_transportManager.ActiveTransport is HttpTransportClient http)
-            {
-                return http.Client;
-            }
-
-            return null;
-        }
     }
 }

@@ -52,10 +52,6 @@ namespace MCPForUnity.Editor.Services
         /// <returns>Verification result with detailed status</returns>
         Task<BridgeVerificationResult> VerifyAsync();
 
-        /// <summary>
-        /// Gets the HTTP client instance (null if not in HTTP mode)
-        /// </summary>
-        HttpMcpClient GetHttpClient();
     }
 
     /// <summary>

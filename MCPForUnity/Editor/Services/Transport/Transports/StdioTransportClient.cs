@@ -46,9 +46,5 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
             return Task.FromResult(running);
         }
 
-        public Task<string> SendCommandAsync(string commandJson)
-        {
-            throw new NotSupportedException("STDIO transport does not send commands from Unity to MCP.");
-        }
     }
 }

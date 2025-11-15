@@ -48,7 +48,7 @@ namespace MCPForUnity.Editor.Helpers
 
             var transportManager = MCPServiceLocator.TransportManager;
             var activeMode = transportManager.ActiveMode;
-            bool isHttpMode = activeMode == TransportMode.Http || activeMode == TransportMode.HttpPush;
+            bool isHttpMode = activeMode == TransportMode.Http;
 
             if (!isHttpMode)
             {
