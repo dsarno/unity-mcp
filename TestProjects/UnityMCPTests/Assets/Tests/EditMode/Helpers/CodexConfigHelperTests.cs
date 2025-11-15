@@ -3,6 +3,8 @@ using MCPForUnity.Editor.Helpers;
 using MCPForUnity.External.Tommy;
 using MCPForUnity.Editor.Services;
 using System.IO;
+using MCPForUnity.Editor.Constants;
+using UnityEditor;
 
 namespace MCPForUnityTests.Editor.Helpers
 {
@@ -26,11 +28,41 @@ namespace MCPForUnityTests.Editor.Helpers
             public string GetSystemRoot() => _isWindows ? _systemRoot : null;
         }
 
+        private bool _hadGitOverride;
+        private string _originalGitOverride;
+
+        [OneTimeSetUp]
+        public void OneTimeSetUp()
+        {
+            _hadGitOverride = EditorPrefs.HasKey(EditorPrefKeys.GitUrlOverride);
+            _originalGitOverride = EditorPrefs.GetString(EditorPrefKeys.GitUrlOverride, string.Empty);
+        }
+
+        [SetUp]
+        public void SetUp()
+        {
+            // Ensure per-test deterministic Git URL (ignore developer overrides)
+            EditorPrefs.DeleteKey(EditorPrefKeys.GitUrlOverride);
+        }
+
         [TearDown]
         public void TearDown()
         {
             // Reset service locator after each test
             MCPServiceLocator.Reset();
+        }
+
+        [OneTimeTearDown]
+        public void OneTimeTearDown()
+        {
+            if (_hadGitOverride)
+            {
+                EditorPrefs.SetString(EditorPrefKeys.GitUrlOverride, _originalGitOverride);
+            }
+            else
+            {
+                EditorPrefs.DeleteKey(EditorPrefKeys.GitUrlOverride);
+            }
         }
 
         [Test]
