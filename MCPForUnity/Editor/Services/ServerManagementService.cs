@@ -17,51 +17,14 @@ namespace MCPForUnity.Editor.Services
         /// </summary>
         public bool StartLocalHttpServer()
         {
-            // Check if HTTP transport is enabled
-            bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
-            if (!useHttpTransport)
+            if (!TryGetLocalHttpServerCommand(out var command, out var error))
             {
                 EditorUtility.DisplayDialog(
-                    "HTTP Transport Disabled",
-                    "HTTP transport is not enabled. Please enable it in the MCP For Unity window first.",
+                    "Cannot Start HTTP Server",
+                    error ?? "The server command could not be constructed with the current settings.",
                     "OK");
                 return false;
             }
-
-            // Get the HTTP URL
-            string httpUrl = HttpEndpointUtility.GetBaseUrl();
-
-            // Check if it's a local URL
-            if (!IsLocalUrl())
-            {
-                EditorUtility.DisplayDialog(
-                    "Remote Server",
-                    $"The configured URL ({httpUrl}) is not a local address.\n\n" +
-                    "This operation is only for starting a local server. " +
-                    "For remote servers, please start the server manually on the remote machine.",
-                    "OK");
-                return false;
-            }
-
-            // Get uvx command parts
-            var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
-
-            if (string.IsNullOrEmpty(uvxPath))
-            {
-                EditorUtility.DisplayDialog(
-                    "UVX Not Found",
-                    "UVX is not installed or not found in PATH. Please install UV/UVX first.",
-                    "OK");
-                return false;
-            }
-
-            // Build the command
-            string args = string.IsNullOrEmpty(fromUrl)
-                ? $"{packageName} --transport http --http-url {httpUrl}"
-                : $"--from {fromUrl} {packageName} --transport http --http-url {httpUrl}";
-
-            // Start the server in a terminal
-            string command = $"{uvxPath} {args}";
 
             if (EditorUtility.DisplayDialog(
                 "Start Local HTTP Server",
@@ -94,6 +57,43 @@ namespace MCPForUnity.Editor.Services
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Attempts to build the command used for starting the local HTTP server
+        /// </summary>
+        public bool TryGetLocalHttpServerCommand(out string command, out string error)
+        {
+            command = null;
+            error = null;
+
+            bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
+            if (!useHttpTransport)
+            {
+                error = "HTTP transport is disabled. Enable it in the MCP For Unity window first.";
+                return false;
+            }
+
+            string httpUrl = HttpEndpointUtility.GetBaseUrl();
+            if (!IsLocalUrl())
+            {
+                error = $"The configured URL ({httpUrl}) is not a local address. Local server launch only works for localhost.";
+                return false;
+            }
+
+            var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+            if (string.IsNullOrEmpty(uvxPath))
+            {
+                error = "UV/UVX is not installed or found in PATH. Install it or set an override in Advanced Settings.";
+                return false;
+            }
+
+            string args = string.IsNullOrEmpty(fromUrl)
+                ? $"{packageName} --transport http --http-url {httpUrl}"
+                : $"--from {fromUrl} {packageName} --transport http --http-url {httpUrl}";
+
+            command = $"{uvxPath} {args}";
+            return true;
         }
 
         /// <summary>

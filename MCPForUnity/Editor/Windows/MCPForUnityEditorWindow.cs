@@ -45,6 +45,10 @@ namespace MCPForUnity.Editor.Windows
         private EnumField transportDropdown;
         private VisualElement httpUrlRow;
         private VisualElement startHttpRow;
+        private Foldout httpServerCommandFoldout;
+        private TextField httpServerCommandField;
+        private Button copyHttpServerCommandButton;
+        private Label httpServerCommandHint;
         private TextField httpUrlField;
         private Button startHttpServerButton;
         private VisualElement unitySocketPortRow;
@@ -217,6 +221,10 @@ namespace MCPForUnity.Editor.Windows
             transportDropdown = rootVisualElement.Q<EnumField>("transport-dropdown");
             httpUrlRow = rootVisualElement.Q<VisualElement>("http-url-row");
             startHttpRow = rootVisualElement.Q<VisualElement>("start-http-row");
+            httpServerCommandFoldout = rootVisualElement.Q<Foldout>("http-server-command-foldout");
+            httpServerCommandField = rootVisualElement.Q<TextField>("http-server-command");
+            copyHttpServerCommandButton = rootVisualElement.Q<Button>("copy-http-server-command-button");
+            httpServerCommandHint = rootVisualElement.Q<Label>("http-server-command-hint");
             httpUrlField = rootVisualElement.Q<TextField>("http-url");
             startHttpServerButton = rootVisualElement.Q<Button>("start-http-server-button");
             unitySocketPortRow = rootVisualElement.Q<VisualElement>("unity-socket-port-row");
@@ -285,6 +293,7 @@ namespace MCPForUnity.Editor.Windows
             // Update HTTP field visibility
             UpdateHttpFieldVisibility();
             UpdateStartHttpButtonState();
+            UpdateHttpServerCommandDisplay();
 
             // Client Configuration
             var clientNames = mcpClients.clients.Select(c => c.name).ToList();
@@ -331,11 +340,24 @@ namespace MCPForUnity.Editor.Windows
                 HttpEndpointUtility.SaveBaseUrl(evt.newValue);
                 httpUrlField.value = HttpEndpointUtility.GetBaseUrl();
                 UpdateManualConfiguration(); // Refresh config display
+                UpdateHttpServerCommandDisplay();
             });
 
             if (startHttpServerButton != null)
             {
                 startHttpServerButton.clicked += OnStartLocalHttpServerClicked;
+            }
+
+            if (copyHttpServerCommandButton != null)
+            {
+                copyHttpServerCommandButton.clicked += () =>
+                {
+                    if (!string.IsNullOrEmpty(httpServerCommandField?.value) && copyHttpServerCommandButton.enabledSelf)
+                    {
+                        EditorGUIUtility.systemCopyBuffer = httpServerCommandField.value;
+                        McpLog.Info("HTTP server command copied to clipboard.");
+                    }
+                };
             }
 
             unityPortField.RegisterCallback<FocusOutEvent>(_ => PersistUnityPortFromField());
@@ -477,6 +499,7 @@ namespace MCPForUnity.Editor.Windows
             unitySocketPortRow.style.display = useHttp ? DisplayStyle.None : DisplayStyle.Flex;
 
             UpdateStartHttpButtonState();
+            UpdateHttpServerCommandDisplay();
         }
 
         private void UpdateStartHttpButtonState()
@@ -489,6 +512,7 @@ namespace MCPForUnity.Editor.Windows
             {
                 startHttpServerButton.SetEnabled(false);
                 startHttpServerButton.tooltip = string.Empty;
+                UpdateHttpServerCommandDisplay();
                 return;
             }
 
@@ -497,6 +521,62 @@ namespace MCPForUnity.Editor.Windows
             startHttpServerButton.tooltip = canStart
                 ? string.Empty
                 : "Start Local HTTP Server is available only for localhost URLs.";
+            UpdateHttpServerCommandDisplay();
+        }
+
+        private void UpdateHttpServerCommandDisplay()
+        {
+            if (httpServerCommandFoldout == null || httpServerCommandField == null)
+            {
+                return;
+            }
+
+            bool useHttp = transportDropdown != null && (TransportProtocol)transportDropdown.value == TransportProtocol.HTTP;
+
+            if (!useHttp)
+            {
+                httpServerCommandFoldout.style.display = DisplayStyle.None;
+                httpServerCommandField.value = string.Empty;
+                httpServerCommandField.tooltip = string.Empty;
+                if (httpServerCommandHint != null)
+                {
+                    httpServerCommandHint.text = string.Empty;
+                }
+                if (copyHttpServerCommandButton != null)
+                {
+                    copyHttpServerCommandButton.SetEnabled(false);
+                }
+                return;
+            }
+
+            httpServerCommandFoldout.style.display = DisplayStyle.Flex;
+
+            if (MCPServiceLocator.Server.TryGetLocalHttpServerCommand(out var command, out var error))
+            {
+                httpServerCommandField.value = command;
+                httpServerCommandField.tooltip = command;
+                if (httpServerCommandHint != null)
+                {
+                    httpServerCommandHint.text = "Run this command in your shell if you prefer to start the server manually.";
+                }
+                if (copyHttpServerCommandButton != null)
+                {
+                    copyHttpServerCommandButton.SetEnabled(true);
+                }
+            }
+            else
+            {
+                httpServerCommandField.value = string.Empty;
+                httpServerCommandField.tooltip = string.Empty;
+                if (httpServerCommandHint != null)
+                {
+                    httpServerCommandHint.text = error ?? "The command is not available with the current configuration.";
+                }
+                if (copyHttpServerCommandButton != null)
+                {
+                    copyHttpServerCommandButton.SetEnabled(false);
+                }
+            }
         }
 
         private void UpdateClientStatus()
