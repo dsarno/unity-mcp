@@ -13,7 +13,7 @@ The window has four areas: Server Status, Unity Bridge, MCP Client Configuration
 1. Open Window > MCP for Unity.
 2. Click “Auto-Setup”.
 3. If prompted:
-   - Select the server folder that contains `server.py` (UnityMcpServer~/src).
+   - Select the server folder that contains `server.py` (Server).
    - Install Python and/or uv if missing.
    - For Claude Code, ensure the `claude` CLI is installed.
 4. Click “Start Bridge” if the Unity Bridge shows “Stopped”.

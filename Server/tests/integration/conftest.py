@@ -16,7 +16,7 @@ os.environ.setdefault("MCP_DISABLE_TELEMETRY", "true")
 # NOTE: These tests are integration tests for the MCP server Python code.
 # They test tools, resources, and utilities without requiring Unity to be running.
 # Tests can now import directly from the parent package since they're inside src/
-# To run: cd MCPForUnity/UnityMcpServer~/src && uv run pytest tests/integration/ -v
+# To run: cd Server && uv run pytest tests/integration/ -v
 
 # Stub telemetry modules to avoid file I/O during import of tools package
 telemetry = types.ModuleType("telemetry")
