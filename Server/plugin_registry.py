@@ -1,7 +1,3 @@
-# Copyright (c) 2025 Unity MCP contributors.
-#
-# Licensed under the MIT License. See LICENSE in the project root for license information.
-
 """In-memory registry for connected Unity plugin sessions."""
 
 from __future__ import annotations
