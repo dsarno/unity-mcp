@@ -305,7 +305,7 @@ class UnityConnection:
                     payload = b'ping'
                 else:
                     payload = json.dumps({
-                        'command': command_type,
+                        'type': command_type,
                         'params': params,
                     }).encode('utf-8')
 
