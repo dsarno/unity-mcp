@@ -1,25 +1,28 @@
-import asyncio
-from telemetry import record_telemetry, record_milestone, RecordType, MilestoneType
-from fastmcp import FastMCP
-import logging
-from logging.handlers import RotatingFileHandler
-import os
 import argparse
+import asyncio
+import logging
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Dict, Any
-from config import config
-from tools import register_all_tools
-from resources import register_all_resources
-from unity_connection import get_unity_connection_pool, UnityConnectionPool
-from unity_instance_middleware import UnityInstanceMiddleware, set_unity_instance_middleware
+import os
+from pathlib import Path
 import time
-from custom_tool_service import CustomToolService
+from typing import AsyncIterator, Dict, Any
+from urllib.parse import urlparse
+
+from fastmcp import FastMCP
+from logging.handlers import RotatingFileHandler
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import WebSocketRoute
 
-from plugin_registry import PluginRegistry
+from config import config
+from custom_tool_service import CustomToolService
 from plugin_hub import PluginHub
+from plugin_registry import PluginRegistry
+from resources import register_all_resources
+from telemetry import record_milestone, record_telemetry, MilestoneType, RecordType
+from tools import register_all_tools
+from unity_connection import get_unity_connection_pool, UnityConnectionPool
+from unity_instance_middleware import UnityInstanceMiddleware, set_unity_instance_middleware
 
 # Configure logging using settings from config
 logging.basicConfig(
@@ -32,11 +35,10 @@ logger = logging.getLogger("mcp-for-unity-server")
 
 # Also write logs to a rotating file so logs are available when launched via stdio
 try:
-    import os as _os
-    _log_dir = _os.path.join(_os.path.expanduser(
+    _log_dir = os.path.join(os.path.expanduser(
         "~/Library/Application Support/UnityMCP"), "Logs")
-    _os.makedirs(_log_dir, exist_ok=True)
-    _file_path = _os.path.join(_log_dir, "unity_mcp_server.log")
+    os.makedirs(_log_dir, exist_ok=True)
+    _file_path = os.path.join(_log_dir, "unity_mcp_server.log")
     _fh = RotatingFileHandler(
         _file_path, maxBytes=512*1024, backupCount=2, encoding="utf-8")
     _fh.setFormatter(logging.Formatter(config.log_format))
@@ -110,7 +112,6 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[Dict[str, Any]]:
     start_time = time.time()
     start_clk = time.perf_counter()
     try:
-        from pathlib import Path
         ver_path = Path(__file__).parent / "server_version.txt"
         server_version = ver_path.read_text(encoding="utf-8").strip()
     except Exception:
@@ -248,8 +249,6 @@ custom_tool_service = CustomToolService(mcp)
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_http(_: Request) -> JSONResponse:
-    import time
-
     return JSONResponse({
         "status": "healthy",
         "timestamp": time.time(),
@@ -275,7 +274,8 @@ existing_routes = [
     if isinstance(route, WebSocketRoute) and route.path == "/hub/plugin"
 ]
 if not existing_routes:
-    mcp._additional_http_routes.append(WebSocketRoute("/hub/plugin", PluginHub))
+    mcp._additional_http_routes.append(
+        WebSocketRoute("/hub/plugin", PluginHub))
 
 # Register all tools
 register_all_tools(mcp)
@@ -367,8 +367,6 @@ Examples:
     os.environ["UNITY_MCP_TRANSPORT"] = transport_mode
     logger.info(f"Transport mode: {transport_mode}")
 
-    # Parse HTTP URL to extract host and port
-    from urllib.parse import urlparse
     http_url = os.environ.get("UNITY_MCP_HTTP_URL", args.http_url)
     parsed_url = urlparse(http_url)
 
@@ -393,7 +391,6 @@ Examples:
         # Use HTTP transport for FastMCP
         transport = 'http'
         # Use the parsed host and port from URL/args
-        from urllib.parse import urlparse
         http_url = os.environ.get("UNITY_MCP_HTTP_URL", args.http_url)
         parsed_url = urlparse(http_url)
         host = args.http_host or os.environ.get(
