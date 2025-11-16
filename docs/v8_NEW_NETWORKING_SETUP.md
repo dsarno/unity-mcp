@@ -20,7 +20,7 @@ The MCP protocol defines how clients and servers can communicate, but we have to
 
 ## How do MCP components communicate?
 
-MCP servers support communicating over stdio or via Streamable HTTP: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports.
+MCP servers support communicating over [stdio or via Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).
 
 ### Stdio Architecture
 
@@ -30,7 +30,7 @@ Why can't the Unity plugin communicate to the server via stdio like the MCP clie
 
 Unity can't reach that internal subprocess, so we listen to port 6400, which the MCP server can open and send/receive data.
 
-**Note**: Previously we used `uv`, and we installed the server locally in the plugin. Now we use `uvx` which installs the server for us, directly from our GitHub repo.
+> **Note**: Previously we used `uv`, and we installed the server locally in the plugin. Now we use `uvx` which installs the server for us, directly from our GitHub repo.
 
 When the user sends a prompt:
 
@@ -43,17 +43,17 @@ In this new version of MCP for Unity, our MCP server supports both the stdio and
 
 ### HTTP Architecture
 
-We create MCP configs that reference a URL, by default http://localhost:8080, however, users can change it to any address. MCP clients connect to the running HTTP server, and communicate with the MCP server via HTTP POST requests with JSON. Unlike in stdio, the MCP server is not a subprocess of the client, but is run indepedently of all other components.
+We create MCP configs that reference a URL, by default http://localhost:8080, however, users can change it to any address. MCP clients connect to the running HTTP server, and communicate with the MCP server via HTTP POST requests with JSON. Unlike in stdio, the MCP server is not a subprocess of the client, but is run independently of all other components.
 
-What about the MCP server and Unity? We could maintain the communication channel that's used in stdio i.e. communicating via port 6400. However, this would limit the HTTP server to being run locally. A remote HTTP server would not have access to a user's port 6400 (unless users open their ports to the internet, which may be hard for some and is an unnecessary security risk).
+What about the MCP server and Unity? We could maintain the communication channel that's used in stdio i.e. communicating via port 6400. However, this would limit the HTTP server to only being run locally. A remote HTTP server would not have access to a user's port 6400 (unless users open their ports to the internet, which may be hard for some and is an unnecessary security risk).
 
-To work with both locally and remotely hosted HTTP servers, we set up a *websocket connection* between Unity and the MCP Server. This allows for real time communication between the two components.
+To work with both locally and remotely hosted HTTP servers, we set up a *WebSocket connection* between Unity and the MCP Server. This allows for real time communication between the two components.
 
 When the user sends a prompt:
 
 1. The MCP client will send an HTTP POST request to the MCP server
-2. The MCP server would process the request and send a message to Unity via websockets
-3. The Unity plugin sends a response via websockets to the MCP server
+2. The MCP server would process the request and send a message to Unity via WebSockets
+3. The Unity plugin sends a response via WebSockets to the MCP server
 4. The MCP server parses the response and returns JSON to the MCP client via Server-Sent Events
 
 MCP for Unity previously only supported local connections with MCP clients via stdio. Now, we continue to support local stdio connections, but additionally support local HTTP connections and remote HTTP connections.
@@ -63,20 +63,21 @@ MCP for Unity previously only supported local connections with MCP clients via s
 Let's discuss both technical and political reasons:
 
 - More flexibility on where the HTTP server can be run:
-  - Do you want to run the MCP server in your terminal/PowerShell/Command Prompt? Sure, go ahead
-  - Do you want to run the MCP server in Windows Subsystem for Linux (WSL), where you prefer to install Python/`uv`? Sure, go ahead
-  - Do you want to run the MCP server in a docker container? Sure, go ahead
-  - Do you want to run the MCP server on a dedicated server all your personal computers connect to? Sure, go ahead
-  - Do you want to run MCP server in the cloud and have various projects use it? Sure, go ahead
+  - Do you want to run the MCP server in your terminal/PowerShell/Command Prompt? You can.
+  - Do you want to run the MCP server in Windows Subsystem for Linux (WSL), where you prefer to install Python/`uv`? You can.
+  - Do you want to run the MCP server in a docker container? You can.
+  - Do you want to run the MCP server on a dedicated server all your personal computers connect to? You can.
+  - Do you want to run MCP server in the cloud and have various projects use it? You can.
 - HTTP opens up easier ways to communicate with the MCP server w/o using the MCP protocol
   - For example, this version supports custom tools that only require C# code (see [CUSTOM_TOOLS.md](./CUSTOM_TOOLS.md) for more info). This was easy to implement because we added a special endpoint to handle tool registration
 - Our MCP server can now be hosted by various MCP marketplaces, they typically require an HTTP server because they host it remotely.
 - We can distribute the plugin with a remote URL, so users would not need to install Python or `uv` installed to use MCP for Unity.
-  - This is controversial, there's a question of who should host the server, particularly for an open source, community centered project. For now, Coplay will host the server as it's the sponsor of this project. This remote URL would not be the default for users who install via Git or OpenUPM, but it will become the default for users who install via the Unity Asset Store, where we can't submit the plugin if it requires Python/`uv` to be installed.
+  - This is a contentious issue. Who should host the server, particularly for an open source, community centered project? For now, Coplay will host the server as it is the sponsor of this project. This remote URL would not be the default for users who install via Git or OpenUPM, but it will become the default for users who install via the Unity Asset Store, where we can't submit the plugin if it requires Python/`uv` to be installed.
+  - Not having to setup Python and `uv` has benefits to non-asset store users, but I think to avoid maintaining this server, we'll explore running the MCP server inside the Unity plugin as a background process using the [official MCP C# SDK](https://github.com/modelcontextprotocol/csharp-sdk).
 
 ## How was it implemented?
 
-Significant changes were made to the server and Unity plugin to support the HTTP protocol, as well as the new websocket connection, with the right amount of abstraction to support both stdio and HTTP.
+Significant changes were made to the server and Unity plugin to support the HTTP protocol, as well as the new WebSocket connection, with the right amount of abstraction to support both stdio and HTTP.
 
 ### Server
 
@@ -94,11 +95,11 @@ It still calls `PortDiscovery.discover_all_unity_instances()`, but we add a lock
 
 The `UnityConnection` class uses the cached ports to retrieve the open port for a specific instances when creating a new connection, and when sending a command.
 
-For websocket connections, we need to understand the `PluginHub` and the `PluginRegistry` classes. The plugin hub is what manages the websocket connections with the MCP server in-memory. It also has the `send_command_for_instance` function, which actually sends the command to the Unity plugin.
+For WebSocket connections, we need to understand the `PluginHub` and the `PluginRegistry` classes. The plugin hub is what manages the WebSocket connections with the MCP server in-memory. It also has the `send_command_for_instance` function, which actually sends the command to the Unity plugin.
 
-The in-memory mapping of sessions to websockets connections in the plugin hub is done via the `PluginRegistry` class.
+The in-memory mapping of sessions to WebSockets connections in the plugin hub is done via the `PluginRegistry` class.
 
-You're wondering if every function tool needs to use the `send_command_for_instance` and the current function and choose between websockets/stdio every invocation? No, to keep tool calls as simple as posisble, all users have to do is call the `send_with_unity_instance`, which delegates the actual sending of data to `send_command_for_instance` or `send_fn`, which is a function that's parsed to the arguments of `send_with_unity_instance`, typically `async_send_command_with_retry`.
+You're wondering if every function tool needs to use the `send_command_for_instance` and the current function and choose between WebSockets/stdio every invocation? No, to keep tool calls as simple as posisble, all users have to do is call the `send_with_unity_instance`, which delegates the actual sending of data to `send_command_for_instance` or `send_fn`, which is a function that's parsed to the arguments of `send_with_unity_instance`, typically `async_send_command_with_retry`.
 
 ### Unity Plugin
 
@@ -106,9 +107,9 @@ Let's start with how things worked before this change. The `MCPForUnityBridge` w
 
 The `BridgeControlService` called functions in the `MCPForUnityBridge`, which managed the state and processing for TCP communication.
 
-In this version `BridgeControlService` wraps around the `TransportManager`, it doesn't have hardcoded logic specific to stdio. The `TransportManager` object manages the state of the network and delegates the actual networking logic to the appropriate transport client - either websocket or stdio. The `TransportManager` interacts with objects that implement the `IMcpTransportClient` interface.
+In this version `BridgeControlService` wraps around the `TransportManager`, it doesn't have hardcoded logic specific to stdio. The `TransportManager` object manages the state of the network and delegates the actual networking logic to the appropriate transport client - either WebSocket or stdio. The `TransportManager` interacts with objects that implement the `IMcpTransportClient` interface.
 
-The legacy `McpForUnityBridge` was renamed and moved to `StdioBridgeHost`. The `StdioTransportClient` class is a think wrapper over the `StdioBridgeHost` class, that implements the `IMcpTransportClient` interface. All the logic for the websocket connection is in the `WebSocketTransportClient` class.
+The legacy `McpForUnityBridge` was renamed and moved to `StdioBridgeHost`. The `StdioTransportClient` class is a think wrapper over the `StdioBridgeHost` class, that implements the `IMcpTransportClient` interface. All the logic for the WebSocket connection is in the `WebSocketTransportClient` class.
 
 ### MCP Configs
 
@@ -185,7 +186,7 @@ The first time users set up the plugin, the server would likely not be running. 
 
 The request is sent to the `/register-tools` endpoint on the server. That request dynamically registers the tool on the server.
 
-**Note**: FastMCP can register and deregister tools while the server is running, however, not all MCP clients can process the updates in real time. We recommend that users refresh/reconfigure the MCP servers in the clients so they can see the new custom tools.
+> **Note**: FastMCP can register and deregister tools while the server is running, however, not all MCP clients can process the updates in real time. We recommend that users refresh/reconfigure the MCP servers in the clients so they can see the new custom tools.
 
 Relevant commits:
 
@@ -203,7 +204,7 @@ Relevant commits:
 
 ### Miscellaneous
 
-- The shortcut (Cmd+Shift+M on macOS, Ctrl+Shift+M on Windows, Linux) can now be used to open and close the MCP for Unity window.
+- The shortcut (Cmd+Shift+M on macOS, Ctrl+Shift+M on Windows/Linux) can now be used to open and close the MCP for Unity window.
 - The `McpLog` object now has a `Debug` function, which only logs when the user selects "Show debug logs" in the settings.
 - All `EditorPrefs` are defined in `MCPForUnity/Editor/Constants/EditorPrefKeys.cs`. At a glance, we can see all the settings we have available.
 
@@ -212,9 +213,9 @@ Relevant commits:
 This was a big change, and it touches all the repo. So a lot of inefficiencies and room for improvement were exposed while working on it. Here are some items to address:
 
 - Loose types in Python. A lot of the new code would use dictionaries for structured data, which works, but we can benefit much more from using Pydantic classes with proper type checking. We always want to know when data is not being transferred in the format we expect it to. Plus, strong types make the code easier for humans and LLMs to reason about.
-- A lot of tools define a `_coerce_int` function, why? Why are we redifining a function that's the same across files? Can we use a shared function, or maybe use it as middleware?
-- Similarly, the `DummyMCP` class is defined in 10 server tests, we could set this up in `conftest.py`. These tests were originally indepdendent of the Server, but in v7 they became integration tests we run with `pytest`. With `pytest` being the default test runner, we can relook at how the tests are structured and optimize their setup.
-- `server_version.txt` is used in one place, but the server can now read it's own pyproject.toml to get the version, so we can remove this.
+- A lot of tools define a `_coerce_int` function, why? Why are we redefining a function that's the same across files? Can we use a shared function, or maybe use it as middleware?
+- Similarly, the `DummyMCP` class is defined in 10 server tests, we could set this up in `conftest.py`. These tests were originally indepdendent of the `Server` project, but in v7 they became integration tests we run with `pytest`. With `pytest` being the default test runner, we can relook at how the tests are structured and optimize their setup.
+- `server_version.txt` is used in one place, but the server can now read its own pyproject.toml to get the version, so we can remove this.
 - Think about a structure of the MCP server some more. The `tools`, `resources` and `registry` folders make sense, but everything else just forms part of the high level repo. It's growing, so some thought about how we create modules will help with scalability.
 - The way we register tools is a good platform for all tools to be defined by C#. Having all tools in the plugin makes it easier for us to maintain, the community to contribute, and users to modify this project to suit their needs. If all tools are registered from the plugin, we can allow users to select the tools they want to use, giving them even more control of their experience.
   - Of course, we need some testing of this custom tool architecture to know if it can scale to all tools. Also, custom tool registration is only supported with HTTP, so we'll need to support this feature when the stdio protocol is being used.
