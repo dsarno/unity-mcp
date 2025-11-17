@@ -89,7 +89,7 @@ mcp.run(transport=transport, host=host, port=port)
 
 And that's pretty much it in terms of HTTP support between the MCP server and client. Things get more interesting for the connection to the Unity plugin.
 
-Backward compatability with stdio connections were maintained, but we did make some small performance optimisations. Namely, we have an in-memory cache of unity isntances using the `StdioPortRegistry` class.
+Backward compatability with stdio connections was maintained, but we did make some small performance optimisations. Namely, we have an in-memory cache of unity isntances using the `StdioPortRegistry` class.
 
 It still calls `PortDiscovery.discover_all_unity_instances()`, but we add a lock when calling it, so multiple attempts to retrieve the instances do not cause our app to run multiple file scans at the same time. 
 
@@ -109,7 +109,7 @@ The `BridgeControlService` called functions in the `MCPForUnityBridge`, which ma
 
 In this version `BridgeControlService` wraps around the `TransportManager`, it doesn't have hardcoded logic specific to stdio. The `TransportManager` object manages the state of the network and delegates the actual networking logic to the appropriate transport client - either WebSocket or stdio. The `TransportManager` interacts with objects that implement the `IMcpTransportClient` interface.
 
-The legacy `McpForUnityBridge` was renamed and moved to `StdioBridgeHost`. The `StdioTransportClient` class is a think wrapper over the `StdioBridgeHost` class, that implements the `IMcpTransportClient` interface. All the logic for the WebSocket connection is in the `WebSocketTransportClient` class.
+The legacy `McpForUnityBridge` was renamed and moved to `StdioBridgeHost`. The `StdioTransportClient` class is a thin wrapper over the `StdioBridgeHost` class, that implements the `IMcpTransportClient` interface. All the logic for the WebSocket connection is in the `WebSocketTransportClient` class.
 
 ### MCP Configs
 
@@ -117,11 +117,11 @@ The legacy `McpForUnityBridge` was renamed and moved to `StdioBridgeHost`. The `
 
 Since we support both HTTP and stdio connections, we had to do some work around the MCP config builders. The major change was reworking how stdio connections were constructed to use `uvx` with the remote package instead of the locally bundled server and `uv`, HTTP configs are much simpler.
 
-The remote git URL we use to get the package is versioned, which added some complications. We frequently make changes to the `main` branch of this repo, some are breaking (the last version before this was v7, which was a major breaking change as well). We don't control how users update their MCP for Unity package. So if we pointed to the main branch, their plugin could be talking to a version of the server that it's incompatible with.
+The remote git URL we use to get the package is versioned, which added some complications. We frequently make changes to the `main` branch of this repo, some are breaking (the last version before this was v7, which was a major breaking change as well). We don't control how users update their MCP for Unity package. So if we point to the main branch, their plugin could be talking to an incompatible version of the server.
 
 To address this, we have a process to auto-update stdio configurations. The `StdIoVersionMigration` class runs when the plugin is loaded. It checks a new editor pref that stores the last version we upgraded clients to. If the plugin was updated, the package version will mismatch the editor pref's version, and we'll cycle through a user's configured MCP clients and re-configure them.
 
-This way, whenver a user upddates the plugin, they will automatically point to the correct version of the MCP server for their MCP clients to use.
+This way, whenever a user updates the plugin, they will automatically point to the correct version of the MCP server for their MCP clients to use.
 
 Relevant commits:
 
@@ -139,7 +139,7 @@ Relevant commits:
 
 ## Other changes
 
-This was the core change, but this version contains numerous other updates, including:
+This version contains numerous other updates, including:
 
 ### Using `uvx` instead of `uv`
 
@@ -174,7 +174,7 @@ Relevant commits:
 
 Custom tools were revamped once more, this time they're reached the simplest version that we wanted them to have - custom tools are written entirely in C# - no Python required. How does it work?
 
-Like before, we do reflection on the `McpForUnityToolAttribute`. However, this time the attribute now accepts a `name`, `description`, and `AutoRegister`. The `AutoRegister` boolean is true by default, but for our core tools it's false, as they do not have yet have their tool details nor parameters defined in C# right now.
+Like before, we do reflection on the `McpForUnityToolAttribute`. However, this time the attribute now accepts a `name`, `description`, and `AutoRegister`. The `AutoRegister` boolean is true by default, but for our core tools it's false, as they don't have their tool details nor parameters defined in C# as yet.
 
 Parameters are defined using the `ToolParameterAttribute`, which contains `Name`, `Description`, `Required`, and `DefaultValue` properties. 
 
