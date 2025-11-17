@@ -12,9 +12,58 @@ namespace MCPForUnity.Editor.Helpers
     /// Provides shared utilities for deriving deterministic project identity information
     /// used by transport clients (hash, name, persistent session id).
     /// </summary>
+    [InitializeOnLoad]
     internal static class ProjectIdentityUtility
     {
         private const string SessionPrefKey = EditorPrefKeys.WebSocketSessionId;
+        private static volatile bool _identityCached;
+        private static string _cachedProjectName = "Unknown";
+        private static string _cachedProjectHash = "default";
+        private static bool _cacheScheduled;
+
+        static ProjectIdentityUtility()
+        {
+            ScheduleCacheRefresh();
+            EditorApplication.projectChanged += ScheduleCacheRefresh;
+        }
+
+        private static void ScheduleCacheRefresh()
+        {
+            if (_cacheScheduled)
+            {
+                return;
+            }
+
+            _cacheScheduled = true;
+            EditorApplication.delayCall += CacheIdentityOnMainThread;
+        }
+
+        private static void CacheIdentityOnMainThread()
+        {
+            EditorApplication.delayCall -= CacheIdentityOnMainThread;
+            _cacheScheduled = false;
+            UpdateIdentityCache();
+        }
+
+        private static void UpdateIdentityCache()
+        {
+            try
+            {
+                string dataPath = Application.dataPath;
+                if (string.IsNullOrEmpty(dataPath))
+                {
+                    return;
+                }
+
+                _cachedProjectHash = ComputeProjectHash(dataPath);
+                _cachedProjectName = ComputeProjectName(dataPath);
+                _identityCached = true;
+            }
+            catch
+            {
+                // Ignore and keep defaults
+            }
+        }
 
         /// <summary>
         /// Returns the SHA1 hash of the current project path (truncated to 8 characters).
@@ -22,11 +71,23 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         public static string GetProjectHash()
         {
+            return _cachedProjectHash;
+        }
+
+        /// <summary>
+        /// Returns a human friendly project name derived from the Assets directory path.
+        /// </summary>
+        public static string GetProjectName()
+        {
+            return _cachedProjectName;
+        }
+
+        private static string ComputeProjectHash(string dataPath)
+        {
             try
             {
-                string projectPath = Application.dataPath ?? string.Empty;
                 using SHA1 sha1 = SHA1.Create();
-                byte[] bytes = Encoding.UTF8.GetBytes(projectPath);
+                byte[] bytes = Encoding.UTF8.GetBytes(dataPath);
                 byte[] hashBytes = sha1.ComputeHash(bytes);
                 var sb = new StringBuilder();
                 foreach (byte b in hashBytes)
@@ -35,25 +96,17 @@ namespace MCPForUnity.Editor.Helpers
                 }
                 return sb.ToString(0, Math.Min(8, sb.Length));
             }
-            catch (Exception)
+            catch
             {
                 return "default";
             }
         }
 
-        /// <summary>
-        /// Returns a human friendly project name derived from the Assets directory path.
-        /// </summary>
-        public static string GetProjectName()
+        private static string ComputeProjectName(string dataPath)
         {
             try
             {
-                string projectPath = Application.dataPath;
-                if (string.IsNullOrEmpty(projectPath))
-                {
-                    return "Unknown";
-                }
-
+                string projectPath = dataPath;
                 projectPath = projectPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 if (projectPath.EndsWith("Assets", StringComparison.OrdinalIgnoreCase))
                 {
