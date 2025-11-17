@@ -76,6 +76,49 @@ namespace MCPForUnity.Editor.Services
                 return;
             }
 
+            // If the editor is not compiling, attempt an immediate restart without relying on editor focus.
+            bool isCompiling = EditorApplication.isCompiling;
+            try
+            {
+                var pipeline = Type.GetType("UnityEditor.Compilation.CompilationPipeline, UnityEditor");
+                var prop = pipeline?.GetProperty("isCompiling", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                if (prop != null) isCompiling |= (bool)prop.GetValue(null);
+            }
+            catch { }
+
+            if (!isCompiling)
+            {
+                try
+                {
+                    var startTask = MCPServiceLocator.Bridge.StartAsync();
+                    startTask.ContinueWith(t =>
+                    {
+                        if (t.IsFaulted)
+                        {
+                            var baseEx = t.Exception?.GetBaseException();
+                            McpLog.Warn($"Failed to resume HTTP MCP bridge after domain reload: {baseEx?.Message}");
+                            return;
+                        }
+                        bool started = t.Result;
+                        if (!started)
+                        {
+                            McpLog.Warn("Failed to resume HTTP MCP bridge after domain reload");
+                        }
+                        else
+                        {
+                            MCPForUnityEditorWindow.RequestHealthVerification();
+                        }
+                    }, TaskScheduler.Default);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    McpLog.Error($"Error resuming HTTP MCP bridge: {ex.Message}");
+                    return;
+                }
+            }
+
+            // Fallback when compiling: schedule on the editor loop
             EditorApplication.delayCall += async () =>
             {
                 try

@@ -341,6 +341,23 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                         catch (SocketException se) when (se.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt >= maxImmediateRetries)
                         {
                             int oldPort = currentUnityPort;
+
+                            // Before switching ports, give the old one a brief chance to release if it looks like ours
+                            try
+                            {
+                                if (PortManager.IsPortUsedByMCPForUnity(oldPort))
+                                {
+                                    const int waitStepMs = 100;
+                                    int waited = 0;
+                                    while (waited < 300 && !PortManager.IsPortAvailable(oldPort))
+                                    {
+                                        Thread.Sleep(waitStepMs);
+                                        waited += waitStepMs;
+                                    }
+                                }
+                            }
+                            catch { }
+
                             currentUnityPort = PortManager.GetPortWithFallback();
 
                             if (IsDebugEnabled())
@@ -1024,10 +1041,28 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
             {
                 shouldRestartAfterReload = false;
             }
-            if (shouldResume)
+            if (!shouldResume)
             {
-                ScheduleInitRetry();
+                return;
             }
+
+            // If we're not compiling, try to bring the bridge up immediately to avoid depending on editor focus.
+            if (!IsCompiling())
+            {
+                try
+                {
+                    Start();
+                    return; // Successful immediate start; no need to schedule a delayed retry
+                }
+                catch (Exception ex)
+                {
+                    // Fall through to delayed retry if immediate start fails
+                    McpLog.Warn($"Immediate STDIO bridge restart after reload failed: {ex.Message}");
+                }
+            }
+
+            // Fallback path when compiling or if immediate start failed
+            ScheduleInitRetry();
         }
 
         private static void WriteHeartbeat(bool reloading, string reason = null)
