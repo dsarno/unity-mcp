@@ -1,0 +1,94 @@
+/* MCP Setup Window Styles */
+
+/* Root container */
+#root-container {
+    padding: 20px;
+}
+
+/* Dependency list */
+#dependency-list {
+    margin-top: 8px;
+}
+
+/* Dependency item container */
+.dependency-item {
+    margin-bottom: 12px;
+}
+
+/* Dependency row (name + version + indicator) */
+.dependency-row {
+    flex-direction: row;
+    align-items: center;
+}
+
+/* Dependency name label */
+.dependency-name {
+    -unity-font-style: bold;
+    min-width: 150px;
+}
+
+/* Status indicator positioning */
+.dependency-row .status-indicator-small {
+    margin-left: 8px;
+}
+
+/* Dependency details text */
+.dependency-details {
+    margin-left: 0px;
+    margin-top: 4px;
+}
+
+/* Status message container */
+#status-message-container {
+    margin-top: 16px;
+}
+
+/* Status message text */
+#status-message {
+    white-space: normal;
+}
+
+/* Installation section */
+#installation-section {
+    margin-top: 16px;
+    display: none;
+}
+
+/* Installation section title */
+.installation-title {
+    -unity-font-style: bold;
+    margin-bottom: 8px;
+}
+
+/* Installation instructions text */
+#installation-instructions {
+    white-space: normal;
+    margin-bottom: 12px;
+}
+
+/* Button container at bottom */
+.button-container {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 20px;
+}
+
+/* Spacer to push buttons right */
+.button-spacer {
+    flex-grow: 1;
+}
+
+/* Button sizing */
+.setup-button {
+    width: 80px;
+}
+
+/* Refresh button specific spacing */
+#refresh-button {
+    margin-right: 8px;
+}
+
+/* Description text spacing */
+.description-text {
+    margin-bottom: 12px;
+}

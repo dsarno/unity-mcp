@@ -65,18 +65,18 @@ namespace MCPForUnity.Editor.Setup
         }
 
         /// <summary>
-        /// Show the setup wizard window
+        /// Show the setup window
         /// </summary>
         public static void ShowSetupWizard(DependencyCheckResult dependencyResult = null)
         {
             try
             {
                 dependencyResult ??= DependencyManager.CheckAllDependencies();
-                SetupWizardWindow.ShowWindow(dependencyResult);
+                MCPSetupWindow.ShowWindow(dependencyResult);
             }
             catch (Exception ex)
             {
-                McpLog.Error($"Error showing setup wizard: {ex.Message}");
+                McpLog.Error($"Error showing setup window: {ex.Message}");
             }
         }
 

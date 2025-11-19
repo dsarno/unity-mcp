@@ -1,9 +1,6 @@
 using System;
 using System.Diagnostics;
-using System.IO;
 using MCPForUnity.Editor.Dependencies.Models;
-using MCPForUnity.Editor.Helpers;
-using MCPForUnity.Editor.Services;
 
 namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
 {
@@ -29,22 +26,18 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
 
             try
             {
-                // Use existing UV detection from ServerInstaller
-                string uvxPath = MCPServiceLocator.Paths.GetUvxPath(verifyPath: false);
-                if (!string.IsNullOrEmpty(uvxPath))
+                // Try to find uv/uvx in PATH
+                if (TryFindUvInPath(out string uvPath, out string version))
                 {
-                    if (TryValidateUvx(uvxPath, out string version))
-                    {
-                        status.IsAvailable = true;
-                        status.Version = version;
-                        status.Path = uvxPath;
-                        status.Details = $"Found UV {version} at {uvxPath}";
-                        return status;
-                    }
+                    status.IsAvailable = true;
+                    status.Version = version;
+                    status.Path = uvPath;
+                    status.Details = $"Found UV {version} in PATH";
+                    return status;
                 }
 
-                status.ErrorMessage = "UV package manager not found. Please install UV.";
-                status.Details = "UV is required for managing Python dependencies.";
+                status.ErrorMessage = "UV not found in PATH";
+                status.Details = "Install UV package manager and ensure it's added to PATH.";
             }
             catch (Exception ex)
             {
@@ -54,37 +47,45 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
             return status;
         }
 
-        protected bool TryValidateUvx(string uvxPath, out string version)
+        protected bool TryFindUvInPath(out string uvPath, out string version)
         {
+            uvPath = null;
             version = null;
 
-            try
+            // Try common UV command names
+            var commands = new[] { "uvx", "uv" };
+            
+            foreach (var cmd in commands)
             {
-                var psi = new ProcessStartInfo
+                try
                 {
-                    FileName = uvxPath,
-                    Arguments = "--version",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = cmd,
+                        Arguments = "--version",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
 
-                using var process = Process.Start(psi);
-                if (process == null) return false;
+                    using var process = Process.Start(psi);
+                    if (process == null) continue;
 
-                string output = process.StandardOutput.ReadToEnd().Trim();
-                process.WaitForExit(5000);
+                    string output = process.StandardOutput.ReadToEnd().Trim();
+                    process.WaitForExit(5000);
 
-                if (process.ExitCode == 0 && output.StartsWith("uv "))
-                {
-                    version = output.Substring(3); // Remove "uv " prefix
-                    return true;
+                    if (process.ExitCode == 0 && output.StartsWith("uv "))
+                    {
+                        version = output.Substring(3).Trim();
+                        uvPath = cmd;
+                        return true;
+                    }
                 }
-            }
-            catch
-            {
-                // Ignore validation errors
+                catch
+                {
+                    // Try next command
+                }
             }
 
             return false;

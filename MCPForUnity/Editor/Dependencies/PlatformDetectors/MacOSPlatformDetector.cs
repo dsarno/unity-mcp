@@ -25,49 +25,33 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
 
             try
             {
-                // Check common Python installation paths on macOS
-                var candidates = new[]
+                // Try running python directly first
+                if (TryValidatePython("python3", out string version, out string fullPath) ||
+                    TryValidatePython("python", out version, out fullPath))
                 {
-                    "python3",
-                    "python",
-                    "/usr/bin/python3",
-                    "/usr/local/bin/python3",
-                    "/opt/homebrew/bin/python3",
-                    "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
-                    "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
-                    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
-                    "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
-                    "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3"
-                };
-
-                foreach (var candidate in candidates)
-                {
-                    if (TryValidatePython(candidate, out string version, out string fullPath))
-                    {
-                        status.IsAvailable = true;
-                        status.Version = version;
-                        status.Path = fullPath;
-                        status.Details = $"Found Python {version} at {fullPath}";
-                        return status;
-                    }
+                    status.IsAvailable = true;
+                    status.Version = version;
+                    status.Path = fullPath;
+                    status.Details = $"Found Python {version} in PATH";
+                    return status;
                 }
 
-                // Try PATH resolution using 'which' command
+                // Fallback: try 'which' command
                 if (TryFindInPath("python3", out string pathResult) ||
                     TryFindInPath("python", out pathResult))
                 {
-                    if (TryValidatePython(pathResult, out string version, out string fullPath))
+                    if (TryValidatePython(pathResult, out version, out fullPath))
                     {
                         status.IsAvailable = true;
                         status.Version = version;
                         status.Path = fullPath;
-                        status.Details = $"Found Python {version} in PATH at {fullPath}";
+                        status.Details = $"Found Python {version} in PATH";
                         return status;
                     }
                 }
 
-                status.ErrorMessage = "Python not found. Please install Python 3.10 or later.";
-                status.Details = "Checked common installation paths including Homebrew, Framework, and system locations.";
+                status.ErrorMessage = "Python not found in PATH";
+                status.Details = "Install Python 3.10+ and ensure it's added to PATH.";
             }
             catch (Exception ex)
             {
