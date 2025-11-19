@@ -210,15 +210,6 @@
 }
 
 /* Manual Configuration */
-.manual-config-foldout {
-    margin-top: 16px;
-}
-
-.manual-config-foldout > .unity-foldout__toggle {
-    -unity-font-style: bold;
-    font-size: 12px;
-}
-
 .manual-config-content {
     padding: 8px;
     margin-top: 8px;

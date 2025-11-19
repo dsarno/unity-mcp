@@ -45,7 +45,7 @@ namespace MCPForUnity.Editor.Windows
         private EnumField transportDropdown;
         private VisualElement httpUrlRow;
         private VisualElement startHttpRow;
-        private Foldout httpServerCommandFoldout;
+        private VisualElement httpServerCommandSection;
         private TextField httpServerCommandField;
         private Button copyHttpServerCommandButton;
         private Label httpServerCommandHint;
@@ -69,7 +69,6 @@ namespace MCPForUnity.Editor.Windows
         private VisualElement claudeCliPathRow;
         private TextField claudeCliPath;
         private Button browseClaudeButton;
-        private Foldout manualConfigFoldout;
         private TextField configPathField;
         private Button copyPathButton;
         private Button openFileButton;
@@ -221,7 +220,7 @@ namespace MCPForUnity.Editor.Windows
             transportDropdown = rootVisualElement.Q<EnumField>("transport-dropdown");
             httpUrlRow = rootVisualElement.Q<VisualElement>("http-url-row");
             startHttpRow = rootVisualElement.Q<VisualElement>("start-http-row");
-            httpServerCommandFoldout = rootVisualElement.Q<Foldout>("http-server-command-foldout");
+            httpServerCommandSection = rootVisualElement.Q<VisualElement>("http-server-command-section");
             httpServerCommandField = rootVisualElement.Q<TextField>("http-server-command");
             copyHttpServerCommandButton = rootVisualElement.Q<Button>("copy-http-server-command-button");
             httpServerCommandHint = rootVisualElement.Q<Label>("http-server-command-hint");
@@ -245,7 +244,6 @@ namespace MCPForUnity.Editor.Windows
             claudeCliPathRow = rootVisualElement.Q<VisualElement>("claude-cli-path-row");
             claudeCliPath = rootVisualElement.Q<TextField>("claude-cli-path");
             browseClaudeButton = rootVisualElement.Q<Button>("browse-claude-button");
-            manualConfigFoldout = rootVisualElement.Q<Foldout>("manual-config-foldout");
             configPathField = rootVisualElement.Q<TextField>("config-path");
             copyPathButton = rootVisualElement.Q<Button>("copy-path-button");
             openFileButton = rootVisualElement.Q<Button>("open-file-button");
@@ -302,9 +300,6 @@ namespace MCPForUnity.Editor.Windows
             {
                 clientDropdown.index = 0;
             }
-
-            // Manual config starts collapsed
-            manualConfigFoldout.value = false;
 
             // Claude CLI path row hidden by default
             claudeCliPathRow.style.display = DisplayStyle.None;
@@ -526,7 +521,7 @@ namespace MCPForUnity.Editor.Windows
 
         private void UpdateHttpServerCommandDisplay()
         {
-            if (httpServerCommandFoldout == null || httpServerCommandField == null)
+            if (httpServerCommandSection == null || httpServerCommandField == null)
             {
                 return;
             }
@@ -535,7 +530,7 @@ namespace MCPForUnity.Editor.Windows
 
             if (!useHttp)
             {
-                httpServerCommandFoldout.style.display = DisplayStyle.None;
+                httpServerCommandSection.style.display = DisplayStyle.None;
                 httpServerCommandField.value = string.Empty;
                 httpServerCommandField.tooltip = string.Empty;
                 if (httpServerCommandHint != null)
@@ -549,7 +544,7 @@ namespace MCPForUnity.Editor.Windows
                 return;
             }
 
-            httpServerCommandFoldout.style.display = DisplayStyle.Flex;
+            httpServerCommandSection.style.display = DisplayStyle.Flex;
 
             if (MCPServiceLocator.Server.TryGetLocalHttpServerCommand(out var command, out var error))
             {

@@ -67,17 +67,15 @@
                     <ui:Label text="HTTP URL:" class="setting-label" />
                     <ui:TextField name="http-url" class="url-field" placeholder-text="http://localhost:8080" />
                 </ui:VisualElement>
-                <ui:Foldout name="http-server-command-foldout" text="HTTP Server Command" class="manual-config-foldout" value="false">
-                    <ui:VisualElement class="manual-config-content">
-                        <ui:Label text="Use this command to launch the server manually:" class="config-label" />
-                        <ui:VisualElement class="config-json-row">
-                            <ui:TextField name="http-server-command" readonly="true" multiline="true" class="config-json-field" />
-                            <ui:Button name="copy-http-server-command-button" text="Copy" class="icon-button-vertical" />
-                        </ui:VisualElement>
-                        <ui:Label name="http-server-command-hint" class="help-text" />
-                        <ui:Button name="start-http-server-button" text="Start Local HTTP Server" class="secondary-button" style="align-self: flex-start; margin-bottom: 6px;" />
+                <ui:VisualElement name="http-server-command-section" class="manual-config-content">
+                    <ui:Label text="Use this command to launch the server manually:" class="config-label" />
+                    <ui:VisualElement class="config-json-row">
+                        <ui:TextField name="http-server-command" readonly="true" multiline="true" class="config-json-field" />
+                        <ui:Button name="copy-http-server-command-button" text="Copy" class="icon-button-vertical" />
                     </ui:VisualElement>
-                </ui:Foldout>
+                    <ui:Label name="http-server-command-hint" class="help-text" />
+                    <ui:Button name="start-http-server-button" text="Start Local HTTP Server" class="secondary-button" style="align-self: flex-start; margin-bottom: 6px;" />
+                </ui:VisualElement>
                 <ui:VisualElement class="setting-row" name="unity-socket-port-row">
                     <ui:Label text="Unity Socket Port:" class="setting-label" />
                     <ui:TextField name="unity-port" class="port-field" />

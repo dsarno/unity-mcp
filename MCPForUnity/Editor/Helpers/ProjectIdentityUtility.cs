@@ -16,7 +16,6 @@ namespace MCPForUnity.Editor.Helpers
     internal static class ProjectIdentityUtility
     {
         private const string SessionPrefKey = EditorPrefKeys.WebSocketSessionId;
-        private static volatile bool _identityCached;
         private static string _cachedProjectName = "Unknown";
         private static string _cachedProjectHash = "default";
         private static bool _cacheScheduled;
@@ -57,7 +56,6 @@ namespace MCPForUnity.Editor.Helpers
 
                 _cachedProjectHash = ComputeProjectHash(dataPath);
                 _cachedProjectName = ComputeProjectName(dataPath);
-                _identityCached = true;
             }
             catch
             {
