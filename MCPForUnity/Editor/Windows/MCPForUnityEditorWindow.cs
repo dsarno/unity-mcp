@@ -385,7 +385,8 @@ namespace MCPForUnity.Editor.Windows
                 {
                     EditorPrefs.SetString(EditorPrefKeys.GitUrlOverride, url);
                 }
-                UpdateManualConfiguration(); // Refresh config display
+                UpdateManualConfiguration();
+                UpdateHttpServerCommandDisplay();
             });
 
             clearGitUrlButton.clicked += () =>
@@ -393,6 +394,7 @@ namespace MCPForUnity.Editor.Windows
                 gitUrlOverride.value = string.Empty;
                 EditorPrefs.DeleteKey(EditorPrefKeys.GitUrlOverride);
                 UpdateManualConfiguration();
+                UpdateHttpServerCommandDisplay();
             };
 
             // Connection callbacks
