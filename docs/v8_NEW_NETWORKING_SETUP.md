@@ -201,6 +201,37 @@ Relevant commits:
 - https://github.com/CoplayDev/unity-mcp/pull/375/commits/85cd5c0cf47582bb43eab7ec998f4044a6430275
 - https://github.com/CoplayDev/unity-mcp/pull/375/commits/a84c2c29a08cabc3345e50147afa896ea4ae37bf
 - https://github.com/CoplayDev/unity-mcp/pull/375/commits/4f22d54ae38f84cfc05e50ad30675f4bb728f76d
+- https://github.com/CoplayDev/unity-mcp/pull/375/commits/01976a507396bf7fca1fd253172dd4c83ff33867
+
+### Window logic has been split into separate classes
+
+The main `MCPForUnityEditorWindow.cs` class, and the releated uxml and uss files, were getting quite long. We had a similar problem with the last immediate UI version of it. To keep it maintanable, we split the logic into 3 separate view classes: Settings, Connection andn ClientConfig. They correspond to the 3 visual sections the window has.
+
+Each section has its own C#, uxml and uss files, but we use a common uss file for shared styles.
+
+Relevant commits:
+
+- https://github.com/CoplayDev/unity-mcp/pull/375/commits/154b4ff3ad9c98f5f5ee8628cd8bcb79d0e108b5
+- https://github.com/CoplayDev/unity-mcp/pull/375/commits/1a9bb008a416a2b3abb0d91819a8173d362748b8
+
+#### Setup Wizard
+
+The Setup Wizard also got revamped. For starters, it's no longer a wizard, just a single window with a status and instructions. We check if Python and uv are installed, based on us being able to check their version by calling them in a process. That's the most reliable indicator of them being correctly installed. Otherwise, we have buttons that open up the webpages for users to download them as needed.
+
+Relevant commits:
+
+- https://github.com/CoplayDev/unity-mcp/pull/375/commits/aa63f21ea42372853690618d928cd1fad73e7c25
+- https://github.com/CoplayDev/unity-mcp/pull/375/commits/cd4529c21f35e5be10a98dcf9303c210ebf42d2b
+
+### Response classes
+
+Previously, the Response class had helper functions that returned generic objects. It's not the worst option, but we've improved it with strongly typed classes. Instead of `Response.Success()` returning a success message, we now return `SuccessResponse` objects. Similarly, `Response.Error()` now returns `ErrorResponse` objects.
+
+JSON serialization is the exact same, but it's clearer in the code what's being transmitted between the client and server.
+
+Relevant commits:
+
+- https://github.com/CoplayDev/unity-mcp/pull/375/commits/f917d9489540498a908f514a561160c08d9d1023
 
 ### Miscellaneous
 
