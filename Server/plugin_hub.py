@@ -211,7 +211,7 @@ class PluginHub(WebSocketEndpoint):
         During Unity domain reloads the plugin's WebSocket session is torn down
         and reconnected shortly afterwards. Instead of failing immediately when
         no sessions are available, we wait for a bounded period for a plugin
-        to reconnect so in‑flight MCP calls can succeed transparently.
+        to reconnect so in-flight MCP calls can succeed transparently.
         """
         if cls._registry is None:
             raise RuntimeError("Plugin registry not configured")

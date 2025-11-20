@@ -47,7 +47,9 @@ async def test_plugin_hub_waits_for_reconnection_during_reload():
     
     mock_registry.list_sessions = mock_list_sessions
     
-    # Configure PluginHub with our mock
+    # Configure PluginHub with our mock while preserving the original state
+    original_registry = PluginHub._registry
+    original_lock = PluginHub._lock
     PluginHub._registry = mock_registry
     PluginHub._lock = asyncio.Lock()
     
@@ -61,9 +63,9 @@ async def test_plugin_hub_waits_for_reconnection_during_reload():
         assert call_count[0] >= 3  # Should have tried at least 3 times
         
     finally:
-        # Clean up
-        PluginHub._registry = None
-        PluginHub._lock = None
+        # Clean up: restore original PluginHub state
+        PluginHub._registry = original_registry
+        PluginHub._lock = original_lock
 
 
 @pytest.mark.asyncio
@@ -80,7 +82,9 @@ async def test_plugin_hub_fails_after_timeout():
     
     mock_registry.list_sessions = mock_list_sessions
     
-    # Configure PluginHub with very short timeout for testing
+    # Configure PluginHub with our mock while preserving the original state
+    original_registry = PluginHub._registry
+    original_lock = PluginHub._lock
     PluginHub._registry = mock_registry
     PluginHub._lock = asyncio.Lock()
     
@@ -94,9 +98,9 @@ async def test_plugin_hub_fails_after_timeout():
             with pytest.raises(RuntimeError, match="No Unity plugins are currently connected"):
                 await PluginHub._resolve_session_id(unity_instance=None)
         finally:
-            # Clean up
-            PluginHub._registry = None
-            PluginHub._lock = None
+            # Clean up: restore original PluginHub state
+            PluginHub._registry = original_registry
+            PluginHub._lock = original_lock
 
 
 @pytest.mark.asyncio
@@ -195,7 +199,9 @@ async def test_plugin_hub_respects_unity_instance_preference():
     mock_registry.list_sessions = mock_list_sessions
     mock_registry.get_session_id_by_hash = mock_get_session_by_hash
     
-    # Configure PluginHub
+    # Configure PluginHub with our mock while preserving the original state
+    original_registry = PluginHub._registry
+    original_lock = PluginHub._lock
     PluginHub._registry = mock_registry
     PluginHub._lock = asyncio.Lock()
     
@@ -213,7 +219,7 @@ async def test_plugin_hub_respects_unity_instance_preference():
         assert session_id in ["session-1", "session-2"]
         
     finally:
-        # Clean up
-        PluginHub._registry = None
-        PluginHub._lock = None
+        # Clean up: restore original PluginHub state
+        PluginHub._registry = original_registry
+        PluginHub._lock = original_lock
 

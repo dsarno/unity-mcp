@@ -721,7 +721,7 @@ def send_command_with_retry(
     instance_id: Optional[str] = None,
     max_retries: int | None = None,
     retry_ms: int | None = None
-) -> Dict[str, Any]:
+) -> dict[str, Any] | MCPResponse:
     """Send a command to a Unity instance, waiting politely through Unity reloads.
 
     Args:
@@ -732,7 +732,7 @@ def send_command_with_retry(
         retry_ms: Delay between retries in milliseconds
 
     Returns:
-        Response dictionary from Unity
+        Response dictionary or MCPResponse from Unity
 
     Uses config.reload_retry_ms and config.reload_max_retries by default. Preserves the
     structured failure if retries are exhausted.

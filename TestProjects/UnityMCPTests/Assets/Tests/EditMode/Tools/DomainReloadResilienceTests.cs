@@ -4,7 +4,6 @@ using UnityEngine.TestTools;
 using UnityEditor;
 using System.Collections;
 using System.IO;
-using System.Threading.Tasks;
 using MCPForUnity.Editor.Tools;
 using Newtonsoft.Json.Linq;
 
@@ -83,7 +82,7 @@ public class StressTestScript : MonoBehaviour
                     ["includeStacktrace"] = false
                 };
                 
-                var result = ReadConsoleTool.Execute(request);
+                var result = ExecuteReadConsole(request);
                 
                 // Check if the call succeeded
                 if (result != null && result["success"]?.Value<bool>() == true)
@@ -98,7 +97,7 @@ public class StressTestScript : MonoBehaviour
                 }
                 
                 // Small delay between calls to simulate rapid-fire scenario
-                yield return new WaitForSeconds(0.1f);
+                yield return WaitFrames(6);
             }
             
             // Step 3: Verify all calls succeeded
@@ -124,7 +123,7 @@ public class StressTestScript : MonoBehaviour
                 ["format"] = "plain"
             };
             
-            var result = ReadConsoleTool.Execute(request);
+            var result = ExecuteReadConsole(request);
             
             Assert.IsNotNull(result, "read_console should return a result");
             Assert.IsTrue(result["success"]?.Value<bool>() ?? false, 
@@ -167,7 +166,7 @@ public class TestScript1 : MonoBehaviour
                 ["format"] = "plain"
             };
             
-            var result = ReadConsoleTool.Execute(request);
+            var result = ExecuteReadConsole(request);
             
             // Should succeed even if domain reload is happening
             Assert.IsNotNull(result, "read_console should return a result");
@@ -214,7 +213,7 @@ public class RapidScript{i} : MonoBehaviour
                         ["format"] = "plain"
                     };
                     
-                    var result = ReadConsoleTool.Execute(request);
+                    var result = ExecuteReadConsole(request);
                     
                     if (result != null && result["success"]?.Value<bool>() == true)
                     {
@@ -226,11 +225,11 @@ public class RapidScript{i} : MonoBehaviour
                         Debug.LogError($"[DomainReloadTest] Console read failed: {error}");
                     }
                     
-                    yield return new WaitForSeconds(0.05f);
+                    yield return WaitFrames(3);
                 }
                 
                 // Brief wait between script creations
-                yield return new WaitForSeconds(0.2f);
+                yield return WaitFrames(12);
             }
             
             Debug.Log($"[DomainReloadTest] {successCount}/{totalExpectedReads} console reads succeeded");
@@ -239,6 +238,29 @@ public class RapidScript{i} : MonoBehaviour
             int minExpectedSuccess = (int)(totalExpectedReads * 0.8f);
             Assert.GreaterOrEqual(successCount, minExpectedSuccess, 
                 $"Expected at least {minExpectedSuccess} console reads to succeed, but only {successCount} succeeded");
+        }
+
+        private static JObject ExecuteReadConsole(JObject request)
+        {
+            var raw = ReadConsole.HandleCommand(request);
+            if (raw == null)
+            {
+                return new JObject
+                {
+                    ["success"] = false,
+                    ["error"] = "ReadConsole returned null"
+                };
+            }
+
+            return JObject.FromObject(raw);
+        }
+
+        private static IEnumerator WaitFrames(int frameCount)
+        {
+            for (int i = 0; i < frameCount; i++)
+            {
+                yield return null;
+            }
         }
     }
 }
