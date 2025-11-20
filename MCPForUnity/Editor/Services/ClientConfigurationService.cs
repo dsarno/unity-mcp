@@ -510,22 +510,46 @@ namespace MCPForUnity.Editor.Services
         {
             try
             {
-                string configPath = McpConfigurationHelper.GetClientConfigPath(client);
-
-                if (!File.Exists(configPath))
+                var pathService = MCPServiceLocator.Paths;
+                string claudePath = pathService.GetClaudeCliPath();
+                
+                if (string.IsNullOrEmpty(claudePath))
                 {
-                    client.SetStatus(McpStatus.NotConfigured);
+                    client.SetStatus(McpStatus.NotConfigured, "Claude CLI not found");
                     return;
                 }
 
-                string configJson = File.ReadAllText(configPath);
-                dynamic claudeConfig = JsonConvert.DeserializeObject(configJson);
+                // Use 'claude mcp list' to check if UnityMCP is registered
+                string args = "mcp list";
+                string projectDir = Path.GetDirectoryName(Application.dataPath);
 
-                if (claudeConfig?.mcpServers != null)
+                string pathPrepend = null;
+                if (Application.platform == RuntimePlatform.OSXEditor)
                 {
-                    var servers = claudeConfig.mcpServers;
-                    // Only check for UnityMCP (fixed - removed candidate hacks)
-                    if (servers.UnityMCP != null)
+                    pathPrepend = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+                }
+                else if (Application.platform == RuntimePlatform.LinuxEditor)
+                {
+                    pathPrepend = "/usr/local/bin:/usr/bin:/bin";
+                }
+
+                // Add the directory containing Claude CLI to PATH
+                try
+                {
+                    string claudeDir = Path.GetDirectoryName(claudePath);
+                    if (!string.IsNullOrEmpty(claudeDir))
+                    {
+                        pathPrepend = string.IsNullOrEmpty(pathPrepend)
+                            ? claudeDir
+                            : $"{claudeDir}:{pathPrepend}";
+                    }
+                }
+                catch { }
+
+                if (ExecPath.TryRun(claudePath, args, projectDir, out var stdout, out var stderr, 10000, pathPrepend))
+                {
+                    // Check if UnityMCP is in the output
+                    if (!string.IsNullOrEmpty(stdout) && stdout.IndexOf("UnityMCP", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         client.SetStatus(McpStatus.Configured);
                         return;
