@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using MCPForUnity.External.Tommy;
 using MCPForUnity.Editor.Services;
+using UnityEditor;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -18,30 +19,43 @@ namespace MCPForUnity.Editor.Helpers
         {
             var table = new TomlTable();
             var mcpServers = new TomlTable();
-
-            // Use structured uvx command parts for proper TOML formatting
-            var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
-
             var unityMCP = new TomlTable();
-            unityMCP["command"] = uvxPath;
 
-            var args = new TomlArray();
-            if (!string.IsNullOrEmpty(fromUrl))
+            // Check transport preference
+            bool useHttpTransport = EditorPrefs.GetBool(MCPForUnity.Editor.Constants.EditorPrefKeys.UseHttpTransport, true);
+
+            if (useHttpTransport)
             {
-                args.Add(new TomlString { Value = "--from" });
-                args.Add(new TomlString { Value = fromUrl });
+                // HTTP mode: Use url field
+                string httpUrl = HttpEndpointUtility.GetMcpRpcUrl();
+                unityMCP["url"] = new TomlString { Value = httpUrl };
             }
-            args.Add(new TomlString { Value = packageName });
-
-            unityMCP["args"] = args;
-
-            // Add Windows-specific environment configuration, see: https://github.com/CoplayDev/unity-mcp/issues/315
-            var platformService = MCPServiceLocator.Platform;
-            if (platformService.IsWindows())
+            else
             {
-                var envTable = new TomlTable { IsInline = true };
-                envTable["SystemRoot"] = new TomlString { Value = platformService.GetSystemRoot() };
-                unityMCP["env"] = envTable;
+                // Stdio mode: Use command and args
+                var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+                unityMCP["command"] = uvxPath;
+
+                var args = new TomlArray();
+                if (!string.IsNullOrEmpty(fromUrl))
+                {
+                    args.Add(new TomlString { Value = "--from" });
+                    args.Add(new TomlString { Value = fromUrl });
+                }
+                args.Add(new TomlString { Value = packageName });
+                args.Add(new TomlString { Value = "--transport" });
+                args.Add(new TomlString { Value = "stdio" });
+
+                unityMCP["args"] = args;
+
+                // Add Windows-specific environment configuration for stdio mode
+                var platformService = MCPServiceLocator.Platform;
+                if (platformService.IsWindows())
+                {
+                    var envTable = new TomlTable { IsInline = true };
+                    envTable["SystemRoot"] = new TomlString { Value = platformService.GetSystemRoot() };
+                    unityMCP["env"] = envTable;
+                }
             }
 
             mcpServers["unityMCP"] = unityMCP;
@@ -75,8 +89,14 @@ namespace MCPForUnity.Editor.Helpers
 
         public static bool TryParseCodexServer(string toml, out string command, out string[] args)
         {
+            return TryParseCodexServer(toml, out command, out args, out _);
+        }
+
+        public static bool TryParseCodexServer(string toml, out string command, out string[] args, out string url)
+        {
             command = null;
             args = null;
+            url = null;
 
             var root = TryParseToml(toml);
             if (root == null) return false;
@@ -92,6 +112,15 @@ namespace MCPForUnity.Editor.Helpers
                 return false;
             }
 
+            // Check for HTTP mode (url field)
+            url = GetTomlString(unity, "url");
+            if (!string.IsNullOrEmpty(url))
+            {
+                // HTTP mode detected - return true with url
+                return true;
+            }
+
+            // Check for stdio mode (command + args)
             command = GetTomlString(unity, "command");
             args = GetTomlStringArray(unity, "args");
 
@@ -132,26 +161,40 @@ namespace MCPForUnity.Editor.Helpers
         {
             var unityMCP = new TomlTable();
 
-            // Use structured uvx command parts for proper TOML formatting
-            var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
-            unityMCP["command"] = new TomlString { Value = uvxPath };
+            // Check transport preference
+            bool useHttpTransport = EditorPrefs.GetBool(MCPForUnity.Editor.Constants.EditorPrefKeys.UseHttpTransport, true);
 
-            var argsArray = new TomlArray();
-            if (!string.IsNullOrEmpty(fromUrl))
+            if (useHttpTransport)
             {
-                argsArray.Add(new TomlString { Value = "--from" });
-                argsArray.Add(new TomlString { Value = fromUrl });
+                // HTTP mode: Use url field
+                string httpUrl = HttpEndpointUtility.GetMcpRpcUrl();
+                unityMCP["url"] = new TomlString { Value = httpUrl };
             }
-            argsArray.Add(new TomlString { Value = packageName });
-            unityMCP["args"] = argsArray;
-
-            // Add Windows-specific environment configuration, see: https://github.com/CoplayDev/unity-mcp/issues/315
-            var platformService = MCPServiceLocator.Platform;
-            if (platformService.IsWindows())
+            else
             {
-                var envTable = new TomlTable { IsInline = true };
-                envTable["SystemRoot"] = new TomlString { Value = platformService.GetSystemRoot() };
-                unityMCP["env"] = envTable;
+                // Stdio mode: Use command and args
+                var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+                unityMCP["command"] = new TomlString { Value = uvxPath };
+
+                var argsArray = new TomlArray();
+                if (!string.IsNullOrEmpty(fromUrl))
+                {
+                    argsArray.Add(new TomlString { Value = "--from" });
+                    argsArray.Add(new TomlString { Value = fromUrl });
+                }
+                argsArray.Add(new TomlString { Value = packageName });
+                argsArray.Add(new TomlString { Value = "--transport" });
+                argsArray.Add(new TomlString { Value = "stdio" });
+                unityMCP["args"] = argsArray;
+
+                // Add Windows-specific environment configuration for stdio mode
+                var platformService = MCPServiceLocator.Platform;
+                if (platformService.IsWindows())
+                {
+                    var envTable = new TomlTable { IsInline = true };
+                    envTable["SystemRoot"] = new TomlString { Value = platformService.GetSystemRoot() };
+                    unityMCP["env"] = envTable;
+                }
             }
 
             return unityMCP;

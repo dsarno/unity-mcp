@@ -153,9 +153,10 @@ namespace MCPForUnity.Editor.Services
                         break;
 
                     case McpTypes.Codex:
-                        if (CodexConfigHelper.TryParseCodexServer(configJson, out _, out var codexArgs))
+                        if (CodexConfigHelper.TryParseCodexServer(configJson, out _, out var codexArgs, out var codexUrl))
                         {
                             args = codexArgs;
+                            configuredUrl = codexUrl;
                             configExists = true;
                         }
                         break;
@@ -249,10 +250,23 @@ namespace MCPForUnity.Editor.Services
                 throw new InvalidOperationException("Claude CLI not found. Please install Claude Code first.");
             }
 
-            // Use structured uvx command parts for proper quoting
-            var (uvxPath, gitUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+            // Check transport preference
+            bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
 
-            string args = $"mcp add UnityMCP -- \"{uvxPath}\" --from \"{gitUrl}\" {packageName}";
+            string args;
+            if (useHttpTransport)
+            {
+                // HTTP mode: Use --transport http with URL
+                string httpUrl = HttpEndpointUtility.GetMcpRpcUrl();
+                args = $"mcp add --transport http UnityMCP {httpUrl}";
+            }
+            else
+            {
+                // Stdio mode: Use command with uvx
+                var (uvxPath, gitUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+                args = $"mcp add --transport stdio UnityMCP -- \"{uvxPath}\" --from \"{gitUrl}\" {packageName}";
+            }
+
             string projectDir = Path.GetDirectoryName(Application.dataPath);
 
             string pathPrepend = null;
@@ -376,14 +390,27 @@ namespace MCPForUnity.Editor.Services
             // Claude Code uses CLI commands, not JSON config
             if (client.mcpType == McpTypes.ClaudeCode)
             {
-                if (string.IsNullOrEmpty(uvxPath))
-                {
-                    return "# Error: Configuration not available - check paths in Advanced Settings";
-                }
+                // Check transport preference
+                bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
 
-                // Show the actual command that RegisterClaudeCode() uses
-                string gitUrl = AssetPathUtility.GetMcpServerGitUrl();
-                string registerCommand = $"claude mcp add UnityMCP -- \"{uvxPath}\" --from \"{gitUrl}\" mcp-for-unity";
+                string registerCommand;
+                if (useHttpTransport)
+                {
+                    // HTTP mode
+                    string httpUrl = HttpEndpointUtility.GetMcpRpcUrl();
+                    registerCommand = $"claude mcp add --transport http UnityMCP {httpUrl}";
+                }
+                else
+                {
+                    // Stdio mode
+                    if (string.IsNullOrEmpty(uvxPath))
+                    {
+                        return "# Error: Configuration not available - check paths in Advanced Settings";
+                    }
+
+                    string gitUrl = AssetPathUtility.GetMcpServerGitUrl();
+                    registerCommand = $"claude mcp add --transport stdio UnityMCP -- \"{uvxPath}\" --from \"{gitUrl}\" mcp-for-unity";
+                }
 
                 return "# Register the MCP server with Claude Code:\n" +
                        $"{registerCommand}\n\n" +
