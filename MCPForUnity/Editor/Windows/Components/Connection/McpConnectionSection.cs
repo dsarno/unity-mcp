@@ -104,6 +104,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 bool useHttp = (TransportProtocol)evt.newValue == TransportProtocol.HTTP;
                 EditorPrefs.SetBool(EditorPrefKeys.UseHttpTransport, useHttp);
                 UpdateHttpFieldVisibility();
+                UpdateHttpServerCommandDisplay();
                 OnManualConfigUpdateRequested?.Invoke();
                 McpLog.Info($"Transport changed to: {evt.newValue}");
             });
