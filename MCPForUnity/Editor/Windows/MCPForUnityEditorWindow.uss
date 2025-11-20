@@ -17,5 +17,4 @@
 
 .section-stack {
     flex-direction: column;
-    gap: 12px;
 }

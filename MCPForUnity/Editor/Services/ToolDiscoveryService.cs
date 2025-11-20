@@ -90,7 +90,9 @@ namespace MCPForUnity.Editor.Services
                     Parameters = parameters,
                     ClassName = type.Name,
                     Namespace = type.Namespace ?? "",
-                    AutoRegister = toolAttr.AutoRegister
+                    AutoRegister = toolAttr.AutoRegister,
+                    RequiresPolling = toolAttr.RequiresPolling,
+                    PollAction = string.IsNullOrEmpty(toolAttr.PollAction) ? "status" : toolAttr.PollAction
                 };
             }
             catch (Exception ex)

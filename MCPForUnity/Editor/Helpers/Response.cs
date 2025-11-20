@@ -33,6 +33,35 @@ namespace MCPForUnity.Editor.Helpers
         }
 
         /// <summary>
+        /// Creates a standardized pending response used by polled tools. The Python
+        /// middleware will keep polling while responses carry the _mcp_status marker.
+        /// </summary>
+        /// <param name="message">Optional status message.</param>
+        /// <param name="pollIntervalSeconds">Polling interval hint in seconds.</param>
+        /// <param name="data">Optional additional data to include in the response.</param>
+        public static object Pending(string message = "", double pollIntervalSeconds = 1.0, object data = null)
+        {
+            var payload = new Dictionary<string, object>
+            {
+                { "success", true },
+                { "_mcp_status", "pending" },
+                { "_mcp_poll_interval", pollIntervalSeconds },
+            };
+
+            if (!string.IsNullOrEmpty(message))
+            {
+                payload["message"] = message;
+            }
+
+            if (data != null)
+            {
+                payload["data"] = data;
+            }
+
+            return payload;
+        }
+
+        /// <summary>
         /// Creates a standardized error response object.
         /// </summary>
         /// <param name="errorCodeOrMessage">A message describing the error.</param>

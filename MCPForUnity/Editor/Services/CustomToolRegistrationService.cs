@@ -72,6 +72,8 @@ namespace MCPForUnity.Editor.Services
                     name = t.Name,
                     description = t.Description,
                     structured_output = t.StructuredOutput,
+                    requires_polling = t.RequiresPolling,
+                    poll_action = t.PollAction,
                     parameters = (t.Parameters ?? new List<ParameterMetadata>()).Select(p => new ParameterDefinition
                     {
                         name = p.Name,
@@ -161,6 +163,8 @@ namespace MCPForUnity.Editor.Services
             public string name;
             public string description;
             public bool structured_output;
+            public bool requires_polling;
+            public string poll_action;
             public List<ParameterDefinition> parameters;
         }
 

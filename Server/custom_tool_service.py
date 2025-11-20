@@ -1,5 +1,7 @@
+import asyncio
 import inspect
 import logging
+import time
 from typing import Dict, List
 
 from fastmcp import Context, FastMCP
@@ -23,6 +25,8 @@ _TYPE_MAP = {
     "array": {"type": "array"},
     "object": {"type": "object"},
 }
+_DEFAULT_POLL_INTERVAL = 1.0
+_MAX_POLL_SECONDS = 600
 
 
 class ToolParameterModel(BaseModel):
@@ -37,6 +41,8 @@ class ToolDefinitionModel(BaseModel):
     name: str
     description: str | None = None
     structured_output: bool | None = True
+    requires_polling: bool | None = False
+    poll_action: str | None = "status"
     parameters: List[ToolParameterModel] = Field(default_factory=list)
 
 
@@ -146,9 +152,19 @@ class CustomToolService:
             response = await send_with_unity_instance(
                 async_send_command_with_retry, unity_instance, tool_name, params
             )
-            if isinstance(response, dict):
-                return response
-            return {"success": False, "message": str(response)}
+
+            if not definition.requires_polling:
+                if isinstance(response, dict):
+                    return response
+                return {"success": False, "message": str(response)}
+
+            return await self._poll_until_complete(
+                tool_name,
+                unity_instance,
+                params,
+                response,
+                definition.poll_action or "status",
+            )
 
         dynamic_tool.__signature__ = self._build_signature(
             definition.parameters)
@@ -196,3 +212,90 @@ class CustomToolService:
         if required:
             schema["required"] = required
         return schema
+
+    async def _poll_until_complete(
+        self,
+        tool_name: str,
+        unity_instance,
+        initial_params: Dict[str, object],
+        initial_response,
+        poll_action: str,
+    ):
+        poll_params = dict(initial_params)
+        poll_params["action"] = poll_action or "status"
+
+        deadline = time.time() + _MAX_POLL_SECONDS
+        response = initial_response
+
+        while True:
+            status, poll_interval = self._interpret_status(response)
+
+            if status in ("complete", "error", "final"):
+                return self._normalize_response(response)
+
+            if time.time() > deadline:
+                return {
+                    "success": False,
+                    "message": f"Timeout waiting for {tool_name} to complete",
+                    "data": self._safe_response(response),
+                }
+
+            await asyncio.sleep(poll_interval)
+
+            try:
+                response = await send_with_unity_instance(
+                    async_send_command_with_retry, unity_instance, tool_name, poll_params
+                )
+            except Exception as exc:  # pragma: no cover - network/domain reload variability
+                logger.debug("Polling %s failed, will retry: %s",
+                             tool_name, exc)
+                # Back off modestly but stay responsive.
+                response = {
+                    "_mcp_status": "pending",
+                    "_mcp_poll_interval": min(max(poll_interval * 2, _DEFAULT_POLL_INTERVAL), 5.0),
+                    "message": f"Retrying after transient error: {exc}",
+                }
+
+    def _interpret_status(self, response) -> tuple[str, float]:
+        if response is None:
+            return "pending", _DEFAULT_POLL_INTERVAL
+
+        if not isinstance(response, dict):
+            return "final", _DEFAULT_POLL_INTERVAL
+
+        status = response.get("_mcp_status")
+        if status is None:
+            if len(response.keys()) == 0:
+                return "pending", _DEFAULT_POLL_INTERVAL
+            return "final", _DEFAULT_POLL_INTERVAL
+
+        if status == "pending":
+            interval_raw = response.get(
+                "_mcp_poll_interval", _DEFAULT_POLL_INTERVAL)
+            try:
+                interval = float(interval_raw)
+            except (TypeError, ValueError):
+                interval = _DEFAULT_POLL_INTERVAL
+
+            interval = max(0.1, min(interval, 5.0))
+            return "pending", interval
+
+        if status == "complete":
+            return "complete", _DEFAULT_POLL_INTERVAL
+
+        if status == "error":
+            return "error", _DEFAULT_POLL_INTERVAL
+
+        return "final", _DEFAULT_POLL_INTERVAL
+
+    def _normalize_response(self, response):
+        if isinstance(response, dict):
+            return response
+        return {"success": False, "message": str(response)}
+
+    def _safe_response(self, response):
+        if isinstance(response, dict):
+            return response
+        if response is None:
+            return None
+        return {"message": str(response)}

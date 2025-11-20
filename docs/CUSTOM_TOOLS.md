@@ -1,16 +1,24 @@
 # Adding Custom Tools to MCP for Unity
 
-MCP for Unity supports auto-discovery of custom tools using C# attributes and reflection. This allows you to easily extend the MCP server with your own tools.
+MCP for Unity makes it easy to extend your AI assistant with custom capabilities. Using C# attributes and reflection, the system automatically discovers and registers your tools—no manual configuration needed.
+
+This guide will walk you through creating your own tools, from simple synchronous operations to complex long-running tasks that survive Unity's domain reloads.
 
 ---
 
-# How to Use (Quick Start Guide)
+# Quick Start Guide
 
-This section shows you how to add custom tools to your Unity project.
+Let's get you up and running with your first custom tool.
 
-## Step 1: Create C# Handler
+## Step 1: Create Your Tool Handler
 
-Create a C# file anywhere in your Unity project in an `Editor/` folder (**this is important!** We load Editor assemblies, so your tool should be in an Editor folder). Each tool is a static class decorated with `[McpForUnityTool]` and exposes a `HandleCommand(JObject)` entry point. You can optionally define a nested parameter class with `[ToolParameter]` attributes so the MCP client receives descriptions and optional/required metadata.
+First, create a C# file in any `Editor/` folder within your Unity project. **The Editor folder is crucial**—we scan Editor assemblies for tools, so placing your code elsewhere means it won't be discovered.
+
+Each tool is a static class with two key ingredients:
+1. The `[McpForUnityTool]` attribute that tells the system "Hey, I'm a tool!"
+2. A `HandleCommand(JObject)` method that does the actual work
+
+You can also define a nested `Parameters` class with `[ToolParameter]` attributes. This gives your AI assistant helpful descriptions and lets it know which parameters are required.
 
 ```csharp
 using Newtonsoft.Json.Linq;
@@ -57,9 +65,13 @@ namespace MyProject.Editor.CustomTools
 }
 ```
 
-## Step 2: Refresh MCP Client
+## Step 2: Refresh Your MCP Client
 
-The MCP server can dynamically register tools, however, not all MCP clients support being updated of the new tools. We recommend in your MCP client that you disconnect and reconnect to the MCP server so the new tools are available. Sometimes you may have to remove the configuration and then reconfigure the MCP for Unity server for the new tools to appear (e.g., in Windsurf).
+Once you've created your tool, you'll need to let your AI assistant know about it. While the MCP server can dynamically register new tools, not all clients pick up these changes automatically.
+
+**The easiest approach:** Disconnect and reconnect to the MCP server in your client. This forces a fresh tool discovery.
+
+**If that doesn't work:** Some clients (like Windsurf) may need you to remove and reconfigure the MCP for Unity server entirely. It's a bit more work, but it guarantees your new tools will appear.
 
 ## Complete Example: Screenshot Tool
 
@@ -155,3 +167,128 @@ namespace MyProject.Editor.CustomTools
 }
 
 ```
+
+## Long-Running (Polled) Tools
+
+Some operations—like running tests, baking lightmaps, or building players—take time and might even trigger Unity domain reloads. For these cases, you'll want a **polled tool**.
+
+Here's how it works: Your tool starts the work and returns a "pending" signal. Behind the scenes, the Python middleware automatically polls Unity for updates until the job completes (or times out after 10 minutes).
+
+### Setting Up Polling
+
+Mark your tool with `RequiresPolling = true` and specify a `PollAction` (typically `"status"`):
+
+```csharp
+[McpForUnityTool(RequiresPolling = true, PollAction = "status")]
+```
+
+### The Three Key Ingredients
+
+1. **Start the work:** Return `Response.Pending("message", pollIntervalSeconds)` to acknowledge the job has started. The poll interval tells the server how long to wait between checks.
+
+2. **Implement the poll action:** Create a method (like `Status`) that checks progress and returns `_mcp_status` of `pending`, `complete`, or `error`. **Important:** The middleware calls your `PollAction` string exactly as written—no automatic case conversion—so make sure your `HandleCommand` recognizes it.
+
+3. **Persist your state:** Use `McpJobStateStore` to save progress to the `Library/` folder. This ensures your tool remembers what it was doing even after a domain reload wipes memory.
+
+### Complete Example
+
+```csharp
+using Newtonsoft.Json.Linq;
+using UnityEditor;
+using UnityEngine;
+using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Tools;
+
+[McpForUnityTool(
+    "bake_lightmaps",
+    Description = "Simulated async lightmap bake with polling",
+    RequiresPolling = true,
+    PollAction = "status"
+)]
+public static class BakeLightmaps
+{
+    private const string ToolName = "bake_lightmaps";
+    private const float SimulatedDurationSeconds = 5f;
+
+    private static bool s_isRunning;
+    private static double s_lastUpdateTime;
+
+    private class State
+    {
+        public string lastStatus { get; set; }
+        public float progress { get; set; }
+    }
+
+    public static object HandleCommand(JObject @params)
+    {
+        if (s_isRunning)
+        {
+            var existing = McpJobStateStore.LoadState<State>(ToolName) ?? new State { lastStatus = "in_progress", progress = 0f };
+            return Response.Pending("Bake already running", 0.5, existing);
+        }
+
+        var state = new State { lastStatus = "in_progress", progress = 0f };
+        McpJobStateStore.SaveState(ToolName, state);
+
+        s_isRunning = true;
+        s_lastUpdateTime = EditorApplication.timeSinceStartup;
+        EditorApplication.update += UpdateBake;
+
+        return Response.Pending("Starting lightmap bake", 0.5, new { state.lastStatus, state.progress });
+    }
+
+    public static object Status(JObject _)
+    {
+        var state = McpJobStateStore.LoadState<State>(ToolName) ?? new State { lastStatus = "unknown", progress = 0f };
+
+        if (state.lastStatus == "completed")
+        {
+            return new { _mcp_status = "complete", message = "Bake finished", data = state };
+        }
+
+        if (state.lastStatus == "error")
+        {
+            return new { _mcp_status = "error", error = "Bake failed", data = state };
+        }
+
+        return Response.Pending($"Baking... {state.progress:P0}", 0.5, state);
+    }
+
+    private static void UpdateBake()
+    {
+        if (!s_isRunning)
+        {
+            EditorApplication.update -= UpdateBake;
+            return;
+        }
+
+        var now = EditorApplication.timeSinceStartup;
+        var delta = now - s_lastUpdateTime;
+        s_lastUpdateTime = now;
+
+        var state = McpJobStateStore.LoadState<State>(ToolName) ?? new State { lastStatus = "in_progress", progress = 0f };
+        state.progress = Mathf.Clamp01(state.progress + (float)(delta / SimulatedDurationSeconds));
+
+        if (state.progress >= 1f)
+        {
+            state.lastStatus = "completed";
+            s_isRunning = false;
+            EditorApplication.update -= UpdateBake;
+        }
+        else
+        {
+            state.lastStatus = "in_progress";
+        }
+
+        McpJobStateStore.SaveState(ToolName, state);
+    }
+}
+```
+
+### How the Polling Protocol Works
+
+- **`_mcp_status: "pending"`** tells the middleware to keep checking back.
+- **`_mcp_poll_interval`** (in seconds) controls how long to wait between polls. The server clamps this between 0.1 and 5 seconds to balance responsiveness with performance.
+- **Null or empty responses** are treated as "still working" and trigger another poll.
+- **Timeout protection:** After 10 minutes, the server gives up and returns a timeout error along with the last response it received.
+- **Action routing:** The initial call uses whatever action your tool expects (often implicit). Subsequent polls use your exact `PollAction` string—no automatic snake_case or camelCase conversion—so make sure your `HandleCommand` switch statement handles it correctly.

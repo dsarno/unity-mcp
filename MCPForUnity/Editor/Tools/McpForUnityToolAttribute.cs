@@ -31,6 +31,18 @@ namespace MCPForUnity.Editor.Tools
         public bool AutoRegister { get; set; } = true;
 
         /// <summary>
+        /// Enables the polling middleware for long-running tools. When true, Unity
+        /// should return Response.Pending and the Python side will poll using
+        /// <see cref="PollAction"/> until completion.
+        /// </summary>
+        public bool RequiresPolling { get; set; } = false;
+
+        /// <summary>
+        /// The action name to use when polling for status. Defaults to "status".
+        /// </summary>
+        public string PollAction { get; set; } = "status";
+
+        /// <summary>
         /// The command name used to route requests to this tool.
         /// If not specified, defaults to the PascalCase class name converted to snake_case.
         /// Kept for backward compatibility.
