@@ -10,27 +10,27 @@ using UnityEngine;
 namespace MCPForUnity.Editor.Setup
 {
     /// <summary>
-    /// Handles automatic triggering of the setup wizard
+    /// Handles automatic triggering of the MCP setup window and exposes menu entry points
     /// </summary>
     [InitializeOnLoad]
-    public static class SetupWizard
+    public static class SetupWindowService
     {
         private const string SETUP_COMPLETED_KEY = EditorPrefKeys.SetupCompleted;
         private const string SETUP_DISMISSED_KEY = EditorPrefKeys.SetupDismissed;
         private static bool _hasCheckedThisSession = false;
 
-        static SetupWizard()
+        static SetupWindowService()
         {
             // Skip in batch mode
             if (Application.isBatchMode)
                 return;
 
-            // Show setup wizard on package import
+            // Show Setup Window on package import
             EditorApplication.delayCall += CheckSetupNeeded;
         }
 
         /// <summary>
-        /// Check if setup wizard should be shown
+        /// Check if Setup Window should be shown
         /// </summary>
         private static void CheckSetupNeeded()
         {
@@ -45,17 +45,17 @@ namespace MCPForUnity.Editor.Setup
                 bool setupCompleted = EditorPrefs.GetBool(SETUP_COMPLETED_KEY, false);
                 bool setupDismissed = EditorPrefs.GetBool(SETUP_DISMISSED_KEY, false);
 
-                // Only show setup wizard if it hasn't been completed or dismissed before
+                // Only show Setup Window if it hasn't been completed or dismissed before
                 if (!(setupCompleted || setupDismissed))
                 {
-                    McpLog.Info("Package imported - showing setup wizard", always: false);
+                    McpLog.Info("Package imported - showing Setup Window", always: false);
 
                     var dependencyResult = DependencyManager.CheckAllDependencies();
-                    EditorApplication.delayCall += () => ShowSetupWizard(dependencyResult);
+                    EditorApplication.delayCall += () => ShowSetupWindow(dependencyResult);
                 }
                 else
                 {
-                    McpLog.Info("Setup wizard skipped - previously completed or dismissed", always: false);
+                    McpLog.Info("Setup Window skipped - previously completed or dismissed", always: false);
                 }
             }
             catch (Exception ex)
@@ -67,7 +67,7 @@ namespace MCPForUnity.Editor.Setup
         /// <summary>
         /// Show the setup window
         /// </summary>
-        public static void ShowSetupWizard(DependencyCheckResult dependencyResult = null)
+        public static void ShowSetupWindow(DependencyCheckResult dependencyResult = null)
         {
             try
             {

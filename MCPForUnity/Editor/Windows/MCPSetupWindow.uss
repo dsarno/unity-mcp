@@ -3,6 +3,7 @@
 /* Root container */
 #root-container {
     padding: 20px;
+    flex-grow: 1;
 }
 
 /* Dependency list */
@@ -51,7 +52,17 @@
 /* Installation section */
 #installation-section {
     margin-top: 16px;
+    padding: 12px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: rgba(0, 0, 0, 0.2);
     display: none;
+}
+
+.installation-container {
+    flex-shrink: 1;
+    min-width: 0;
 }
 
 /* Installation section title */
@@ -63,29 +74,30 @@
 /* Installation instructions text */
 #installation-instructions {
     white-space: normal;
-    margin-bottom: 12px;
+    margin-bottom: 4px;
+}
+
+.install-links-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.install-link-button {
+    flex-grow: 1;
+    min-width: 180px;
+    margin-top: 0;
 }
 
 /* Button container at bottom */
 .button-container {
     flex-direction: row;
     align-items: center;
-    margin-top: 20px;
-}
-
-/* Spacer to push buttons right */
-.button-spacer {
-    flex-grow: 1;
+    justify-content: flex-end;
 }
 
 /* Button sizing */
 .setup-button {
-    width: 80px;
-}
-
-/* Refresh button specific spacing */
-#refresh-button {
-    margin-right: 8px;
+    width: 96px;
 }
 
 /* Description text spacing */

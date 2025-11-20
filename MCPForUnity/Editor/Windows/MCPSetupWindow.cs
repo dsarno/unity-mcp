@@ -23,7 +23,8 @@ namespace MCPForUnity.Editor.Windows
         private Label statusMessage;
         private VisualElement installationSection;
         private Label installationInstructions;
-        private Button openInstallLinksButton;
+        private Button openPythonLinkButton;
+        private Button openUvLinkButton;
         private Button refreshButton;
         private Button doneButton;
 
@@ -65,14 +66,16 @@ namespace MCPForUnity.Editor.Windows
             statusMessage = rootVisualElement.Q<Label>("status-message");
             installationSection = rootVisualElement.Q<VisualElement>("installation-section");
             installationInstructions = rootVisualElement.Q<Label>("installation-instructions");
-            openInstallLinksButton = rootVisualElement.Q<Button>("open-install-links-button");
+            openPythonLinkButton = rootVisualElement.Q<Button>("open-python-link-button");
+            openUvLinkButton = rootVisualElement.Q<Button>("open-uv-link-button");
             refreshButton = rootVisualElement.Q<Button>("refresh-button");
             doneButton = rootVisualElement.Q<Button>("done-button");
 
             // Register callbacks
             refreshButton.clicked += OnRefreshClicked;
             doneButton.clicked += OnDoneClicked;
-            openInstallLinksButton.clicked += OnOpenInstallLinksClicked;
+            openPythonLinkButton.clicked += OnOpenPythonInstallClicked;
+            openUvLinkButton.clicked += OnOpenUvInstallClicked;
 
             // Initial update
             UpdateUI();
@@ -97,33 +100,16 @@ namespace MCPForUnity.Editor.Windows
             Close();
         }
 
-        private void OnOpenInstallLinksClicked()
+        private void OnOpenPythonInstallClicked()
         {
-            var (pythonUrl, uvUrl) = DependencyManager.GetInstallationUrls();
+            var (pythonUrl, _) = DependencyManager.GetInstallationUrls();
+            Application.OpenURL(pythonUrl);
+        }
 
-            bool openPython = EditorUtility.DisplayDialog(
-                "Open Installation URLs",
-                "Open Python installation page?",
-                "Yes",
-                "No"
-            );
-
-            if (openPython)
-            {
-                Application.OpenURL(pythonUrl);
-            }
-
-            bool openUV = EditorUtility.DisplayDialog(
-                "Open Installation URLs",
-                "Open UV installation page?",
-                "Yes",
-                "No"
-            );
-
-            if (openUV)
-            {
-                Application.OpenURL(uvUrl);
-            }
+        private void OnOpenUvInstallClicked()
+        {
+            var (_, uvUrl) = DependencyManager.GetInstallationUrls();
+            Application.OpenURL(uvUrl);
         }
 
         private void UpdateUI()

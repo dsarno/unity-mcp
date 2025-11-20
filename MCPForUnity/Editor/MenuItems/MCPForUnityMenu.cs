@@ -15,12 +15,12 @@ namespace MCPForUnity.Editor.MenuItems
         // ========================================
 
         /// <summary>
-        /// Show the setup wizard
+        /// Show the Setup Window
         /// </summary>
-        [MenuItem("Window/MCP For Unity/Setup Wizard", priority = 1)]
-        public static void ShowSetupWizard()
+        [MenuItem("Window/MCP For Unity/Setup Window", priority = 1)]
+        public static void ShowSetupWindow()
         {
-            SetupWizard.ShowSetupWizard();
+            SetupWindowService.ShowSetupWindow();
         }
 
         /// <summary>

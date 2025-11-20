@@ -88,6 +88,51 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
 Note: If using Homebrew, make sure /opt/homebrew/bin is in your PATH.";
         }
 
+        public override DependencyStatus DetectUV()
+        {
+            var status = new DependencyStatus("UV Package Manager", isRequired: true)
+            {
+                InstallationHint = GetUVInstallUrl()
+            };
+
+            try
+            {
+                // Try running uv/uvx directly with augmented PATH
+                if (TryValidateUv("uv", out string version, out string fullPath) ||
+                    TryValidateUv("uvx", out version, out fullPath))
+                {
+                    status.IsAvailable = true;
+                    status.Version = version;
+                    status.Path = fullPath;
+                    status.Details = $"Found UV {version} in PATH";
+                    return status;
+                }
+
+                // Fallback: use which with augmented PATH
+                if (TryFindInPath("uv", out string pathResult) ||
+                    TryFindInPath("uvx", out pathResult))
+                {
+                    if (TryValidateUv(pathResult, out version, out fullPath))
+                    {
+                        status.IsAvailable = true;
+                        status.Version = version;
+                        status.Path = fullPath;
+                        status.Details = $"Found UV {version} in PATH";
+                        return status;
+                    }
+                }
+
+                status.ErrorMessage = "UV not found in PATH";
+                status.Details = "Install UV package manager and ensure it's added to PATH.";
+            }
+            catch (Exception ex)
+            {
+                status.ErrorMessage = $"Error detecting UV: {ex.Message}";
+            }
+
+            return status;
+        }
+
         private bool TryValidatePython(string pythonPath, out string version, out string fullPath)
         {
             version = null;
@@ -142,6 +187,67 @@ Note: If using Homebrew, make sure /opt/homebrew/bin is in your PATH.";
             }
 
             return false;
+        }
+
+        private bool TryValidateUv(string uvPath, out string version, out string fullPath)
+        {
+            version = null;
+            fullPath = null;
+
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = uvPath,
+                    Arguments = "--version",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                var augmentedPath = BuildAugmentedPath();
+                psi.EnvironmentVariables["PATH"] = augmentedPath;
+
+                using var process = Process.Start(psi);
+                if (process == null) return false;
+
+                string output = process.StandardOutput.ReadToEnd().Trim();
+                process.WaitForExit(5000);
+
+                if (process.ExitCode == 0 && output.StartsWith("uv "))
+                {
+                    version = output.Substring(3).Trim();
+                    fullPath = uvPath;
+                    return true;
+                }
+            }
+            catch
+            {
+                // Ignore validation errors
+            }
+
+            return false;
+        }
+
+        private string BuildAugmentedPath()
+        {
+            var pathAdditions = GetPathAdditions();
+            string currentPath = Environment.GetEnvironmentVariable("PATH") ?? "";
+            return string.Join(":", pathAdditions) + ":" + currentPath;
+        }
+
+        private string[] GetPathAdditions()
+        {
+            var homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return new[]
+            {
+                "/opt/homebrew/bin",
+                "/usr/local/bin",
+                "/usr/bin",
+                "/bin",
+                Path.Combine(homeDir, ".local", "bin")
+            };
         }
 
         private bool TryFindInPath(string executable, out string fullPath)

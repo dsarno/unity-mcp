@@ -38,19 +38,21 @@
                 </ui:VisualElement>
                 
                 <!-- Installation Instructions (shown when dependencies missing) -->
-                <ui:VisualElement name="installation-section">
+                <ui:VisualElement name="installation-section" class="installation-container">
                     <ui:Label text="Installation Instructions" class="installation-title" />
                     <ui:Label name="installation-instructions" class="help-text" />
-                    <ui:Button name="open-install-links-button" text="Open Installation Pages" class="secondary-button" />
+                    <ui:VisualElement class="install-links-row">
+                        <ui:Button name="open-python-link-button" text="Open Python Install Page" class="secondary-button install-link-button" />
+                        <ui:Button name="open-uv-link-button" text="Open UV Install Page" class="secondary-button install-link-button" />
+                    </ui:VisualElement>
                 </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>
         
         <!-- Action Buttons -->
         <ui:VisualElement class="button-container">
-            <ui:VisualElement class="button-spacer" />
-            <ui:Button name="refresh-button" text="Refresh" class="secondary-button setup-button" />
-            <ui:Button name="done-button" text="Done" class="action-button setup-button" />
+            <ui:Button name="refresh-button" text="Refresh" class="setup-button secondary-button" />
+            <ui:Button name="done-button" text="Done" class="setup-button action-button" />
         </ui:VisualElement>
     </ui:ScrollView>
 </ui:UXML>
