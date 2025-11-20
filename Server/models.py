@@ -8,6 +8,9 @@ class MCPResponse(BaseModel):
     message: str | None = None
     error: str | None = None
     data: Any | None = None
+    # Optional hint for clients about how to handle the response
+    # e.g. "retry" when Unity is temporarily reloading the domain.
+    hint: str | None = None
 
 
 class UnityInstanceInfo(BaseModel):

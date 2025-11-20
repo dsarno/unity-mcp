@@ -690,14 +690,28 @@ def get_unity_connection(instance_identifier: Optional[str] = None) -> UnityConn
 # Centralized retry helpers
 # -----------------------------
 
-def _is_reloading_response(resp: dict) -> bool:
-    """Return True if the Unity response indicates the editor is reloading."""
-    if not isinstance(resp, dict):
-        return False
-    if resp.get("state") == "reloading":
-        return True
-    message_text = (resp.get("message") or resp.get("error") or "").lower()
-    return "reload" in message_text
+def _is_reloading_response(resp: object) -> bool:
+    """Return True if the Unity response indicates the editor is reloading.
+
+    Supports both raw dict payloads from Unity and MCPResponse objects returned
+    by preflight checks or transport helpers.
+    """
+    # Structured MCPResponse from preflight/transport
+    if isinstance(resp, MCPResponse):
+        # Explicit "please retry" hint from preflight
+        if getattr(resp, "hint", None) == "retry":
+            return True
+        message_text = f"{resp.message or ''} {resp.error or ''}".lower()
+        return "reload" in message_text
+
+    # Raw Unity payloads
+    if isinstance(resp, dict):
+        if resp.get("state") == "reloading":
+            return True
+        message_text = (resp.get("message") or resp.get("error") or "").lower()
+        return "reload" in message_text
+
+    return False
 
 
 def send_command_with_retry(

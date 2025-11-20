@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from typing import Any, Dict, Optional
 
 from starlette.endpoints import WebSocketEndpoint
 from starlette.websockets import WebSocket
 
+from config import config
 from plugin_registry import PluginRegistry
 
 logger = logging.getLogger("mcp-for-unity-server")
@@ -204,19 +206,71 @@ class PluginHub(WebSocketEndpoint):
     # ------------------------------------------------------------------
     @classmethod
     async def _resolve_session_id(cls, unity_instance: Optional[str]) -> str:
+        """Resolve a project hash (Unity instance id) to an active plugin session.
+
+        During Unity domain reloads the plugin's WebSocket session is torn down
+        and reconnected shortly afterwards. Instead of failing immediately when
+        no sessions are available, we wait for a bounded period for a plugin
+        to reconnect so in‑flight MCP calls can succeed transparently.
+        """
         if cls._registry is None:
             raise RuntimeError("Plugin registry not configured")
 
-        if unity_instance:
-            session_id = await cls._registry.get_session_id_by_hash(unity_instance)
-            if session_id:
-                return session_id
+        # Use the same defaults as the stdio transport reload handling so that
+        # HTTP/WebSocket and TCP behave consistently without per-project env.
+        max_retries = max(1, int(getattr(config, "reload_max_retries", 40)))
+        retry_ms = float(getattr(config, "reload_retry_ms", 250))
+        sleep_seconds = max(0.05, retry_ms / 1000.0)
 
-        sessions = await cls._registry.list_sessions()
-        if not sessions:
+        async def _try_once() -> Optional[str]:
+            # Prefer a specific Unity instance if one was requested
+            if unity_instance:
+                session_id = await cls._registry.get_session_id_by_hash(unity_instance)
+                if session_id:
+                    return session_id
+
+            # Fallback: use the first available plugin session, if any
+            sessions = await cls._registry.list_sessions()
+            if not sessions:
+                return None
+            # Deterministic order: rely on insertion ordering
+            return next(iter(sessions.keys()))
+
+        session_id = await _try_once()
+        deadline = time.monotonic() + (max_retries * sleep_seconds)
+        wait_started = None
+
+        # If there is no active plugin yet (e.g., Unity starting up or reloading),
+        # wait politely for a session to appear before surfacing an error.
+        while session_id is None and time.monotonic() < deadline:
+            if wait_started is None:
+                wait_started = time.monotonic()
+                logger.debug(
+                    "No plugin session available (instance=%s); waiting up to %.2fs",
+                    unity_instance or "default",
+                    deadline - wait_started,
+                )
+            await asyncio.sleep(sleep_seconds)
+            session_id = await _try_once()
+
+        if session_id is not None and wait_started is not None:
+            logger.debug(
+                "Plugin session restored after %.3fs (instance=%s)",
+                time.monotonic() - wait_started,
+                unity_instance or "default",
+            )
+
+        if session_id is None:
+            logger.warning(
+                "No Unity plugin reconnected within %.2fs (instance=%s)",
+                max_retries * sleep_seconds,
+                unity_instance or "default",
+            )
+            # At this point we've given the plugin ample time to reconnect; surface
+            # a clear error so the client can prompt the user to open Unity.
             raise RuntimeError("No Unity plugins are currently connected")
-        # Deterministic order: rely on insertion ordering
-        return next(iter(sessions.keys()))
+
+        return session_id
 
     @classmethod
     async def send_command_for_instance(
