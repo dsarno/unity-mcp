@@ -30,11 +30,11 @@ namespace MCPForUnity.Editor.Resources.Project
                     assetsPath = assetsPath
                 };
 
-                return Response.Success("Retrieved project info.", info);
+                return new SuccessResponse("Retrieved project info.", info);
             }
             catch (Exception e)
             {
-                return Response.Error($"Error getting project info: {e.Message}");
+                return new ErrorResponse($"Error getting project info: {e.Message}");
             }
         }
     }

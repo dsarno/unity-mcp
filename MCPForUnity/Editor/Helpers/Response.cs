@@ -1,91 +1,108 @@
-using System;
-using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace MCPForUnity.Editor.Helpers
 {
-    /// <summary>
-    /// Provides static methods for creating standardized success and error response objects.
-    /// Ensures consistent JSON structure for communication back to the Python server.
-    /// </summary>
-    public static class Response
+public interface IMcpResponse
+{
+        [JsonProperty("success")]
+        bool Success { get; }
+    }
+
+    public sealed class SuccessResponse : IMcpResponse
     {
-        /// <summary>
-        /// Creates a standardized success response object.
-        /// </summary>
-        /// <param name="message">A message describing the successful operation.</param>
-        /// <param name="data">Optional additional data to include in the response.</param>
-        /// <returns>An object representing the success response.</returns>
-        public static object Success(string message, object data = null)
+        [JsonProperty("success")]
+        public bool Success => true;
+
+        [JsonIgnore]
+        public bool success => Success; // Backward-compatible casing for reflection-based tests
+
+        [JsonProperty("message")]
+        public string Message { get; }
+
+        [JsonProperty("data", NullValueHandling = NullValueHandling.Ignore)]
+        public object Data { get; }
+
+        [JsonIgnore]
+        public object data => Data;
+
+        public SuccessResponse(string message, object data = null)
         {
-            if (data != null)
-            {
-                return new
-                {
-                    success = true,
-                    message = message,
-                    data = data,
-                };
-            }
-            else
-            {
-                return new { success = true, message = message };
-            }
+            Message = message;
+            Data = data;
         }
+    }
 
-        /// <summary>
-        /// Creates a standardized pending response used by polled tools. The Python
-        /// middleware will keep polling while responses carry the _mcp_status marker.
-        /// </summary>
-        /// <param name="message">Optional status message.</param>
-        /// <param name="pollIntervalSeconds">Polling interval hint in seconds.</param>
-        /// <param name="data">Optional additional data to include in the response.</param>
-        public static object Pending(string message = "", double pollIntervalSeconds = 1.0, object data = null)
+    public sealed class ErrorResponse : IMcpResponse
+    {
+        [JsonProperty("success")]
+        public bool Success => false;
+
+        [JsonIgnore]
+        public bool success => Success; // Backward-compatible casing for reflection-based tests
+
+        [JsonProperty("code", NullValueHandling = NullValueHandling.Ignore)]
+        public string Code { get; }
+
+        [JsonIgnore]
+        public string code => Code;
+
+        [JsonProperty("error")]
+        public string Error { get; }
+
+        [JsonIgnore]
+        public string error => Error;
+
+        [JsonProperty("data", NullValueHandling = NullValueHandling.Ignore)]
+        public object Data { get; }
+
+        [JsonIgnore]
+        public object data => Data;
+
+        public ErrorResponse(string messageOrCode, object data = null)
         {
-            var payload = new Dictionary<string, object>
-            {
-                { "success", true },
-                { "_mcp_status", "pending" },
-                { "_mcp_poll_interval", pollIntervalSeconds },
-            };
-
-            if (!string.IsNullOrEmpty(message))
-            {
-                payload["message"] = message;
-            }
-
-            if (data != null)
-            {
-                payload["data"] = data;
-            }
-
-            return payload;
+            Code = messageOrCode;
+            Error = messageOrCode;
+            Data = data;
         }
+    }
 
-        /// <summary>
-        /// Creates a standardized error response object.
-        /// </summary>
-        /// <param name="errorCodeOrMessage">A message describing the error.</param>
-        /// <param name="data">Optional additional data (e.g., error details) to include.</param>
-        /// <returns>An object representing the error response.</returns>
-        public static object Error(string errorCodeOrMessage, object data = null)
+    public sealed class PendingResponse : IMcpResponse
+    {
+        [JsonProperty("success")]
+        public bool Success => true;
+
+        [JsonIgnore]
+        public bool success => Success; // Backward-compatible casing for reflection-based tests
+
+        [JsonProperty("_mcp_status")]
+        public string Status => "pending";
+
+        [JsonIgnore]
+        public string _mcp_status => Status;
+
+        [JsonProperty("_mcp_poll_interval")]
+        public double PollIntervalSeconds { get; }
+
+        [JsonIgnore]
+        public double _mcp_poll_interval => PollIntervalSeconds;
+
+        [JsonProperty("message", NullValueHandling = NullValueHandling.Ignore)]
+        public string Message { get; }
+
+        [JsonIgnore]
+        public string message => Message;
+
+        [JsonProperty("data", NullValueHandling = NullValueHandling.Ignore)]
+        public object Data { get; }
+
+        [JsonIgnore]
+        public object data => Data;
+
+        public PendingResponse(string message = "", double pollIntervalSeconds = 1.0, object data = null)
         {
-            if (data != null)
-            {
-                // Note: The key is "error" for error messages, not "message"
-                return new
-                {
-                    success = false,
-                    // Preserve original behavior while adding a machine-parsable code field.
-                    // If callers pass a code string, it will be echoed in both code and error.
-                    code = errorCodeOrMessage,
-                    error = errorCodeOrMessage,
-                    data = data,
-                };
-            }
-            else
-            {
-                return new { success = false, code = errorCodeOrMessage, error = errorCodeOrMessage };
-            }
+            Message = string.IsNullOrEmpty(message) ? null : message;
+            PollIntervalSeconds = pollIntervalSeconds;
+            Data = data;
         }
     }
 }

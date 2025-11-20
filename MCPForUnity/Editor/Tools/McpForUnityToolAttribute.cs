@@ -32,7 +32,7 @@ namespace MCPForUnity.Editor.Tools
 
         /// <summary>
         /// Enables the polling middleware for long-running tools. When true, Unity
-        /// should return Response.Pending and the Python side will poll using
+        /// should return a PendingResponse and the Python side will poll using
         /// <see cref="PollAction"/> until completion.
         /// </summary>
         public bool RequiresPolling { get; set; } = false;
