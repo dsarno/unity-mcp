@@ -45,12 +45,12 @@ namespace MyProject.Editor.CustomTools
 
             if (string.IsNullOrEmpty(parameters.param1))
             {
-                return Response.Error("param1 is required");
+                return new ErrorResponse("param1 is required");
             }
 
             DoSomethingAmazing(parameters.param1, parameters.param2);
 
-            return Response.Success("Custom tool executed successfully!", new
+            return new SuccessResponse("Custom tool executed successfully!", new
             {
                 parameters.param1,
                 parameters.param2
@@ -112,7 +112,7 @@ namespace MyProject.Editor.CustomTools
 
             if (string.IsNullOrEmpty(parameters.filename))
             {
-                return Response.Error("filename is required");
+                return new ErrorResponse("filename is required");
             }
 
             try
@@ -128,7 +128,7 @@ namespace MyProject.Editor.CustomTools
                 Camera camera = Camera.main ?? Object.FindFirstObjectByType<Camera>();
                 if (camera == null)
                 {
-                    return Response.Error("No camera found in the scene");
+                    return new ErrorResponse("No camera found in the scene");
                 }
 
                 // Capture screenshot
@@ -151,7 +151,7 @@ namespace MyProject.Editor.CustomTools
                 File.WriteAllBytes(absolutePath, bytes);
                 Object.DestroyImmediate(screenshot);
 
-                return Response.Success($"Screenshot saved to {absolutePath}", new
+                return new SuccessResponse($"Screenshot saved to {absolutePath}", new
                 {
                     path = absolutePath,
                     width = width,
@@ -160,7 +160,7 @@ namespace MyProject.Editor.CustomTools
             }
             catch (System.Exception ex)
             {
-                return Response.Error($"Failed to capture screenshot: {ex.Message}");
+                return new ErrorResponse($"Failed to capture screenshot: {ex.Message}");
             }
         }
     }
@@ -184,7 +184,7 @@ Mark your tool with `RequiresPolling = true` and specify a `PollAction` (typical
 
 ### The Three Key Ingredients
 
-1. **Start the work:** Return `Response.Pending("message", pollIntervalSeconds)` to acknowledge the job has started. The poll interval tells the server how long to wait between checks.
+1. **Start the work:** Return `new PendingResponse("message", pollIntervalSeconds)` to acknowledge the job has started. The poll interval tells the server how long to wait between checks.
 
 2. **Implement the poll action:** Create a method (like `Status`) that checks progress and returns `_mcp_status` of `pending`, `complete`, or `error`. **Important:** The middleware calls your `PollAction` string exactly as written—no automatic case conversion—so make sure your `HandleCommand` recognizes it.
 
@@ -224,7 +224,7 @@ public static class BakeLightmaps
         if (s_isRunning)
         {
             var existing = McpJobStateStore.LoadState<State>(ToolName) ?? new State { lastStatus = "in_progress", progress = 0f };
-            return Response.Pending("Bake already running", 0.5, existing);
+            return new PendingResponse("Bake already running", 0.5, existing);
         }
 
         var state = new State { lastStatus = "in_progress", progress = 0f };
@@ -234,7 +234,7 @@ public static class BakeLightmaps
         s_lastUpdateTime = EditorApplication.timeSinceStartup;
         EditorApplication.update += UpdateBake;
 
-        return Response.Pending("Starting lightmap bake", 0.5, new { state.lastStatus, state.progress });
+        return new PendingResponse("Starting lightmap bake", 0.5, new { state.lastStatus, state.progress });
     }
 
     public static object Status(JObject _)
@@ -251,7 +251,7 @@ public static class BakeLightmaps
             return new { _mcp_status = "error", error = "Bake failed", data = state };
         }
 
-        return Response.Pending($"Baking... {state.progress:P0}", 0.5, state);
+        return new PendingResponse($"Baking... {state.progress:P0}", 0.5, state);
     }
 
     private static void UpdateBake()
