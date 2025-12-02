@@ -1,15 +1,17 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using UnityEditor;
-using UnityEngine;
-using UnityEngine.UIElements;
-using MCPForUnity.Editor.Data;
+using System.Threading.Tasks;
+using MCPForUnity.Editor.Clients;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Services;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace MCPForUnity.Editor.Windows.Components.ClientConfig
 {
@@ -36,15 +38,18 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
         private Label installationStepsLabel;
 
         // Data
-        private readonly McpClients mcpClients;
+        private readonly List<IMcpClientConfigurator> configurators;
+        private readonly Dictionary<IMcpClientConfigurator, DateTime> lastStatusChecks = new();
+        private readonly HashSet<IMcpClientConfigurator> statusRefreshInFlight = new();
+        private static readonly TimeSpan StatusRefreshInterval = TimeSpan.FromSeconds(45);
         private int selectedClientIndex = 0;
 
         public VisualElement Root { get; private set; }
 
-        public McpClientConfigSection(VisualElement root, McpClients clients)
+        public McpClientConfigSection(VisualElement root)
         {
             Root = root;
-            mcpClients = clients;
+            configurators = MCPServiceLocator.Client.GetAllClients().ToList();
             CacheUIElements();
             InitializeUI();
             RegisterCallbacks();
@@ -70,7 +75,7 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
 
         private void InitializeUI()
         {
-            var clientNames = mcpClients.clients.Select(c => c.name).ToList();
+            var clientNames = configurators.Select(c => c.DisplayName).ToList();
             clientDropdown.choices = clientNames;
             if (clientNames.Count > 0)
             {
@@ -100,72 +105,64 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
 
         public void UpdateClientStatus()
         {
-            if (selectedClientIndex < 0 || selectedClientIndex >= mcpClients.clients.Count)
+            if (selectedClientIndex < 0 || selectedClientIndex >= configurators.Count)
                 return;
 
-            var client = mcpClients.clients[selectedClientIndex];
-            MCPServiceLocator.Client.CheckClientStatus(client);
+            var client = configurators[selectedClientIndex];
+            RefreshClientStatus(client);
+        }
 
-            clientStatusLabel.text = client.GetStatusDisplayString();
-            clientStatusLabel.style.color = StyleKeyword.Null;
-
-            clientStatusIndicator.RemoveFromClassList("configured");
-            clientStatusIndicator.RemoveFromClassList("not-configured");
-            clientStatusIndicator.RemoveFromClassList("warning");
-
-            switch (client.status)
+        private string GetStatusDisplayString(McpStatus status)
+        {
+            return status switch
             {
-                case McpStatus.Configured:
-                case McpStatus.Running:
-                case McpStatus.Connected:
-                    clientStatusIndicator.AddToClassList("configured");
-                    break;
-                case McpStatus.IncorrectPath:
-                case McpStatus.CommunicationError:
-                case McpStatus.NoResponse:
-                    clientStatusIndicator.AddToClassList("warning");
-                    break;
-                default:
-                    clientStatusIndicator.AddToClassList("not-configured");
-                    break;
-            }
-
-            if (client.mcpType == McpTypes.ClaudeCode)
-            {
-                bool isConfigured = client.status == McpStatus.Configured;
-                configureButton.text = isConfigured ? "Unregister" : "Register";
-            }
-            else
-            {
-                configureButton.text = "Configure";
-            }
+                McpStatus.NotConfigured => "Not Configured",
+                McpStatus.Configured => "Configured",
+                McpStatus.Running => "Running",
+                McpStatus.Connected => "Connected",
+                McpStatus.IncorrectPath => "Incorrect Path",
+                McpStatus.CommunicationError => "Communication Error",
+                McpStatus.NoResponse => "No Response",
+                McpStatus.UnsupportedOS => "Unsupported OS",
+                McpStatus.MissingConfig => "Missing MCPForUnity Config",
+                McpStatus.Error => "Error",
+                _ => "Unknown",
+            };
         }
 
         public void UpdateManualConfiguration()
         {
-            if (selectedClientIndex < 0 || selectedClientIndex >= mcpClients.clients.Count)
+            if (selectedClientIndex < 0 || selectedClientIndex >= configurators.Count)
                 return;
 
-            var client = mcpClients.clients[selectedClientIndex];
+            var client = configurators[selectedClientIndex];
 
-            string configPath = MCPServiceLocator.Client.GetConfigPath(client);
+            string configPath = client.GetConfigPath();
             configPathField.value = configPath;
 
-            string configJson = MCPServiceLocator.Client.GenerateConfigJson(client);
+            string configJson = client.GetManualSnippet();
             configJsonField.value = configJson;
 
-            string steps = MCPServiceLocator.Client.GetInstallationSteps(client);
-            installationStepsLabel.text = steps;
+            var steps = client.GetInstallationSteps();
+            if (steps != null && steps.Count > 0)
+            {
+                var numbered = steps.Select((s, i) => $"{i + 1}. {s}");
+                installationStepsLabel.text = string.Join("\n", numbered);
+            }
+            else
+            {
+                installationStepsLabel.text = "Configuration steps not available for this client.";
+            }
         }
 
         private void UpdateClaudeCliPathVisibility()
         {
-            if (selectedClientIndex < 0 || selectedClientIndex >= mcpClients.clients.Count)
+            if (selectedClientIndex < 0 || selectedClientIndex >= configurators.Count)
                 return;
 
-            var client = mcpClients.clients[selectedClientIndex];
+            var client = configurators[selectedClientIndex];
 
-            if (client.mcpType == McpTypes.ClaudeCode)
+            if (client is ClaudeCliMcpConfigurator)
             {
                 string claudePath = MCPServiceLocator.Paths.GetClaudeCliPath();
                 if (string.IsNullOrEmpty(claudePath))
@@ -199,7 +196,7 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
 
                 EditorUtility.DisplayDialog("Configure All Clients", message, "OK");
 
-                if (selectedClientIndex >= 0 && selectedClientIndex < mcpClients.clients.Count)
+                if (selectedClientIndex >= 0 && selectedClientIndex < configurators.Count)
                 {
                     UpdateClientStatus();
                     UpdateManualConfiguration();
@@ -213,31 +210,16 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
 
         private void OnConfigureClicked()
         {
-            if (selectedClientIndex < 0 || selectedClientIndex >= mcpClients.clients.Count)
+            if (selectedClientIndex < 0 || selectedClientIndex >= configurators.Count)
                 return;
 
-            var client = mcpClients.clients[selectedClientIndex];
+            var client = configurators[selectedClientIndex];
 
             try
             {
-                if (client.mcpType == McpTypes.ClaudeCode)
-                {
-                    bool isConfigured = client.status == McpStatus.Configured;
-                    if (isConfigured)
-                    {
-                        MCPServiceLocator.Client.UnregisterClaudeCode();
-                    }
-                    else
-                    {
-                        MCPServiceLocator.Client.RegisterClaudeCode();
-                    }
-                }
-                else
-                {
-                    MCPServiceLocator.Client.ConfigureClient(client);
-                }
-
-                UpdateClientStatus();
+                MCPServiceLocator.Client.ConfigureClient(client);
+                lastStatusChecks.Remove(client);
+                RefreshClientStatus(client, forceImmediate: true);
                 UpdateManualConfiguration();
             }
             catch (Exception ex)
@@ -308,14 +290,143 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
 
         public void RefreshSelectedClient()
         {
-            if (selectedClientIndex >= 0 && selectedClientIndex < mcpClients.clients.Count)
+            if (selectedClientIndex >= 0 && selectedClientIndex < configurators.Count)
             {
-                var client = mcpClients.clients[selectedClientIndex];
-                MCPServiceLocator.Client.CheckClientStatus(client);
-                UpdateClientStatus();
+                var client = configurators[selectedClientIndex];
+                RefreshClientStatus(client, forceImmediate: true);
                 UpdateManualConfiguration();
                 UpdateClaudeCliPathVisibility();
             }
+        }
+
+        private void RefreshClientStatus(IMcpClientConfigurator client, bool forceImmediate = false)
+        {
+            if (client is ClaudeCliMcpConfigurator)
+            {
+                RefreshClaudeCliStatus(client, forceImmediate);
+                return;
+            }
+
+            if (forceImmediate || ShouldRefreshClient(client))
+            {
+                MCPServiceLocator.Client.CheckClientStatus(client);
+                lastStatusChecks[client] = DateTime.UtcNow;
+            }
+
+            ApplyStatusToUi(client);
+        }
+
+        private void RefreshClaudeCliStatus(IMcpClientConfigurator client, bool forceImmediate)
+        {
+            if (forceImmediate)
+            {
+                MCPServiceLocator.Client.CheckClientStatus(client, attemptAutoRewrite: false);
+                lastStatusChecks[client] = DateTime.UtcNow;
+                ApplyStatusToUi(client);
+                return;
+            }
+
+            bool hasStatus = lastStatusChecks.ContainsKey(client);
+            bool needsRefresh = !hasStatus || ShouldRefreshClient(client);
+
+            if (!hasStatus)
+            {
+                ApplyStatusToUi(client, showChecking: true);
+            }
+            else
+            {
+                ApplyStatusToUi(client);
+            }
+
+            if (needsRefresh && !statusRefreshInFlight.Contains(client))
+            {
+                statusRefreshInFlight.Add(client);
+                ApplyStatusToUi(client, showChecking: true);
+
+                Task.Run(() =>
+                {
+                    MCPServiceLocator.Client.CheckClientStatus(client, attemptAutoRewrite: false);
+                }).ContinueWith(t =>
+                {
+                    bool faulted = false;
+                    string errorMessage = null;
+                    if (t.IsFaulted && t.Exception != null)
+                    {
+                        var baseException = t.Exception.GetBaseException();
+                        errorMessage = baseException?.Message ?? "Status check failed";
+                        McpLog.Error($"Failed to refresh Claude CLI status: {errorMessage}");
+                        faulted = true;
+                    }
+
+                    EditorApplication.delayCall += () =>
+                    {
+                        statusRefreshInFlight.Remove(client);
+                        lastStatusChecks[client] = DateTime.UtcNow;
+                        if (faulted)
+                        {
+                            if (client is McpClientConfiguratorBase baseConfigurator)
+                            {
+                                baseConfigurator.Client.SetStatus(McpStatus.Error, errorMessage ?? "Status check failed");
+                            }
+                        }
+                        ApplyStatusToUi(client);
+                    };
+                });
+            }
+        }
+
+        private bool ShouldRefreshClient(IMcpClientConfigurator client)
+        {
+            if (!lastStatusChecks.TryGetValue(client, out var last))
+            {
+                return true;
+            }
+
+            return (DateTime.UtcNow - last) > StatusRefreshInterval;
+        }
+
+        private void ApplyStatusToUi(IMcpClientConfigurator client, bool showChecking = false)
+        {
+            if (selectedClientIndex < 0 || selectedClientIndex >= configurators.Count)
+                return;
+
+            if (!ReferenceEquals(configurators[selectedClientIndex], client))
+                return;
+
+            clientStatusIndicator.RemoveFromClassList("configured");
+            clientStatusIndicator.RemoveFromClassList("not-configured");
+            clientStatusIndicator.RemoveFromClassList("warning");
+
+            if (showChecking)
+            {
+                clientStatusLabel.text = "Checking...";
+                clientStatusLabel.style.color = StyleKeyword.Null;
+                clientStatusIndicator.AddToClassList("warning");
+                configureButton.text = client.GetConfigureActionLabel();
+                return;
+            }
+
+            clientStatusLabel.text = GetStatusDisplayString(client.Status);
+            clientStatusLabel.style.color = StyleKeyword.Null;
+
+            switch (client.Status)
+            {
+                case McpStatus.Configured:
+                case McpStatus.Running:
+                case McpStatus.Connected:
+                    clientStatusIndicator.AddToClassList("configured");
+                    break;
+                case McpStatus.IncorrectPath:
+                case McpStatus.CommunicationError:
+                case McpStatus.NoResponse:
+                    clientStatusIndicator.AddToClassList("warning");
+                    break;
+                default:
+                    clientStatusIndicator.AddToClassList("not-configured");
+                    break;
+            }
+
+            configureButton.text = client.GetConfigureActionLabel();
         }
     }
 }
