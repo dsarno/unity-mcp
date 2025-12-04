@@ -176,6 +176,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 
                 // Force the UI to reflect the actual port being used
                 unityPortField.value = bridgeService.CurrentPort.ToString();
+                unityPortField.SetEnabled(false);
             }
             else
             {
@@ -183,6 +184,8 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 statusIndicator.RemoveFromClassList("connected");
                 statusIndicator.AddToClassList("disconnected");
                 connectionToggleButton.text = "Start Session";
+                
+                unityPortField.SetEnabled(true);
 
                 healthStatusLabel.text = HealthStatusUnknown;
                 healthIndicator.RemoveFromClassList("healthy");
