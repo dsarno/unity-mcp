@@ -187,8 +187,6 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 
                 unityPortField.SetEnabled(true);
 
-                unityPortField.SetEnabled(true);
-
                 healthStatusLabel.text = HealthStatusUnknown;
                 healthIndicator.RemoveFromClassList("healthy");
                 healthIndicator.RemoveFromClassList("warning");

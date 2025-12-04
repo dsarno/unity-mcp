@@ -25,57 +25,29 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
 
             try
             {
-                // 1. Check explicit common Homebrew/system paths first to avoid PATH ambiguity
-                // This prioritizes Homebrew versions (often newer) over system versions
-                var candidatePaths = new[]
-                {
-                    "/opt/homebrew/bin/python3",
-                    "/usr/local/bin/python3",
-                    "/opt/homebrew/bin/python3.13",
-                    "/opt/homebrew/bin/python3.12",
-                    "/opt/homebrew/bin/python3.11",
-                    "/opt/homebrew/bin/python3.10",
-                    "/usr/local/bin/python3.13",
-                    "/usr/local/bin/python3.12",
-                    "/usr/local/bin/python3.11",
-                    "/usr/local/bin/python3.10"
-                };
-
-                foreach (var path in candidatePaths)
-                {
-                    if (File.Exists(path) && TryValidatePython(path, out string v, out string p))
-                    {
-                        status.IsAvailable = true;
-                        status.Version = v;
-                        status.Path = p;
-                        status.Details = $"Found Python {v} at {p}";
-                        return status;
-                    }
-                }
-
-                // 2. Try running python directly from PATH (fallback)
-                if (TryValidatePython("python3", out string version, out string fullPath) ||
-                    TryValidatePython("python", out version, out fullPath))
-                {
-                    status.IsAvailable = true;
-                    status.Version = version;
-                    status.Path = fullPath;
-                    status.Details = $"Found Python {version} in PATH";
-                    return status;
-                }
-
-                // 3. Fallback: try 'which' command
+                // 1. Try 'which' command with augmented PATH (prioritizing Homebrew)
                 if (TryFindInPath("python3", out string pathResult) ||
                     TryFindInPath("python", out pathResult))
                 {
-                    if (TryValidatePython(pathResult, out version, out fullPath))
+                    if (TryValidatePython(pathResult, out string version, out string fullPath))
                     {
                         status.IsAvailable = true;
                         status.Version = version;
                         status.Path = fullPath;
-                        status.Details = $"Found Python {version} in PATH";
+                        status.Details = $"Found Python {version} at {fullPath}";
                         return status;
                     }
+                }
+
+                // 2. Fallback: Try running python directly from PATH
+                if (TryValidatePython("python3", out string v, out string p) ||
+                    TryValidatePython("python", out v, out p))
+                {
+                    status.IsAvailable = true;
+                    status.Version = v;
+                    status.Path = p;
+                    status.Details = $"Found Python {v} in PATH";
+                    return status;
                 }
 
                 status.ErrorMessage = "Python not found in PATH or standard locations";
