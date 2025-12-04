@@ -103,7 +103,7 @@ class UnityInstanceMiddleware(Middleware):
                     # We only need session_id for HTTP transport routing.
                     # For stdio, we just need the instance ID.
                     session_id = await PluginHub._resolve_session_id(active_instance)
-                except Exception as exc:
+                except (ConnectionError, ValueError, KeyError, TimeoutError) as exc:
                     # If resolution fails, it means the Unity instance is not reachable via HTTP/WS.
                     # If we are in stdio mode, this might still be fine if the user is just setting state?
                     # But usually if PluginHub is configured, we expect it to work.
@@ -114,6 +114,16 @@ class UnityInstanceMiddleware(Middleware):
                         active_instance,
                         exc,
                         exc_info=True,
+                    )
+                except Exception as exc:
+                    # Re-raise unexpected system exceptions to avoid swallowing critical failures
+                    if isinstance(exc, (SystemExit, KeyboardInterrupt)):
+                        raise
+                    logger.error(
+                        "Unexpected error during PluginHub session resolution for %s: %s",
+                        active_instance,
+                        exc,
+                        exc_info=True
                     )
 
             ctx.set_state("unity_instance", active_instance)
