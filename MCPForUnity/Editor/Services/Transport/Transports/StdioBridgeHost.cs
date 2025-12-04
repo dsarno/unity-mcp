@@ -306,6 +306,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     {
                         try
                         {
+<<<<<<< HEAD
                             listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
 #if !UNITY_EDITOR_OSX
                             listener.Server.SetSocketOption(
@@ -328,6 +329,9 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                             catch (Exception)
                             {
                             }
+=======
+                            listener = CreateConfiguredListener(currentUnityPort);
+>>>>>>> b693edcaa9cc51bfec59d00595db0e96c49129eb
                             listener.Start();
                             break;
                         }
@@ -359,6 +363,13 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
 
                             currentUnityPort = PortManager.DiscoverNewPort();
 
+                            // Persist the new port so next time we start on this port
+                            try
+                            {
+                                EditorPrefs.SetInt(EditorPrefKeys.UnitySocketPort, currentUnityPort);
+                            }
+                            catch { }
+
                             if (IsDebugEnabled())
                             {
                                 if (currentUnityPort == oldPort)
@@ -371,6 +382,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                                 }
                             }
 
+<<<<<<< HEAD
                             listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
 #if !UNITY_EDITOR_OSX
                             listener.Server.SetSocketOption(
@@ -393,6 +405,9 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                             catch (Exception)
                             {
                             }
+=======
+                            listener = CreateConfiguredListener(currentUnityPort);
+>>>>>>> b693edcaa9cc51bfec59d00595db0e96c49129eb
                             listener.Start();
                             break;
                         }
@@ -418,6 +433,33 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     McpLog.Error($"Failed to start TCP listener: {ex.Message}");
                 }
             }
+        }
+
+        private static TcpListener CreateConfiguredListener(int port)
+        {
+            var newListener = new TcpListener(IPAddress.Loopback, port);
+#if !UNITY_EDITOR_OSX
+            newListener.Server.SetSocketOption(
+                SocketOptionLevel.Socket,
+                SocketOptionName.ReuseAddress,
+                true
+            );
+#endif
+#if UNITY_EDITOR_WIN
+            try
+            {
+                newListener.ExclusiveAddressUse = false;
+            }
+            catch { }
+#endif
+            try
+            {
+                newListener.Server.LingerState = new LingerOption(true, 0);
+            }
+            catch (Exception)
+            {
+            }
+            return newListener;
         }
 
         public static void Stop()

@@ -120,10 +120,10 @@ class UnityInstanceMiddleware(Middleware):
                     if isinstance(exc, (SystemExit, KeyboardInterrupt)):
                         raise
                     logger.error(
-                        "PluginHub session resolution failed for %s: %s; leaving active_instance unchanged",
+                        "Unexpected error during PluginHub session resolution for %s: %s",
                         active_instance,
                         exc,
-                        exc_info=True,
+                        exc_info=True
                     )
 
             ctx.set_state("unity_instance", active_instance)

@@ -184,6 +184,8 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 statusIndicator.RemoveFromClassList("connected");
                 statusIndicator.AddToClassList("disconnected");
                 connectionToggleButton.text = "Start Session";
+                
+                unityPortField.SetEnabled(true);
 
                 unityPortField.SetEnabled(true);
 
