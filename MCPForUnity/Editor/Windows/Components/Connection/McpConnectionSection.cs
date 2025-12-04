@@ -193,10 +193,9 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 healthIndicator.AddToClassList("unknown");
                 
                 int savedPort = EditorPrefs.GetInt(EditorPrefKeys.UnitySocketPort, 0);
-                if (savedPort == 0)
-                {
-                    unityPortField.value = bridgeService.CurrentPort.ToString();
-                }
+                unityPortField.value = (savedPort == 0 
+                    ? bridgeService.CurrentPort 
+                    : savedPort).ToString();
             }
         }
 
