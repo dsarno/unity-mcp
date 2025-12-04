@@ -103,13 +103,23 @@ class UnityInstanceMiddleware(Middleware):
                     # We only need session_id for HTTP transport routing.
                     # For stdio, we just need the instance ID.
                     session_id = await PluginHub._resolve_session_id(active_instance)
-                except Exception as exc:
+                except (ConnectionError, ValueError, KeyError, TimeoutError) as exc:
                     # If resolution fails, it means the Unity instance is not reachable via HTTP/WS.
                     # If we are in stdio mode, this might still be fine if the user is just setting state?
                     # But usually if PluginHub is configured, we expect it to work.
                     # Let's LOG the error but NOT clear the instance immediately to avoid flickering,
                     # or at least debug why it's failing.
                     logger.debug(
+                        "PluginHub session resolution failed for %s: %s; leaving active_instance unchanged",
+                        active_instance,
+                        exc,
+                        exc_info=True,
+                    )
+                except Exception as exc:
+                    # Re-raise unexpected system exceptions to avoid swallowing critical failures
+                    if isinstance(exc, (SystemExit, KeyboardInterrupt)):
+                        raise
+                    logger.error(
                         "PluginHub session resolution failed for %s: %s; leaving active_instance unchanged",
                         active_instance,
                         exc,
