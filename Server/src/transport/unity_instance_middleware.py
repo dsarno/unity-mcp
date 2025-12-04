@@ -16,14 +16,17 @@ logger = logging.getLogger("mcp-for-unity-server")
 # Store a global reference to the middleware instance so tools can interact
 # with it to set or clear the active unity instance.
 _unity_instance_middleware = None
+_middleware_lock = RLock()
 
 
 def get_unity_instance_middleware() -> 'UnityInstanceMiddleware':
     """Get the global Unity instance middleware."""
     global _unity_instance_middleware
     if _unity_instance_middleware is None:
-        # Auto-initialize if not set (lazy singleton) to handle import order or test cases
-        _unity_instance_middleware = UnityInstanceMiddleware()
+        with _middleware_lock:
+            if _unity_instance_middleware is None:
+                # Auto-initialize if not set (lazy singleton) to handle import order or test cases
+                _unity_instance_middleware = UnityInstanceMiddleware()
         
     return _unity_instance_middleware
 
