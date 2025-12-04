@@ -306,32 +306,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     {
                         try
                         {
-<<<<<<< HEAD
-                            listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
-#if !UNITY_EDITOR_OSX
-                            listener.Server.SetSocketOption(
-                                SocketOptionLevel.Socket,
-                                SocketOptionName.ReuseAddress,
-                                true
-                            );
-#endif
-#if UNITY_EDITOR_WIN
-                            try
-                            {
-                                listener.ExclusiveAddressUse = false;
-                            }
-                            catch { }
-#endif
-                            try
-                            {
-                                listener.Server.LingerState = new LingerOption(true, 0);
-                            }
-                            catch (Exception)
-                            {
-                            }
-=======
                             listener = CreateConfiguredListener(currentUnityPort);
->>>>>>> b693edcaa9cc51bfec59d00595db0e96c49129eb
                             listener.Start();
                             break;
                         }
@@ -382,32 +357,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                                 }
                             }
 
-<<<<<<< HEAD
-                            listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
-#if !UNITY_EDITOR_OSX
-                            listener.Server.SetSocketOption(
-                                SocketOptionLevel.Socket,
-                                SocketOptionName.ReuseAddress,
-                                true
-                            );
-#endif
-#if UNITY_EDITOR_WIN
-                            try
-                            {
-                                listener.ExclusiveAddressUse = false;
-                            }
-                            catch { }
-#endif
-                            try
-                            {
-                                listener.Server.LingerState = new LingerOption(true, 0);
-                            }
-                            catch (Exception)
-                            {
-                            }
-=======
                             listener = CreateConfiguredListener(currentUnityPort);
->>>>>>> b693edcaa9cc51bfec59d00595db0e96c49129eb
                             listener.Start();
                             break;
                         }
