@@ -25,7 +25,35 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
 
             try
             {
-                // Try running python directly first
+                // 1. Check explicit common Homebrew/system paths first to avoid PATH ambiguity
+                // This prioritizes Homebrew versions (often newer) over system versions
+                var candidatePaths = new[]
+                {
+                    "/opt/homebrew/bin/python3",
+                    "/usr/local/bin/python3",
+                    "/opt/homebrew/bin/python3.13",
+                    "/opt/homebrew/bin/python3.12",
+                    "/opt/homebrew/bin/python3.11",
+                    "/opt/homebrew/bin/python3.10",
+                    "/usr/local/bin/python3.13",
+                    "/usr/local/bin/python3.12",
+                    "/usr/local/bin/python3.11",
+                    "/usr/local/bin/python3.10"
+                };
+
+                foreach (var path in candidatePaths)
+                {
+                    if (File.Exists(path) && TryValidatePython(path, out string v, out string p))
+                    {
+                        status.IsAvailable = true;
+                        status.Version = v;
+                        status.Path = p;
+                        status.Details = $"Found Python {v} at {p}";
+                        return status;
+                    }
+                }
+
+                // 2. Try running python directly from PATH (fallback)
                 if (TryValidatePython("python3", out string version, out string fullPath) ||
                     TryValidatePython("python", out version, out fullPath))
                 {
@@ -36,7 +64,7 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
                     return status;
                 }
 
-                // Fallback: try 'which' command
+                // 3. Fallback: try 'which' command
                 if (TryFindInPath("python3", out string pathResult) ||
                     TryFindInPath("python", out pathResult))
                 {
@@ -50,8 +78,8 @@ namespace MCPForUnity.Editor.Dependencies.PlatformDetectors
                     }
                 }
 
-                status.ErrorMessage = "Python not found in PATH";
-                status.Details = "Install Python 3.10+ and ensure it's added to PATH.";
+                status.ErrorMessage = "Python not found in PATH or standard locations";
+                status.Details = "Install Python 3.10+ via Homebrew ('brew install python3') and ensure it's in your PATH.";
             }
             catch (Exception ex)
             {
