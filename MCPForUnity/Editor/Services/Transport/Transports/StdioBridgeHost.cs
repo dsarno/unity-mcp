@@ -307,11 +307,13 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                         try
                         {
                             listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
+#if !UNITY_EDITOR_OSX
                             listener.Server.SetSocketOption(
                                 SocketOptionLevel.Socket,
                                 SocketOptionName.ReuseAddress,
                                 true
                             );
+#endif
 #if UNITY_EDITOR_WIN
                             try
                             {
@@ -355,7 +357,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                             }
                             catch { }
 
-                            currentUnityPort = PortManager.GetPortWithFallback();
+                            currentUnityPort = PortManager.DiscoverNewPort();
 
                             if (IsDebugEnabled())
                             {
@@ -370,11 +372,13 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                             }
 
                             listener = new TcpListener(IPAddress.Loopback, currentUnityPort);
+#if !UNITY_EDITOR_OSX
                             listener.Server.SetSocketOption(
                                 SocketOptionLevel.Socket,
                                 SocketOptionName.ReuseAddress,
                                 true
                             );
+#endif
 #if UNITY_EDITOR_WIN
                             try
                             {
