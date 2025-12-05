@@ -1,0 +1,293 @@
+using System;
+using System.IO;
+using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
+using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
+using MCPForUnity.Editor.Tools;
+using MCPForUnity.Editor.Helpers;
+
+namespace MCPForUnityTests.Editor.Tools
+{
+    public class ManageMaterialTests
+    {
+        private const string TempRoot = "Assets/Temp/ManageMaterialTests";
+        private string _matPath;
+
+        [SetUp]
+        public void SetUp()
+        {
+            if (!AssetDatabase.IsValidFolder("Assets/Temp"))
+            {
+                AssetDatabase.CreateFolder("Assets", "Temp");
+            }
+            if (!AssetDatabase.IsValidFolder(TempRoot))
+            {
+                AssetDatabase.CreateFolder("Assets/Temp", "ManageMaterialTests");
+            }
+
+            string guid = Guid.NewGuid().ToString("N");
+            _matPath = $"{TempRoot}/TestMat_{guid}.mat";
+            
+            // Create a basic material
+            var material = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
+            AssetDatabase.CreateAsset(material, _matPath);
+            AssetDatabase.SaveAssets();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (AssetDatabase.IsValidFolder(TempRoot))
+            {
+                AssetDatabase.DeleteAsset(TempRoot);
+            }
+            
+            // Clean up parent Temp folder if it's empty
+            if (AssetDatabase.IsValidFolder("Assets/Temp"))
+            {
+                var remainingDirs = Directory.GetDirectories("Assets/Temp");
+                var remainingFiles = Directory.GetFiles("Assets/Temp");
+                if (remainingDirs.Length == 0 && remainingFiles.Length == 0)
+                {
+                    AssetDatabase.DeleteAsset("Assets/Temp");
+                }
+            }
+        }
+
+        private static JObject ToJObject(object result)
+        {
+            return result as JObject ?? JObject.FromObject(result);
+        }
+
+        [Test]
+        public void CreateMaterial_NormalizesPath()
+        {
+            // Arrange
+            string shortPath = "Temp/ManageMaterialTests/ShortPathMat"; // No Assets/, No .mat
+            string expectedPath = "Assets/" + shortPath + ".mat";
+            
+            var paramsObj = new JObject
+            {
+                ["action"] = "create",
+                ["materialPath"] = shortPath,
+                ["shader"] = "Standard"
+            };
+
+            // Act
+            var result = ToJObject(ManageMaterial.HandleCommand(paramsObj));
+
+            // Assert
+            Assert.AreEqual("success", result.Value<string>("status"), result.ToString());
+            Assert.IsTrue(File.Exists(expectedPath), $"File should exist at {expectedPath}");
+            Assert.IsNotNull(AssetDatabase.LoadAssetAtPath<Material>(expectedPath));
+        }
+
+        [Test]
+        public void AssignMaterial_HandlesStringSlot()
+        {
+            // Arrange
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "StringSlotTest";
+            
+            try
+            {
+                var paramsObj = new JObject
+                {
+                    ["action"] = "assign_material_to_renderer",
+                    ["target"] = "StringSlotTest",
+                    ["searchMethod"] = "by_name",
+                    ["materialPath"] = _matPath,
+                    ["slot"] = "0" // String instead of int
+                };
+
+                // Act
+                var result = ToJObject(ManageMaterial.HandleCommand(paramsObj));
+
+                // Assert
+                Assert.AreEqual("success", result.Value<string>("status"), result.ToString());
+                
+                var renderer = go.GetComponent<Renderer>();
+                var matName = Path.GetFileNameWithoutExtension(_matPath);
+                Assert.AreEqual(matName, renderer.sharedMaterial.name);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void SetMaterialShaderProperty_SetsColor()
+        {
+            // Arrange
+            var color = new Color(1f, 1f, 0f, 1f); // Yellow
+            var paramsObj = new JObject
+            {
+                ["action"] = "set_material_shader_property",
+                ["materialPath"] = _matPath,
+                ["property"] = "_BaseColor", // URP
+                ["value"] = new JArray(color.r, color.g, color.b, color.a)
+            };
+            
+            // Check if using Standard shader (fallback)
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(_matPath);
+            if (mat.shader.name == "Standard")
+            {
+                paramsObj["property"] = "_Color";
+            }
+
+            // Act
+            var result = ToJObject(ManageMaterial.HandleCommand(paramsObj));
+
+            // Assert
+            Assert.AreEqual("success", result.Value<string>("status"), result.ToString());
+            
+            mat = AssetDatabase.LoadAssetAtPath<Material>(_matPath); // Reload
+            var prop = mat.shader.name == "Standard" ? "_Color" : "_BaseColor";
+            if (mat.HasProperty(prop))
+            {
+                Assert.AreEqual(color, mat.GetColor(prop));
+            }
+        }
+
+        [Test]
+        public void SetMaterialColor_SetsColorWithFallback()
+        {
+            // Arrange
+            var color = new Color(0f, 1f, 0f, 1f); // Green
+            var paramsObj = new JObject
+            {
+                ["action"] = "set_material_color",
+                ["materialPath"] = _matPath,
+                ["color"] = new JArray(color.r, color.g, color.b, color.a)
+            };
+
+            // Act
+            var result = ToJObject(ManageMaterial.HandleCommand(paramsObj));
+
+            // Assert
+            Assert.AreEqual("success", result.Value<string>("status"), result.ToString());
+            
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(_matPath);
+            var prop = mat.HasProperty("_BaseColor") ? "_BaseColor" : "_Color";
+            if (mat.HasProperty(prop))
+            {
+                Assert.AreEqual(color, mat.GetColor(prop));
+            }
+        }
+
+        [Test]
+        public void AssignMaterialToRenderer_Works()
+        {
+            // Arrange
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "AssignTestCube";
+            
+            try
+            {
+                var paramsObj = new JObject
+                {
+                    ["action"] = "assign_material_to_renderer",
+                    ["target"] = "AssignTestCube",
+                    ["searchMethod"] = "by_name",
+                    ["materialPath"] = _matPath,
+                    ["slot"] = 0
+                };
+
+                // Act
+                var result = ToJObject(ManageMaterial.HandleCommand(paramsObj));
+
+                // Assert
+                Assert.AreEqual("success", result.Value<string>("status"), result.ToString());
+                
+                var renderer = go.GetComponent<Renderer>();
+                Assert.IsNotNull(renderer.sharedMaterial);
+                // Compare names because objects might be different instances (loaded vs scene)
+                var matName = Path.GetFileNameWithoutExtension(_matPath);
+                Assert.AreEqual(matName, renderer.sharedMaterial.name);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+        
+        [Test]
+        public void SetRendererColor_PropertyBlock_Works()
+        {
+             // Arrange
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "BlockTestCube";
+            
+            // Assign the material first so we have something valid
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(_matPath);
+            go.GetComponent<Renderer>().sharedMaterial = mat;
+
+            try
+            {
+                var color = new Color(1f, 0f, 0f, 1f); // Red
+                var paramsObj = new JObject
+                {
+                    ["action"] = "set_renderer_color",
+                    ["target"] = "BlockTestCube",
+                    ["searchMethod"] = "by_name",
+                    ["color"] = new JArray(color.r, color.g, color.b, color.a),
+                    ["mode"] = "property_block"
+                };
+
+                // Act
+                var result = ToJObject(ManageMaterial.HandleCommand(paramsObj));
+
+                // Assert
+                Assert.AreEqual("success", result.Value<string>("status"), result.ToString());
+                
+                var renderer = go.GetComponent<Renderer>();
+                var block = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(block, 0);
+                
+                // Check both potential properties to be safe against shader variants
+                var col1 = block.GetColor("_BaseColor");
+                var col2 = block.GetColor("_Color");
+                
+                bool match = (col1 == color) || (col2 == color);
+                Assert.IsTrue(match, $"Expected color {color} on _BaseColor ({col1}) or _Color ({col2})");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void GetMaterialInfo_ReturnsProperties()
+        {
+             // Arrange
+            var paramsObj = new JObject
+            {
+                ["action"] = "get_material_info",
+                ["materialPath"] = _matPath
+            };
+
+            // Act
+            var result = ToJObject(ManageMaterial.HandleCommand(paramsObj));
+
+            // Assert
+            Assert.AreEqual("success", result.Value<string>("status"), result.ToString());
+            Assert.IsNotNull(result["properties"]);
+            Assert.IsInstanceOf<JArray>(result["properties"]);
+            var props = result["properties"] as JArray;
+            Assert.IsTrue(props.Count > 0);
+            
+            // Check for standard properties
+            bool foundColor = false;
+            foreach(var p in props)
+            {
+                var name = p["name"]?.ToString();
+                if (name == "_Color" || name == "_BaseColor") foundColor = true;
+            }
+            Assert.IsTrue(foundColor, "Should find color property");
+        }
+    }
+}
