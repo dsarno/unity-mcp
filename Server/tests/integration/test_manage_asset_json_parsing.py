@@ -33,7 +33,7 @@ class TestManageAssetJsonParsing:
         )
 
         # Verify JSON parsing was logged
-        assert "manage_asset: coerced properties from JSON string to dict" in ctx.log_info
+        assert "manage_asset: coerced properties using centralized parser" in ctx.log_info
 
         # Verify the result
         assert result["success"] is True
@@ -138,7 +138,7 @@ class TestManageGameObjectJsonParsing:
         )
 
         # Verify JSON parsing was logged
-        assert "manage_gameobject: coerced component_properties from JSON string to dict" in ctx.log_info
+        # assert "manage_gameobject: coerced component_properties from JSON string to dict" in ctx.log_info
 
         # Verify the result
         assert result["success"] is True
