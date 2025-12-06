@@ -54,10 +54,21 @@ namespace MCPForUnity.Editor.Tools
 
             // Parameters used by various actions
             JToken targetToken = @params["target"]; // Can be string (name/path) or int (instanceID)
-            string searchMethod = @params["searchMethod"]?.ToString().ToLower();
-
-            // Get common parameters (consolidated)
             string name = @params["name"]?.ToString();
+
+            // --- Usability Improvement: Alias 'name' to 'target' for modification actions ---
+            // If 'target' is missing but 'name' is provided, and we aren't creating a new object,
+            // assume the user meant "find object by name".
+            if (targetToken == null && !string.IsNullOrEmpty(name) && action != "create")
+            {
+                targetToken = name;
+                // We don't update @params["target"] because we use targetToken locally mostly,
+                // but some downstream methods might parse @params directly. Let's update @params too for safety.
+                @params["target"] = name;
+            }
+            // -------------------------------------------------------------------------------
+
+            string searchMethod = @params["searchMethod"]?.ToString().ToLower();
             string tag = @params["tag"]?.ToString();
             string layer = @params["layer"]?.ToString();
             JToken parentToken = @params["parent"];
