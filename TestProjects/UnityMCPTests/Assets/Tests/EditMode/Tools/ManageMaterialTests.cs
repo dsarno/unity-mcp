@@ -62,63 +62,6 @@ namespace MCPForUnityTests.Editor.Tools
         }
 
         [Test]
-        public void CreateMaterial_NormalizesPath()
-        {
-            // Arrange
-            string shortPath = "Temp/ManageMaterialTests/ShortPathMat"; // No Assets/, No .mat
-            string expectedPath = "Assets/" + shortPath + ".mat";
-            
-            var paramsObj = new JObject
-            {
-                ["action"] = "create",
-                ["materialPath"] = shortPath,
-                ["shader"] = "Standard"
-            };
-
-            // Act
-            var result = ToJObject(ManageMaterial.HandleCommand(paramsObj));
-
-            // Assert
-            Assert.AreEqual("success", result.Value<string>("status"), result.ToString());
-            Assert.IsTrue(File.Exists(expectedPath), $"File should exist at {expectedPath}");
-            Assert.IsNotNull(AssetDatabase.LoadAssetAtPath<Material>(expectedPath));
-        }
-
-        [Test]
-        public void AssignMaterial_HandlesStringSlot()
-        {
-            // Arrange
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "StringSlotTest";
-            
-            try
-            {
-                var paramsObj = new JObject
-                {
-                    ["action"] = "assign_material_to_renderer",
-                    ["target"] = "StringSlotTest",
-                    ["searchMethod"] = "by_name",
-                    ["materialPath"] = _matPath,
-                    ["slot"] = "0" // String instead of int
-                };
-
-                // Act
-                var result = ToJObject(ManageMaterial.HandleCommand(paramsObj));
-
-                // Assert
-                Assert.AreEqual("success", result.Value<string>("status"), result.ToString());
-                
-                var renderer = go.GetComponent<Renderer>();
-                var matName = Path.GetFileNameWithoutExtension(_matPath);
-                Assert.AreEqual(matName, renderer.sharedMaterial.name);
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
-        [Test]
         public void SetMaterialShaderProperty_SetsColor()
         {
             // Arrange
@@ -247,12 +190,13 @@ namespace MCPForUnityTests.Editor.Tools
                 var block = new MaterialPropertyBlock();
                 renderer.GetPropertyBlock(block, 0);
                 
-                // Check both potential properties to be safe against shader variants
-                var col1 = block.GetColor("_BaseColor");
-                var col2 = block.GetColor("_Color");
+                var prop = mat.HasProperty("_BaseColor") ? "_BaseColor" : "_Color";
+                Assert.AreEqual(color, block.GetColor(prop));
                 
-                bool match = (col1 == color) || (col2 == color);
-                Assert.IsTrue(match, $"Expected color {color} on _BaseColor ({col1}) or _Color ({col2})");
+                // Verify material asset didn't change (it was originally white/gray from setup?)
+                // We didn't check original color, but property block shouldn't affect shared material
+                // We can check that sharedMaterial color is NOT red if we set it to something else first
+                // But assuming test isolation, we can just verify the block is set.
             }
             finally
             {

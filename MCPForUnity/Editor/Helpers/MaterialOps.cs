@@ -1,13 +1,200 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 using UnityEditor;
+using MCPForUnity.Editor.Tools; // For AssetPathUtility if needed? No, it uses AssetDatabase directly usually.
 
 namespace MCPForUnity.Editor.Helpers
 {
     public static class MaterialOps
     {
+        /// <summary>
+        /// Applies a set of properties (JObject) to a material, handling aliases and structured formats.
+        /// </summary>
+        public static bool ApplyProperties(Material mat, JObject properties, JsonSerializer serializer)
+        {
+            if (mat == null || properties == null)
+                return false;
+            bool modified = false;
+
+            // --- Structured / Legacy Format Handling ---
+            // Example: Set shader
+            if (properties["shader"]?.Type == JTokenType.String)
+            {
+                string shaderRequest = properties["shader"].ToString();
+                // We don't have RenderPipelineUtility here easily unless we import it or duplicate logic.
+                // For now, let's assume shader might be set by caller or we use Shader.Find.
+                // Actually ManageAsset uses RenderPipelineUtility.ResolveShader.
+                // That class is internal. We might need to make it public or just use Shader.Find here.
+                // Let's skip shader setting here since CreateAsset handles it? 
+                // ManageAsset.ApplyMaterialProperties handled it.
+                // We should probably check if RenderPipelineUtility is accessible.
+                // It is in MCPForUnity.Editor.Helpers namespace (same as this).
+                Shader newShader = RenderPipelineUtility.ResolveShader(shaderRequest);
+                if (newShader != null && mat.shader != newShader)
+                {
+                    mat.shader = newShader;
+                    modified = true;
+                }
+            }
+
+            // Example: Set color property (structured)
+            if (properties["color"] is JObject colorProps)
+            {
+                string propName = colorProps["name"]?.ToString() ?? GetMainColorPropertyName(mat);
+                if (colorProps["value"] is JArray colArr && colArr.Count >= 3)
+                {
+                    try
+                    {
+                        Color newColor = ParseColor(colArr, serializer);
+                        if (mat.HasProperty(propName))
+                        {
+                            if (mat.GetColor(propName) != newColor)
+                            {
+                                mat.SetColor(propName, newColor);
+                                modified = true;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            else if (properties["color"] is JArray colorArr) // Structured shorthand
+            {
+                string propName = GetMainColorPropertyName(mat);
+                try
+                {
+                    Color newColor = ParseColor(colorArr, serializer);
+                    if (mat.HasProperty(propName) && mat.GetColor(propName) != newColor)
+                    {
+                        mat.SetColor(propName, newColor);
+                        modified = true;
+                    }
+                }
+                catch { }
+            }
+
+            // Example: Set float property (structured)
+            if (properties["float"] is JObject floatProps)
+            {
+                string propName = floatProps["name"]?.ToString();
+                if (!string.IsNullOrEmpty(propName) &&
+                   (floatProps["value"]?.Type == JTokenType.Float || floatProps["value"]?.Type == JTokenType.Integer))
+                {
+                    try
+                    {
+                        float newVal = floatProps["value"].ToObject<float>();
+                        if (mat.HasProperty(propName) && mat.GetFloat(propName) != newVal)
+                        {
+                            mat.SetFloat(propName, newVal);
+                            modified = true;
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            // Example: Set texture property (structured)
+            {
+                JObject texProps = null;
+                var direct = properties.Property("texture");
+                if (direct != null && direct.Value is JObject t0) texProps = t0;
+                if (texProps == null)
+                {
+                    var ci = properties.Properties().FirstOrDefault(
+                        p => string.Equals(p.Name, "texture", StringComparison.OrdinalIgnoreCase));
+                    if (ci != null && ci.Value is JObject t1) texProps = t1;
+                }
+                if (texProps != null)
+                {
+                    string rawName = (texProps["name"] ?? texProps["Name"])?.ToString();
+                    string texPath = (texProps["path"] ?? texProps["Path"])?.ToString();
+                    if (!string.IsNullOrEmpty(texPath))
+                    {
+                        var newTex = AssetDatabase.LoadAssetAtPath<Texture>(texPath); // Assuming path is sanitized or valid
+                        // Use ResolvePropertyName to handle aliases even for structured texture names
+                        string candidateName = string.IsNullOrEmpty(rawName) ? "_BaseMap" : rawName;
+                        string targetProp = ResolvePropertyName(mat, candidateName);
+                        
+                        if (!string.IsNullOrEmpty(targetProp) && mat.HasProperty(targetProp))
+                        {
+                            if (mat.GetTexture(targetProp) != newTex)
+                            {
+                                mat.SetTexture(targetProp, newTex);
+                                modified = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- Direct Property Assignment (Flexible) ---
+            var reservedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "shader", "color", "float", "texture" };
+
+            foreach (var prop in properties.Properties())
+            {
+                if (reservedKeys.Contains(prop.Name)) continue;
+                string shaderProp = ResolvePropertyName(mat, prop.Name);
+                JToken v = prop.Value;
+
+                if (TrySetShaderProperty(mat, shaderProp, v, serializer))
+                {
+                    modified = true;
+                }
+            }
+
+            return modified;
+        }
+
+        /// <summary>
+        /// Resolves common property aliases (e.g. "metallic" -> "_Metallic").
+        /// </summary>
+        public static string ResolvePropertyName(Material mat, string name)
+        {
+            if (mat == null || string.IsNullOrEmpty(name)) return name;
+            string[] candidates;
+            var lower = name.ToLowerInvariant();
+            switch (lower)
+            {
+                case "_color": candidates = new[] { "_Color", "_BaseColor" }; break;
+                case "_basecolor": candidates = new[] { "_BaseColor", "_Color" }; break;
+                case "_maintex": candidates = new[] { "_MainTex", "_BaseMap" }; break;
+                case "_basemap": candidates = new[] { "_BaseMap", "_MainTex" }; break;
+                case "_glossiness": candidates = new[] { "_Glossiness", "_Smoothness" }; break;
+                case "_smoothness": candidates = new[] { "_Smoothness", "_Glossiness" }; break;
+                // Friendly names → shader property names
+                case "metallic": candidates = new[] { "_Metallic" }; break;
+                case "smoothness": candidates = new[] { "_Smoothness", "_Glossiness" }; break;
+                case "albedo": candidates = new[] { "_BaseMap", "_MainTex" }; break;
+                default: candidates = new[] { name }; break; // keep original as-is
+            }
+            foreach (var candidate in candidates)
+            {
+                if (mat.HasProperty(candidate)) return candidate;
+            }
+            return name;
+        }
+
+        /// <summary>
+        /// Auto-detects the main color property name for a material's shader.
+        /// </summary>
+        public static string GetMainColorPropertyName(Material mat)
+        {
+            if (mat == null || mat.shader == null)
+                return "_Color";
+
+            string[] commonColorProps = { "_BaseColor", "_Color", "_MainColor", "_Tint", "_TintColor" };
+            foreach (var prop in commonColorProps)
+            {
+                if (mat.HasProperty(prop))
+                    return prop;
+            }
+            return "_Color";
+        }
+
         /// <summary>
         /// Tries to set a shader property on a material based on a JToken value.
         /// Handles Colors, Vectors, Floats, Ints, Booleans, and Textures.
@@ -17,7 +204,7 @@ namespace MCPForUnity.Editor.Helpers
             if (material == null || string.IsNullOrEmpty(propertyName) || value == null)
                 return false;
 
-            // Handle stringified JSON (e.g. "[1,0,0,1]" coming as a string)
+            // Handle stringified JSON
             if (value.Type == JTokenType.String)
             {
                 string s = value.ToString();
@@ -26,17 +213,15 @@ namespace MCPForUnity.Editor.Helpers
                     try
                     {
                         JToken parsed = JToken.Parse(s);
-                        // Recurse with the parsed token
                         return TrySetShaderProperty(material, propertyName, parsed, serializer);
                     }
-                    catch { /* Not valid JSON, treat as regular string */ }
+                    catch { }
                 }
             }
 
             // Use the serializer to convert the JToken value first
             if (value is JArray jArray)
             {
-                // Try converting to known types that SetColor/SetVector accept
                 if (jArray.Count == 4)
                 {
                     try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } catch { }
@@ -44,12 +229,7 @@ namespace MCPForUnity.Editor.Helpers
                 }
                 else if (jArray.Count == 3)
                 {
-                    try 
-                    { 
-                        material.SetColor(propertyName, ParseColor(value, serializer)); 
-                        return true; 
-                    } 
-                    catch { }
+                    try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } catch { }
                 }
                 else if (jArray.Count == 2)
                 {
@@ -66,9 +246,23 @@ namespace MCPForUnity.Editor.Helpers
             }
             else if (value.Type == JTokenType.String)
             {
-                // Try converting to Texture using the serializer/converter
                 try
                 {
+                    // Try loading as asset path first (most common case for strings in this context)
+                    string path = value.ToString();
+                    if (!string.IsNullOrEmpty(path) && path.Contains("/")) // Heuristic: paths usually have slashes
+                    {
+                         // We need to handle texture assignment here. 
+                         // Since we don't have easy access to AssetDatabase here directly without using UnityEditor namespace (which is imported),
+                         // we can try to load it.
+                         Texture tex = AssetDatabase.LoadAssetAtPath<Texture>(path); // Or AssetPathUtility.Sanitize?
+                         if (tex != null)
+                         {
+                             material.SetTexture(propertyName, tex);
+                             return true;
+                         }
+                    }
+
                     Texture texture = value.ToObject<Texture>(serializer);
                     if (texture != null)
                     {
@@ -79,7 +273,6 @@ namespace MCPForUnity.Editor.Helpers
                 catch { }
             }
             
-            // If we reached here, maybe it's a texture instruction object?
             if (value.Type == JTokenType.Object)
             {
                  try
@@ -105,7 +298,6 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         public static Color ParseColor(JToken token, JsonSerializer serializer)
         {
-            // Handle stringified JSON
             if (token.Type == JTokenType.String)
             {
                 string s = token.ToString();
@@ -119,7 +311,6 @@ namespace MCPForUnity.Editor.Helpers
                 }
             }
 
-            // Handle Array [r, g, b, a] or [r, g, b]
             if (token is JArray jArray)
             {
                 if (jArray.Count == 4)
@@ -142,7 +333,6 @@ namespace MCPForUnity.Editor.Helpers
                 }
             }
             
-            // Handle Object {r:..., g:..., b:..., a:...} via converter
             return token.ToObject<Color>(serializer);
         }
     }

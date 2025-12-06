@@ -100,7 +100,13 @@ async def read_console(
         # Strip stacktrace fields from returned lines if present
         try:
             data = resp.get("data")
-            if isinstance(data, list):
+            # Handle standard format: {"data": {"lines": [...]}}
+            if isinstance(data, dict) and "lines" in data and isinstance(data["lines"], list):
+                for line in data["lines"]:
+                    if isinstance(line, dict) and "stacktrace" in line:
+                        line.pop("stacktrace", None)
+            # Handle legacy/direct list format if any
+            elif isinstance(data, list):
                 for line in data:
                     if isinstance(line, dict) and "stacktrace" in line:
                         line.pop("stacktrace", None)

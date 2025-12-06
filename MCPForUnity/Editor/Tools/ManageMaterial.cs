@@ -101,6 +101,7 @@ namespace MCPForUnity.Editor.Tools
             }
             
             // 2. Fallback to standard logic via MaterialOps (handles Colors, Floats, Strings->Path)
+            property = MaterialOps.ResolvePropertyName(mat, property);
             bool success = MaterialOps.TrySetShaderProperty(mat, property, value, ManageGameObject.InputSerializer);
 
             if (success)
@@ -426,12 +427,7 @@ namespace MCPForUnity.Editor.Tools
             
             if (properties != null)
             {
-                foreach (var prop in properties)
-                {
-                    string propName = prop.Key;
-                    JToken propValue = prop.Value;
-                    MaterialOps.TrySetShaderProperty(material, propName, propValue, ManageGameObject.InputSerializer);
-                }
+                MaterialOps.ApplyProperties(material, properties, ManageGameObject.InputSerializer);
             }
             
             EditorUtility.SetDirty(material);
