@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 using UnityEditor;
-using MCPForUnity.Editor.Tools; // For AssetPathUtility if needed? No, it uses AssetDatabase directly usually.
+using MCPForUnity.Editor.Tools;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -20,11 +20,19 @@ namespace MCPForUnity.Editor.Helpers
                 return false;
             bool modified = false;
 
+            // Helper for case-insensitive lookup
+            JToken GetValue(string key)
+            {
+                return properties.Properties()
+                    .FirstOrDefault(p => string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase))?.Value;
+            }
+
             // --- Structured / Legacy Format Handling ---
             // Example: Set shader
-            if (properties["shader"]?.Type == JTokenType.String)
+            var shaderToken = GetValue("shader");
+            if (shaderToken?.Type == JTokenType.String)
             {
-                string shaderRequest = properties["shader"].ToString();
+                string shaderRequest = shaderToken.ToString();
                 // Set shader
                 Shader newShader = RenderPipelineUtility.ResolveShader(shaderRequest);
                 if (newShader != null && mat.shader != newShader)
@@ -35,7 +43,8 @@ namespace MCPForUnity.Editor.Helpers
             }
 
             // Example: Set color property (structured)
-            if (properties["color"] is JObject colorProps)
+            var colorToken = GetValue("color");
+            if (colorToken is JObject colorProps)
             {
                 string propName = colorProps["name"]?.ToString() ?? GetMainColorPropertyName(mat);
                 if (colorProps["value"] is JArray colArr && colArr.Count >= 3)
@@ -58,7 +67,7 @@ namespace MCPForUnity.Editor.Helpers
                     }
                 }
             }
-            else if (properties["color"] is JArray colorArr) // Structured shorthand
+            else if (colorToken is JArray colorArr) // Structured shorthand
             {
                 string propName = GetMainColorPropertyName(mat);
                 try
@@ -74,7 +83,8 @@ namespace MCPForUnity.Editor.Helpers
             }
 
             // Example: Set float property (structured)
-            if (properties["float"] is JObject floatProps)
+            var floatToken = GetValue("float");
+            if (floatToken is JObject floatProps)
             {
                 string propName = floatProps["name"]?.ToString();
                 if (!string.IsNullOrEmpty(propName) &&
@@ -95,16 +105,8 @@ namespace MCPForUnity.Editor.Helpers
 
             // Example: Set texture property (structured)
             {
-                JObject texProps = null;
-                var direct = properties.Property("texture");
-                if (direct != null && direct.Value is JObject t0) texProps = t0;
-                if (texProps == null)
-                {
-                    var ci = properties.Properties().FirstOrDefault(
-                        p => string.Equals(p.Name, "texture", StringComparison.OrdinalIgnoreCase));
-                    if (ci != null && ci.Value is JObject t1) texProps = t1;
-                }
-                if (texProps != null)
+                var texToken = GetValue("texture");
+                if (texToken is JObject texProps)
                 {
                     string rawName = (texProps["name"] ?? texProps["Name"])?.ToString();
                     string texPath = (texProps["path"] ?? texProps["Path"])?.ToString();
@@ -221,19 +223,25 @@ namespace MCPForUnity.Editor.Helpers
             {
                 if (jArray.Count == 4)
                 {
-                if (material.HasProperty(propertyName))
-                {
-                    try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } catch { }
-                    try { Vector4 vec = value.ToObject<Vector4>(serializer); material.SetVector(propertyName, vec); return true; } catch { }
-                }
+                    if (material.HasProperty(propertyName))
+                    {
+                        try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } catch { }
+                        try { Vector4 vec = value.ToObject<Vector4>(serializer); material.SetVector(propertyName, vec); return true; } catch { }
+                    }
                 }
                 else if (jArray.Count == 3)
                 {
-                    try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } catch { }
+                    if (material.HasProperty(propertyName))
+                    {
+                        try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } catch { }
+                    }
                 }
                 else if (jArray.Count == 2)
                 {
-                    try { Vector2 vec = value.ToObject<Vector2>(serializer); material.SetVector(propertyName, vec); return true; } catch { }
+                    if (material.HasProperty(propertyName))
+                    {
+                        try { Vector2 vec = value.ToObject<Vector2>(serializer); material.SetVector(propertyName, vec); return true; } catch { }
+                    }
                 }
             }
             else if (value.Type == JTokenType.Float || value.Type == JTokenType.Integer)
