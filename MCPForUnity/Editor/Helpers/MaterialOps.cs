@@ -110,7 +110,8 @@ namespace MCPForUnity.Editor.Helpers
                     string texPath = (texProps["path"] ?? texProps["Path"])?.ToString();
                     if (!string.IsNullOrEmpty(texPath))
                     {
-                        var newTex = AssetDatabase.LoadAssetAtPath<Texture>(texPath); // Assuming path is sanitized or valid
+                        var sanitizedPath = AssetPathUtility.SanitizeAssetPath(texPath);
+                        var newTex = AssetDatabase.LoadAssetAtPath<Texture>(sanitizedPath);
                         // Use ResolvePropertyName to handle aliases even for structured texture names
                         string candidateName = string.IsNullOrEmpty(rawName) ? "_BaseMap" : rawName;
                         string targetProp = ResolvePropertyName(mat, candidateName);
@@ -254,7 +255,8 @@ namespace MCPForUnity.Editor.Helpers
                          // We need to handle texture assignment here. 
                          // Since we don't have easy access to AssetDatabase here directly without using UnityEditor namespace (which is imported),
                          // we can try to load it.
-                         Texture tex = AssetDatabase.LoadAssetAtPath<Texture>(path); // Or AssetPathUtility.Sanitize?
+                         var sanitizedPath = AssetPathUtility.SanitizeAssetPath(path);
+                         Texture tex = AssetDatabase.LoadAssetAtPath<Texture>(sanitizedPath);
                          if (tex != null)
                          {
                              material.SetTexture(propertyName, tex);
