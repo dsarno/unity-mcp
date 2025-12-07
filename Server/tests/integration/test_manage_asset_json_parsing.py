@@ -138,7 +138,6 @@ class TestManageGameObjectJsonParsing:
         )
 
         # Verify JSON parsing was logged
-        # assert "manage_gameobject: coerced component_properties from JSON string to dict" in ctx.log_info
-
+        
         # Verify the result
         assert result["success"] is True

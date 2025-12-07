@@ -52,7 +52,7 @@ namespace MCPForUnityTests.Editor.Tools
                 AssetDatabase.DeleteAsset(TempRoot);
             }
             
-             // Clean up parent Temp folder if it's empty
+            // Clean up parent Temp folder if it's empty
             if (AssetDatabase.IsValidFolder("Assets/Temp"))
             {
                 var remainingDirs = Directory.GetDirectories("Assets/Temp");

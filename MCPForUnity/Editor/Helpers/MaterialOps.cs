@@ -25,14 +25,7 @@ namespace MCPForUnity.Editor.Helpers
             if (properties["shader"]?.Type == JTokenType.String)
             {
                 string shaderRequest = properties["shader"].ToString();
-                // We don't have RenderPipelineUtility here easily unless we import it or duplicate logic.
-                // For now, let's assume shader might be set by caller or we use Shader.Find.
-                // Actually ManageAsset uses RenderPipelineUtility.ResolveShader.
-                // That class is internal. We might need to make it public or just use Shader.Find here.
-                // Let's skip shader setting here since CreateAsset handles it? 
-                // ManageAsset.ApplyMaterialProperties handled it.
-                // We should probably check if RenderPipelineUtility is accessible.
-                // It is in MCPForUnity.Editor.Helpers namespace (same as this).
+                // Set shader
                 Shader newShader = RenderPipelineUtility.ResolveShader(shaderRequest);
                 if (newShader != null && mat.shader != newShader)
                 {
@@ -59,7 +52,10 @@ namespace MCPForUnity.Editor.Helpers
                             }
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[MaterialOps] Failed to parse color for property '{propName}': {ex.Message}");
+                    }
                 }
             }
             else if (properties["color"] is JArray colorArr) // Structured shorthand
@@ -224,8 +220,11 @@ namespace MCPForUnity.Editor.Helpers
             {
                 if (jArray.Count == 4)
                 {
+                if (material.HasProperty(propertyName))
+                {
                     try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } catch { }
                     try { Vector4 vec = value.ToObject<Vector4>(serializer); material.SetVector(propertyName, vec); return true; } catch { }
+                }
                 }
                 else if (jArray.Count == 3)
                 {
@@ -261,13 +260,6 @@ namespace MCPForUnity.Editor.Helpers
                              material.SetTexture(propertyName, tex);
                              return true;
                          }
-                    }
-
-                    Texture texture = value.ToObject<Texture>(serializer);
-                    if (texture != null)
-                    {
-                        material.SetTexture(propertyName, texture);
-                        return true;
                     }
                 }
                 catch { }

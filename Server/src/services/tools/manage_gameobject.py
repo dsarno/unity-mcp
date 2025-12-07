@@ -238,4 +238,4 @@ async def manage_gameobject(
         return response if isinstance(response, dict) else {"success": False, "message": str(response)}
 
     except Exception as e:
-        return {"success": False, "message": f"Python error managing GameObject: {str(e)}"}
+        return {"success": False, "message": f"Python error managing GameObject: {e!s}"}

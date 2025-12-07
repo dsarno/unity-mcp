@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
@@ -141,7 +140,9 @@ namespace MCPForUnityTests.Editor.Tools
             var result = ToJObject(ManageMaterial.HandleCommand(paramsObj));
             
             // We accept either success (ignored) or specific error, but not crash
-            Assert.AreNotEqual("internal_error", result.Value<string>("status")); 
+            // Assert.AreNotEqual("internal_error", result.Value<string>("status")); 
+            var status = result.Value<string>("status");
+            Assert.IsTrue(status == "success" || status == "error", $"Status should be success or error, got {status}"); 
         }
     }
 }

@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any, TypeVar
+from typing import Any
 
 _TRUTHY = {"true", "1", "yes", "on"}
 _FALSY = {"false", "0", "no", "off"}
-
-T = TypeVar("T")
 
 def coerce_bool(value: Any, default: bool | None = None) -> bool | None:
     """Attempt to coerce a loosely-typed value to a boolean."""

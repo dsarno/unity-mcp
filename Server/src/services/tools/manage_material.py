@@ -1,7 +1,6 @@
 """
 Defines the manage_material tool for interacting with Unity materials.
 """
-import asyncio
 import json
 from typing import Annotated, Any, Literal, Union
 
@@ -65,7 +64,7 @@ async def manage_material(
                 # Try parsing if it's a JSON number string
                 try:
                     slot = int(json.loads(slot))
-                except:
+                except (json.JSONDecodeError, ValueError, TypeError):
                     pass # Let it fail downstream or keep as string if that was intended (though C# expects int)
 
     # Prepare parameters for the C# handler
@@ -86,10 +85,7 @@ async def manage_material(
     # Remove None values
     params_dict = {k: v for k, v in params_dict.items() if v is not None}
 
-    # Get the current asyncio event loop
-    loop = asyncio.get_running_loop()
-
     # Use centralized async retry helper with instance routing
-    result = await send_with_unity_instance(async_send_command_with_retry, unity_instance, "manage_material", params_dict, loop=loop)
+    result = await send_with_unity_instance(async_send_command_with_retry, unity_instance, "manage_material", params_dict)
     
     return result if isinstance(result, dict) else {"success": False, "message": str(result)}

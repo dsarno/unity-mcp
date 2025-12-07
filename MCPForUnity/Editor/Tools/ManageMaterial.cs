@@ -309,6 +309,7 @@ namespace MCPForUnity.Editor.Tools
                 if (slot >= 0 && slot < renderer.materials.Length)
                 {
                      Material mat = renderer.materials[slot]; 
+                     // Note: Undo cannot fully revert material instantiation
                      Undo.RecordObject(mat, "Set Instance Material Color");
                      if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
                      else mat.SetColor("_Color", color);
@@ -364,7 +365,9 @@ namespace MCPForUnity.Editor.Tools
                             case ShaderUtil.ShaderPropertyType.TexEnv: currentValue = mat.GetTexture(name)?.name ?? "null"; break;
                         }
                     }
-                } catch {}
+                } catch (Exception ex) {
+                    currentValue = $"<error: {ex.Message}>";
+                }
                 
                 properties.Add(new {
                     name = name,
@@ -422,7 +425,12 @@ namespace MCPForUnity.Editor.Tools
 
             Material material = new Material(shader);
             
-            // CreateAsset overwrites if it exists
+            // Check for existing asset to avoid silent overwrite
+            if (AssetDatabase.LoadAssetAtPath<Material>(materialPath) != null)
+            {
+                return new { status = "error", message = $"Material already exists at {materialPath}" };
+            }
+            
             AssetDatabase.CreateAsset(material, materialPath);
             
             if (properties != null)
