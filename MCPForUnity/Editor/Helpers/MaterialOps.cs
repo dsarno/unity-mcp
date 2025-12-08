@@ -303,7 +303,7 @@ namespace MCPForUnity.Editor.Helpers
                          // we can try to load it.
                          var sanitizedPath = AssetPathUtility.SanitizeAssetPath(path);
                          Texture tex = AssetDatabase.LoadAssetAtPath<Texture>(sanitizedPath);
-                         if (tex != null)
+                         if (tex != null && material.HasProperty(propertyName))
                          {
                              material.SetTexture(propertyName, tex);
                              return true;
@@ -318,7 +318,7 @@ namespace MCPForUnity.Editor.Helpers
                  try
                 {
                     Texture texture = value.ToObject<Texture>(serializer);
-                    if (texture != null)
+                    if (texture != null && material.HasProperty(propertyName))
                     {
                         material.SetTexture(propertyName, texture);
                         return true;

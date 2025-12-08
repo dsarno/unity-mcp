@@ -46,6 +46,7 @@ MCP for Unity acts as a bridge, allowing AI assistants (like Claude, Cursor) to 
 * `manage_asset`: Performs asset operations (import, create, modify, delete, etc.).
 * `manage_editor`: Controls and queries the editor's state and settings.
 * `manage_gameobject`: Manages GameObjects: create, modify, delete, find, and component operations.
+* `manage_material`: Manages materials: create, set properties, colors, assign to renderers, and query material info.
 * `manage_prefabs`: Performs prefab operations (create, modify, delete, etc.).
 * `manage_scene`: Manages scenes (load, save, create, get hierarchy, etc.).
 * `manage_script`: Compatibility router for legacy script operations (create, read, delete). Prefer `apply_text_edits` or `script_apply_edits` for edits.
