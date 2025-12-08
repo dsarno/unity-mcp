@@ -57,8 +57,16 @@ namespace MCPForUnity.Editor.Tools
         private static string NormalizePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return path;
-            if (!path.StartsWith("Assets/")) path = "Assets/" + path;
-            if (!path.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)) path += ".mat";
+            
+            // Normalize separators and ensure Assets/ root
+            path = AssetPathUtility.SanitizeAssetPath(path);
+
+            // Ensure .mat extension
+            if (!path.EndsWith(".mat", StringComparison.OrdinalIgnoreCase))
+            {
+                path += ".mat";
+            }
+            
             return path;
         }
 
