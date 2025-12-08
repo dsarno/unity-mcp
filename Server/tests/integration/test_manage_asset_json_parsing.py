@@ -33,7 +33,10 @@ class TestManageAssetJsonParsing:
         )
 
         # Verify JSON parsing was logged
-        assert "manage_asset: coerced properties using centralized parser" in ctx.log_info
+        assert any(
+            "manage_asset: coerced properties using centralized parser" in msg
+            for msg in ctx.log_info
+        )
 
         # Verify the result
         assert result["success"] is True
@@ -141,3 +144,38 @@ class TestManageGameObjectJsonParsing:
         
         # Verify the result
         assert result["success"] is True
+        
+        # Verify that component_properties reached Unity as a dict
+        # We can't easily check 'captured_params' here without refactoring the test to capture args,
+        # but since we mocked the transport, we can trust the return value and rely on
+        # unit tests for parse_json_payload.
+        # However, to follow the feedback, let's verify implicit behavior or refactor.
+        # Since I cannot easily monkeypatch a capture variable here without changing the test structure significantly,
+        # I will rely on the fact that if it wasn't parsed, it would likely fail downstream or be passed as string.
+        # The feedback suggested: "captured_params = {} ... monkeypatch ... assert isinstance(captured_params...)"
+        # I'll implement that pattern.
+        
+    @pytest.mark.asyncio
+    async def test_component_properties_parsing_verification(self, monkeypatch):
+        """Test that component_properties are actually parsed to dict before sending."""
+        from services.tools.manage_gameobject import manage_gameobject
+        ctx = DummyContext()
+        
+        captured_params = {}
+        async def fake_send(cmd, params, **kwargs):
+            captured_params.update(params)
+            return {"success": True, "message": "GameObject created successfully"}
+            
+        monkeypatch.setattr(
+            "services.tools.manage_gameobject.async_send_command_with_retry",
+            fake_send,
+        )
+        
+        await manage_gameobject(
+            ctx=ctx,
+            action="create",
+            name="TestObject",
+            component_properties='{"MeshRenderer": {"material": "Assets/Materials/BlueMaterial.mat"}}'
+        )
+        
+        assert isinstance(captured_params.get("componentProperties"), dict)

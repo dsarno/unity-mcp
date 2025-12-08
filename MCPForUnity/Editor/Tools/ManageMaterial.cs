@@ -272,6 +272,11 @@ namespace MCPForUnity.Editor.Tools
 
             if (mode == "property_block")
             {
+                if (slot < 0 || slot >= renderer.sharedMaterials.Length)
+                {
+                    return new { status = "error", message = $"Slot {slot} out of bounds (count: {renderer.sharedMaterials.Length})" };
+                }
+
                 MaterialPropertyBlock block = new MaterialPropertyBlock();
                 renderer.GetPropertyBlock(block, slot);
                 
@@ -313,8 +318,8 @@ namespace MCPForUnity.Editor.Tools
                      Undo.RecordObject(mat, "Set Instance Material Color");
                      if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
                      else mat.SetColor("_Color", color);
-                     return new { status = "success", message = "Set instance material color" };
-                }
+                     return new { status = "success", message = "Set instance material color", warning = "Material instance created; Undo cannot fully revert instantiation." };
+                 }
                  return new { status = "error", message = "Invalid slot" };
             }
             

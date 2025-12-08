@@ -213,7 +213,7 @@ namespace MCPForUnity.Editor.Tools
 
                         if (propertiesForApply.HasValues)
                         {
-                            MaterialOps.ApplyProperties(mat, propertiesForApply, Newtonsoft.Json.JsonSerializer.CreateDefault());
+                            MaterialOps.ApplyProperties(mat, propertiesForApply, ManageGameObject.InputSerializer);
                         }
                     }
                     AssetDatabase.CreateAsset(mat, fullPath);
@@ -441,7 +441,7 @@ namespace MCPForUnity.Editor.Tools
                 {
                     // Apply properties directly to the material. If this modifies, it sets modified=true.
                     // Use |= in case the asset was already marked modified by previous logic (though unlikely here)
-                    modified |= MaterialOps.ApplyProperties(material, properties, Newtonsoft.Json.JsonSerializer.CreateDefault());
+                    modified |= MaterialOps.ApplyProperties(material, properties, ManageGameObject.InputSerializer);
                 }
                 // Example: Modifying a ScriptableObject
                 else if (asset is ScriptableObject so)

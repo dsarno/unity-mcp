@@ -29,7 +29,8 @@ def parse_json_payload(value: Any) -> Any:
     Attempt to parse a value that might be a JSON string into its native object.
     
     This is a tolerant parser used to handle cases where MCP clients or LLMs
-    serialize complex objects (lists, dicts) into strings.
+    serialize complex objects (lists, dicts) into strings. It also handles
+    scalar values like numbers, booleans, and null.
     
     Args:
         value: The input value (can be str, list, dict, etc.)

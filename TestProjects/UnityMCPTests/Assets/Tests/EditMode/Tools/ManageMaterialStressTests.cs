@@ -152,7 +152,7 @@ namespace MCPForUnityTests.Editor.Tools
         }
 
         [Test]
-        public void Integration_WithManageGameObject_AssignsMaterialAndModifies()
+        public void Integration_PureManageMaterial_AssignsMaterialAndModifies()
         {
              // This simulates a workflow where we create a GO, assign a mat, then tweak it.
              

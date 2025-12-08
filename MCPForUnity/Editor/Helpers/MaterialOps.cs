@@ -79,7 +79,10 @@ namespace MCPForUnity.Editor.Helpers
                         modified = true;
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[MaterialOps] Failed to parse color array: {ex.Message}");
+                }
             }
 
             // Example: Set float property (structured)
@@ -225,22 +228,27 @@ namespace MCPForUnity.Editor.Helpers
                 {
                     if (material.HasProperty(propertyName))
                     {
-                        try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } catch { }
-                        try { Vector4 vec = value.ToObject<Vector4>(serializer); material.SetVector(propertyName, vec); return true; } catch { }
+                        try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } 
+                        catch (Exception ex) { Debug.LogWarning($"[MaterialOps] SetColor failed: {ex.Message}"); }
+                        
+                        try { Vector4 vec = value.ToObject<Vector4>(serializer); material.SetVector(propertyName, vec); return true; } 
+                        catch (Exception ex) { Debug.LogWarning($"[MaterialOps] SetVector (Vec4) failed: {ex.Message}"); }
                     }
                 }
                 else if (jArray.Count == 3)
                 {
                     if (material.HasProperty(propertyName))
                     {
-                        try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } catch { }
+                        try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } 
+                        catch (Exception ex) { Debug.LogWarning($"[MaterialOps] SetColor (Vec3) failed: {ex.Message}"); }
                     }
                 }
                 else if (jArray.Count == 2)
                 {
                     if (material.HasProperty(propertyName))
                     {
-                        try { Vector2 vec = value.ToObject<Vector2>(serializer); material.SetVector(propertyName, vec); return true; } catch { }
+                        try { Vector2 vec = value.ToObject<Vector2>(serializer); material.SetVector(propertyName, vec); return true; } 
+                        catch (Exception ex) { Debug.LogWarning($"[MaterialOps] SetVector (Vec2) failed: {ex.Message}"); }
                     }
                 }
             }

@@ -1,4 +1,5 @@
 import json
+import math
 from typing import Annotated, Any, Literal, Union
 
 from fastmcp import Context
@@ -100,8 +101,6 @@ async def manage_gameobject(
         # First try to parse if it's a string
         val = parse_json_payload(value)
         
-        import math
-
         def _to_vec3(parts):
             try:
                 vec = [float(parts[0]), float(parts[1]), float(parts[2])]

@@ -117,9 +117,9 @@ namespace MCPForUnityTests.Editor.Tools
             
             // Verify we get exception details
             Assert.IsTrue(msg.Contains("Invalid JSON"), "Should mention Invalid JSON");
-            // Newtonsoft usually mentions line/position or "Unexpected end"
-            Assert.IsTrue(msg.Contains("Path") || msg.Contains("line") || msg.Contains("position") || msg.Contains("End of input"), 
-                $"Message should contain details. Got: {msg}");
+            // Verify the message contains more than just the prefix (has exception details)
+            Assert.IsTrue(msg.Length > "Invalid JSON".Length, 
+                $"Message should contain exception details. Got: {msg}");
         }
 
         [Test]

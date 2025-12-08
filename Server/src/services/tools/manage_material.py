@@ -58,14 +58,10 @@ async def manage_material(
     # Coerce slot to int if it's a string
     if slot is not None:
         if isinstance(slot, str):
-            if slot.isdigit():
+            try:
                 slot = int(slot)
-            else:
-                # Try parsing if it's a JSON number string
-                try:
-                    slot = int(json.loads(slot))
-                except (json.JSONDecodeError, ValueError, TypeError):
-                    pass # Let it fail downstream or keep as string if that was intended (though C# expects int)
+            except ValueError:
+                pass  # Let it fail downstream; C# expects int
 
     # Prepare parameters for the C# handler
     params_dict = {

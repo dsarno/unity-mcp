@@ -46,25 +46,12 @@ namespace MCPForUnityTests.Editor.Tools
             // Clean up parent Temp folder if it's empty
             if (AssetDatabase.IsValidFolder("Assets/Temp"))
             {
-                // Check if empty using AssetDatabase (sub-assets)
-                var guids = AssetDatabase.FindAssets("", new[] { "Assets/Temp" });
-                // FindAssets returns the folder itself too usually, or contents? 
-                // Actually Directory.GetFiles/GetDirectories is fine for checking emptiness of a folder on disk,
-                // but AssetDatabase.DeleteAsset("Assets/Temp") is safer if we know it's empty.
-                // The review suggested using AssetDatabase consistently.
-                // Let's check sub-folders via AssetDatabase?
-                // Actually, if we just want to remove if empty, we can try to delete and catch, or check existence of sub items.
-                // But let's stick to the reviewer's point: "using AssetDatabase APIs consistently would be more robust".
-                // We can't easily check "is empty" with AssetDatabase without listing assets.
-                // So I will stick to the logic but use AssetDatabase for deletion (which it already does).
-                // Wait, lines 50-51 use Directory.GetDirectories. 
-                // I will assume the reviewer wants us to avoid System.IO.Directory.
-                // I'll skip this change if it's too complex to do purely with AssetDatabase without a helper, 
-                // OR I can just try to delete it and let Unity handle it if it's not empty? No, Unity deletes recursively.
-                // So checking emptiness is important.
-                // I will just use Directory.GetFiles but with Application.dataPath relative path?
-                // The reviewer said "using AssetDatabase APIs consistently".
-                // I'll leave it for now or use `AssetDatabase.GetSubFolders`.
+                // Only delete if empty
+                var subFolders = AssetDatabase.GetSubFolders("Assets/Temp");
+                if (subFolders.Length == 0)
+                {
+                    AssetDatabase.DeleteAsset("Assets/Temp");
+                }
             }
         }
 
