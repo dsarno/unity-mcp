@@ -16,6 +16,8 @@ env:
 
 jobs:
   test-editmode:
+    # Guard: run only on the fork owner's repo
+    if: github.repository_owner == 'dsarno'
     name: Test in editmode (fork)
     runs-on: ubuntu-latest
     timeout-minutes: 90
