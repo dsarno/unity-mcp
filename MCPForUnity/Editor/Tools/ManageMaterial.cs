@@ -91,6 +91,9 @@ namespace MCPForUnity.Editor.Tools
             }
 
             Undo.RecordObject(mat, "Set Material Property");
+
+            // Normalize alias/casing once for all code paths
+            property = MaterialOps.ResolvePropertyName(mat, property);
             
             // 1. Try handling Texture instruction explicitly (ManageMaterial special feature)
             if (value.Type == JTokenType.Object)
@@ -99,7 +102,7 @@ namespace MCPForUnity.Editor.Tools
                  if (value is JObject obj && (obj.ContainsKey("find") || obj.ContainsKey("method")))
                  {
                      Texture tex = ManageGameObject.FindObjectByInstruction(obj, typeof(Texture)) as Texture;
-                     if (tex != null)
+                     if (tex != null && mat.HasProperty(property))
                      {
                          mat.SetTexture(property, tex);
                          EditorUtility.SetDirty(mat);
@@ -109,7 +112,6 @@ namespace MCPForUnity.Editor.Tools
             }
             
             // 2. Fallback to standard logic via MaterialOps (handles Colors, Floats, Strings->Path)
-            property = MaterialOps.ResolvePropertyName(mat, property);
             bool success = MaterialOps.TrySetShaderProperty(mat, property, value, ManageGameObject.InputSerializer);
 
             if (success)
@@ -438,7 +440,7 @@ namespace MCPForUnity.Editor.Tools
                  return new { status = "error", message = "Path must start with Assets/ (normalization failed)" };
             }
 
-            Shader shader = Shader.Find(shaderName);
+            Shader shader = RenderPipelineUtility.ResolveShader(shaderName);
             if (shader == null)
             {
                 return new { status = "error", message = $"Could not find shader: {shaderName}" };

@@ -125,7 +125,7 @@ class TestManageGameObjectJsonParsing:
 
         ctx = DummyContext()
 
-        async def fake_send(cmd, params, **kwargs):
+        async def fake_send(_cmd, params, **_kwargs):
             return {"success": True, "message": "GameObject created successfully"}
         monkeypatch.setattr(
             "services.tools.manage_gameobject.async_send_command_with_retry",
@@ -151,7 +151,7 @@ class TestManageGameObjectJsonParsing:
         ctx = DummyContext()
         
         captured_params = {}
-        async def fake_send(cmd, params, **kwargs):
+        async def fake_send(_cmd, params, **_kwargs):
             captured_params.update(params)
             return {"success": True, "message": "GameObject created successfully"}
             

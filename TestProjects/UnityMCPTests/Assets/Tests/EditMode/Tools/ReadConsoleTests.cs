@@ -20,6 +20,7 @@ namespace MCPForUnityTests.Editor.Tools
             
             // Verify content exists before clear
             var getBefore = ToJObject(ReadConsole.HandleCommand(new JObject { ["action"] = "get", ["count"] = 10 }));
+            Assert.IsTrue(getBefore.Value<bool>("success"), getBefore.ToString());
             var entriesBefore = getBefore["data"] as JArray;
             
             // Ideally we'd assert count > 0, but other tests/system logs might affect this.
@@ -35,6 +36,7 @@ namespace MCPForUnityTests.Editor.Tools
             
             // Verify clear effect
             var getAfter = ToJObject(ReadConsole.HandleCommand(new JObject { ["action"] = "get", ["count"] = 10 }));
+            Assert.IsTrue(getAfter.Value<bool>("success"), getAfter.ToString());
             var entriesAfter = getAfter["data"] as JArray;
             Assert.IsTrue(entriesAfter == null || entriesAfter.Count == 0, "Console should be empty after clear.");
         }
@@ -49,7 +51,7 @@ namespace MCPForUnityTests.Editor.Tools
             var paramsObj = new JObject
             {
                 ["action"] = "get",
-                ["count"] = 10 // Fetch enough to likely catch our message
+                ["count"] = 1000 // Fetch enough to likely catch our message
             };
 
             // Act

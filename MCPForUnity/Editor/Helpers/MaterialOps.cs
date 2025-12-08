@@ -270,6 +270,9 @@ namespace MCPForUnity.Editor.Helpers
             }
             else if (value.Type == JTokenType.Float || value.Type == JTokenType.Integer)
             {
+                if (!material.HasProperty(propertyName))
+                    return false;
+
                 try { material.SetFloat(propertyName, value.ToObject<float>(serializer)); return true; } 
                 catch (Exception ex)
                 {
@@ -278,6 +281,9 @@ namespace MCPForUnity.Editor.Helpers
             }
             else if (value.Type == JTokenType.Boolean)
             {
+                if (!material.HasProperty(propertyName))
+                    return false;
+
                 try { material.SetFloat(propertyName, value.ToObject<bool>(serializer) ? 1f : 0f); return true; } 
                 catch (Exception ex)
                 {
