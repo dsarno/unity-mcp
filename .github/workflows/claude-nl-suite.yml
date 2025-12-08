@@ -62,9 +62,6 @@ jobs:
           else
             echo "No MCP Python deps found (skipping)"
           fi
-          else
-            echo "No MCP Python deps found (skipping)"
-          fi
 
       # --- Licensing: allow both ULF and EBL when available ---
       - name: Decide license sources
