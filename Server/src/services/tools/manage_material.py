@@ -61,7 +61,10 @@ async def manage_material(
             try:
                 slot = int(slot)
             except ValueError:
-                pass  # Let it fail downstream; C# expects int
+                return {
+                    "success": False,
+                    "message": f"Invalid slot value: '{slot}' must be a valid integer"
+                }
 
     # Prepare parameters for the C# handler
     params_dict = {
@@ -82,6 +85,11 @@ async def manage_material(
     params_dict = {k: v for k, v in params_dict.items() if v is not None}
 
     # Use centralized async retry helper with instance routing
-    result = await send_with_unity_instance(async_send_command_with_retry, unity_instance, "manage_material", params_dict)
+    result = await send_with_unity_instance(
+        async_send_command_with_retry,
+        unity_instance,
+        "manage_material",
+        params_dict,
+    )
     
     return result if isinstance(result, dict) else {"success": False, "message": str(result)}

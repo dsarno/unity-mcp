@@ -9,7 +9,7 @@ using UnityEditor;
 namespace MCPForUnity.Editor.Tools
 {
     [McpForUnityTool("manage_material", AutoRegister = false)]
-    public class ManageMaterial
+    public static class ManageMaterial
     {
         public static object HandleCommand(JObject @params)
         {
@@ -280,7 +280,7 @@ namespace MCPForUnity.Editor.Tools
                 MaterialPropertyBlock block = new MaterialPropertyBlock();
                 renderer.GetPropertyBlock(block, slot);
                 
-                if (slot < renderer.sharedMaterials.Length && renderer.sharedMaterials[slot] != null)
+                if (renderer.sharedMaterials[slot] != null)
                 {
                     Material mat = renderer.sharedMaterials[slot];
                     if (mat.HasProperty("_BaseColor")) block.SetColor("_BaseColor", color);
@@ -301,6 +301,10 @@ namespace MCPForUnity.Editor.Tools
                 if (slot >= 0 && slot < renderer.sharedMaterials.Length)
                 {
                      Material mat = renderer.sharedMaterials[slot];
+                     if (mat == null)
+                     {
+                         return new { status = "error", message = $"No material in slot {slot}" };
+                     }
                      Undo.RecordObject(mat, "Set Material Color");
                      if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
                      else mat.SetColor("_Color", color);
@@ -314,6 +318,10 @@ namespace MCPForUnity.Editor.Tools
                 if (slot >= 0 && slot < renderer.materials.Length)
                 {
                      Material mat = renderer.materials[slot]; 
+                     if (mat == null)
+                     {
+                         return new { status = "error", message = $"No material in slot {slot}" };
+                     }
                      // Note: Undo cannot fully revert material instantiation
                      Undo.RecordObject(mat, "Set Instance Material Color");
                      if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);

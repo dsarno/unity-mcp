@@ -102,7 +102,10 @@ namespace MCPForUnity.Editor.Helpers
                             modified = true;
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[MaterialOps] Failed to set float property '{propName}': {ex.Message}");
+                    }
                 }
             }
 
@@ -229,10 +232,17 @@ namespace MCPForUnity.Editor.Helpers
                     if (material.HasProperty(propertyName))
                     {
                         try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } 
-                        catch (Exception ex) { Debug.LogWarning($"[MaterialOps] SetColor failed: {ex.Message}"); }
-                        
+                        catch (Exception ex) 
+                        { 
+                            // Log at Debug level since we'll try other conversions
+                            Debug.Log($"[MaterialOps] SetColor attempt for '{propertyName}' failed: {ex.Message}"); 
+                        }
+
                         try { Vector4 vec = value.ToObject<Vector4>(serializer); material.SetVector(propertyName, vec); return true; } 
-                        catch (Exception ex) { Debug.LogWarning($"[MaterialOps] SetVector (Vec4) failed: {ex.Message}"); }
+                        catch (Exception ex) 
+                        { 
+                            Debug.Log($"[MaterialOps] SetVector (Vec4) attempt for '{propertyName}' failed: {ex.Message}"); 
+                        }
                     }
                 }
                 else if (jArray.Count == 3)
@@ -240,7 +250,10 @@ namespace MCPForUnity.Editor.Helpers
                     if (material.HasProperty(propertyName))
                     {
                         try { material.SetColor(propertyName, ParseColor(value, serializer)); return true; } 
-                        catch (Exception ex) { Debug.LogWarning($"[MaterialOps] SetColor (Vec3) failed: {ex.Message}"); }
+                        catch (Exception ex) 
+                        { 
+                             Debug.Log($"[MaterialOps] SetColor (Vec3) attempt for '{propertyName}' failed: {ex.Message}"); 
+                        }
                     }
                 }
                 else if (jArray.Count == 2)
@@ -248,17 +261,28 @@ namespace MCPForUnity.Editor.Helpers
                     if (material.HasProperty(propertyName))
                     {
                         try { Vector2 vec = value.ToObject<Vector2>(serializer); material.SetVector(propertyName, vec); return true; } 
-                        catch (Exception ex) { Debug.LogWarning($"[MaterialOps] SetVector (Vec2) failed: {ex.Message}"); }
+                        catch (Exception ex) 
+                        { 
+                            Debug.Log($"[MaterialOps] SetVector (Vec2) attempt for '{propertyName}' failed: {ex.Message}"); 
+                        }
                     }
                 }
             }
             else if (value.Type == JTokenType.Float || value.Type == JTokenType.Integer)
             {
-                try { material.SetFloat(propertyName, value.ToObject<float>(serializer)); return true; } catch { }
+                try { material.SetFloat(propertyName, value.ToObject<float>(serializer)); return true; } 
+                catch (Exception ex)
+                {
+                     Debug.Log($"[MaterialOps] SetFloat attempt for '{propertyName}' failed: {ex.Message}");
+                }
             }
             else if (value.Type == JTokenType.Boolean)
             {
-                try { material.SetFloat(propertyName, value.ToObject<bool>(serializer) ? 1f : 0f); return true; } catch { }
+                try { material.SetFloat(propertyName, value.ToObject<bool>(serializer) ? 1f : 0f); return true; } 
+                catch (Exception ex)
+                {
+                     Debug.Log($"[MaterialOps] SetFloat (bool) attempt for '{propertyName}' failed: {ex.Message}");
+                }
             }
             else if (value.Type == JTokenType.String)
             {
@@ -341,9 +365,21 @@ namespace MCPForUnity.Editor.Helpers
                         1f
                     );
                 }
+                else
+                {
+                    throw new ArgumentException("Color array must have 3 or 4 elements.");
+                }
             }
             
-            return token.ToObject<Color>(serializer);
+            try
+            {
+                return token.ToObject<Color>(serializer);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[MaterialOps] Failed to parse color from token: {ex.Message}");
+                throw;
+            }
         }
     }
 }

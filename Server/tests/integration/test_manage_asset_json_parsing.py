@@ -120,7 +120,7 @@ class TestManageGameObjectJsonParsing:
 
     @pytest.mark.asyncio
     async def test_component_properties_json_string_parsing(self, monkeypatch):
-        """Test that JSON string component_properties are correctly parsed."""
+        """Test that JSON string component_properties result in successful operation."""
         from services.tools.manage_gameobject import manage_gameobject
 
         ctx = DummyContext()
@@ -140,20 +140,9 @@ class TestManageGameObjectJsonParsing:
             component_properties='{"MeshRenderer": {"material": "Assets/Materials/BlueMaterial.mat"}}'
         )
 
-        # Verify JSON parsing was logged
-        
         # Verify the result
         assert result["success"] is True
-        
-        # Verify that component_properties reached Unity as a dict
-        # We can't easily check 'captured_params' here without refactoring the test to capture args,
-        # but since we mocked the transport, we can trust the return value and rely on
-        # unit tests for parse_json_payload.
-        # However, to follow the feedback, let's verify implicit behavior or refactor.
-        # Since I cannot easily monkeypatch a capture variable here without changing the test structure significantly,
-        # I will rely on the fact that if it wasn't parsed, it would likely fail downstream or be passed as string.
-        # The feedback suggested: "captured_params = {} ... monkeypatch ... assert isinstance(captured_params...)"
-        # I'll implement that pattern.
+
         
     @pytest.mark.asyncio
     async def test_component_properties_parsing_verification(self, monkeypatch):
