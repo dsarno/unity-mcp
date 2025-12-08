@@ -361,9 +361,56 @@ namespace MCPForUnity.Editor.Tools
             }
             
             Shader shader = mat.shader;
-            int propertyCount = ShaderUtil.GetPropertyCount(shader);
             var properties = new List<object>();
-            
+
+#if UNITY_6000_0_OR_NEWER
+            int propertyCount = shader.GetPropertyCount();
+            for (int i = 0; i < propertyCount; i++)
+            {
+                string name = shader.GetPropertyName(i);
+                var type = shader.GetPropertyType(i);
+                string description = shader.GetPropertyDescription(i);
+
+                object currentValue = null;
+                try
+                {
+                    if (mat.HasProperty(name))
+                    {
+                        switch (type)
+                        {
+                            case UnityEngine.Rendering.ShaderPropertyType.Color:
+                                var c = mat.GetColor(name);
+                                currentValue = new { r = c.r, g = c.g, b = c.b, a = c.a };
+                                break;
+                            case UnityEngine.Rendering.ShaderPropertyType.Vector:
+                                var v = mat.GetVector(name);
+                                currentValue = new { x = v.x, y = v.y, z = v.z, w = v.w };
+                                break;
+                            case UnityEngine.Rendering.ShaderPropertyType.Float:
+                            case UnityEngine.Rendering.ShaderPropertyType.Range:
+                                currentValue = mat.GetFloat(name);
+                                break;
+                            case UnityEngine.Rendering.ShaderPropertyType.Texture:
+                                currentValue = mat.GetTexture(name)?.name ?? "null";
+                                break;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    currentValue = $"<error: {ex.Message}>";
+                }
+
+                properties.Add(new
+                {
+                    name = name,
+                    type = type.ToString(),
+                    description = description,
+                    value = currentValue
+                });
+            }
+#else
+            int propertyCount = ShaderUtil.GetPropertyCount(shader);
             for (int i = 0; i < propertyCount; i++)
             {
                 string name = ShaderUtil.GetPropertyName(shader, i);
@@ -399,6 +446,7 @@ namespace MCPForUnity.Editor.Tools
                     value = currentValue
                 });
             }
+#endif
 
             return new {
                 status = "success",

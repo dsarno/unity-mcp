@@ -310,7 +310,10 @@ namespace MCPForUnity.Editor.Helpers
                          }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    McpLog.Warn($"SetTexture (string path) for '{propertyName}' failed: {ex.Message}");
+                }
             }
             
             if (value.Type == JTokenType.Object)
@@ -324,7 +327,10 @@ namespace MCPForUnity.Editor.Helpers
                         return true;
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    McpLog.Warn($"SetTexture (object) for '{propertyName}' failed: {ex.Message}");
+                }
             }
 
             Debug.LogWarning(
