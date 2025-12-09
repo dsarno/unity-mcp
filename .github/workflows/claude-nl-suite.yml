@@ -208,7 +208,7 @@ jobs:
             -v "${{ github.workspace }}:/workspace" -w /workspace \
             -v "$HOME/.unity-mcp:/root/.unity-mcp" \
             -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d:ro" \
-            -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d:ro" \
+            -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d" \
             "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
               -stackTraceLogType Full \
               -projectPath /workspace/TestProjects/UnityMCPTests \
