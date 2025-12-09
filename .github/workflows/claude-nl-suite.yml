@@ -210,7 +210,7 @@ jobs:
             -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d" \
             -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d" \
             -v "$RUNNER_TEMP/unity-cache:/root/.cache/unity3d" \
-            "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
+            "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile /root/.config/unity3d/Editor.log \
               -stackTraceLogType Full \
               -projectPath /workspace/TestProjects/UnityMCPTests \
               "${manual_args[@]}" \
@@ -294,6 +294,8 @@ jobs:
           else
             echo "No unity_port in status file"
           fi
+          echo "--- Config dir listing ---"
+          docker exec unity-mcp ls -la /root/.config/unity3d || true
           echo "--- Editor log tail ---"
           docker exec unity-mcp tail -n 200 /root/.config/unity3d/Editor.log || true
           # Fail fast if no status file was written
