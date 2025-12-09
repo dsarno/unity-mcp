@@ -411,7 +411,7 @@ jobs:
           settings: .claude/settings.json
           allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
           disallowed_tools: "Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: claude-3-7-sonnet-20250219
+          model: claude-sonnet-4-5-20250929
           append_system_prompt: |
             You are running the NL pass only.
             - Emit exactly NL-0, NL-1, NL-2, NL-3, NL-4.
@@ -475,8 +475,8 @@ jobs:
           settings: .claude/settings.json
           allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
           disallowed_tools: "Bash,MultiEdit(/!(reports/**)),WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: claude-3-7-sonnet-20250219
-          fallback_model: claude-3-5-haiku-20241022
+          model: claude-sonnet-4-5-20250929
+          fallback_model: claude-haiku-4-5-20251001
           append_system_prompt: |
             You are running the T pass only.
             Output requirements:
