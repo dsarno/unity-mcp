@@ -198,7 +198,7 @@ jobs:
             manual_args=(-manualLicenseFile "/root/.local/share/unity3d/Unity/Unity_lic.ulf")
           fi
 
-          mkdir -p "$RUNNER_TEMP/unity-status"
+          mkdir -p "$HOME/.unity-mcp"
           docker rm -f unity-mcp >/dev/null 2>&1 || true
           docker run -d --name unity-mcp --network host \
             -e HOME=/root \
@@ -206,7 +206,7 @@ jobs:
             -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
             -e UNITY_MCP_BIND_HOST=127.0.0.1 \
             -v "${{ github.workspace }}:/workspace" -w /workspace \
-            -v "$RUNNER_TEMP/unity-status:/root/.unity-mcp" \
+            -v "$HOME/.unity-mcp:/root/.unity-mcp" \
             -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d:ro" \
             -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d:ro" \
             "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
@@ -236,7 +236,7 @@ jobs:
             logs="$(docker logs unity-mcp 2>&1 || true)"
 
             # 1) Primary: status JSON exposes TCP port
-            port="$(jq -r '.unity_port // empty' "$RUNNER_TEMP"/unity-status/unity-mcp-status-*.json 2>/dev/null | head -n1 || true)"
+            port="$(jq -r '.unity_port // empty' "$HOME"/.unity-mcp/unity-mcp-status-*.json 2>/dev/null | head -n1 || true)"
             if [[ -n "${port:-}" ]] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port"; then
               echo "Bridge ready on port $port"
               exit 0
@@ -287,7 +287,7 @@ jobs:
                   "PYTHONUNBUFFERED": "1",
                   "MCP_LOG_LEVEL": "debug",
                   "UNITY_PROJECT_ROOT": "$GITHUB_WORKSPACE/TestProjects/UnityMCPTests",
-                  "UNITY_MCP_STATUS_DIR": "$RUNNER_TEMP/unity-status",
+                  "UNITY_MCP_STATUS_DIR": "$HOME/.unity-mcp",
                   "UNITY_MCP_HOST": "127.0.0.1"
                 }
               }
@@ -343,11 +343,11 @@ jobs:
       - name: Verify Unity bridge status/port
         run: |
           set -euxo pipefail
-          ls -la "$RUNNER_TEMP/unity-status" || true
-          jq -r . "$RUNNER_TEMP"/unity-status/unity-mcp-status-*.json | sed -n '1,80p' || true
+          ls -la "$HOME/.unity-mcp" || true
+          jq -r . "$HOME"/.unity-mcp/unity-mcp-status-*.json | sed -n '1,80p' || true
 
           shopt -s nullglob
-          status_files=("$RUNNER_TEMP"/unity-status/unity-mcp-status-*.json)
+          status_files=("$HOME"/.unity-mcp/unity-mcp-status-*.json)
           if ((${#status_files[@]})); then
             port="$(grep -hEo '"unity_port"[[:space:]]*:[[:space:]]*[0-9]+' "${status_files[@]}" \
               | sed -E 's/.*: *([0-9]+).*/\1/' | head -n1 || true)"
