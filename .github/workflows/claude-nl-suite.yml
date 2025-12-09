@@ -432,7 +432,7 @@ jobs:
           settings: .claude/settings.json
           allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
           disallowed_tools: "Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: claude-haiku-4-5-20251001
+          model: claude-3-7-sonnet-20250219
           append_system_prompt: |
             You are running the T pass (A–J) only.
             Output requirements:
@@ -475,8 +475,8 @@ jobs:
           settings: .claude/settings.json
           allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
           disallowed_tools: "Bash,MultiEdit(/!(reports/**)),WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: cclaude-haiku-4-5-20251001
-          fallback_model: claude-haiku-4-5-20251001
+          model: claude-3-7-sonnet-20250219
+          fallback_model: claude-3-5-haiku-20241022
           append_system_prompt: |
             You are running the T pass only.
             Output requirements:
