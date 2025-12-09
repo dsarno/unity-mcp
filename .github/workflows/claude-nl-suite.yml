@@ -293,6 +293,13 @@ jobs:
           else
             echo "No unity_port in status file"
           fi
+          # Fail fast if no status file was written
+          shopt -s nullglob
+          status_files=("$HOME"/.unity-mcp/unity-mcp-status-*.json)
+          if ((${#status_files[@]} == 0)); then
+            echo "::error::No Unity MCP status file found; failing fast."
+            exit 1
+          fi
 
       # (moved) — return license after Unity is stopped
 
