@@ -318,7 +318,7 @@ jobs:
             "mcpServers": {
               "unity": {
                 "command": "uv",
-                "args": ["run","--active","--directory","Server","python","src/server.py"],
+                "args": ["run","--active","--directory","Server","mcp-for-unity","--transport","stdio"],
                 "transport": { "type": "stdio" },
                 "env": {
                   "PYTHONUNBUFFERED": "1",
@@ -405,7 +405,7 @@ jobs:
           export UNITY_PROJECT_ROOT="$GITHUB_WORKSPACE/TestProjects/UnityMCPTests"
           export UNITY_MCP_STATUS_DIR="$HOME/.unity-mcp"
           export UNITY_MCP_HOST=127.0.0.1
-          uv run --active --directory Server python src/server.py --help \
+          uv run --active --directory Server mcp-for-unity --help \
             > /tmp/mcp-preflight.log 2>&1 || { cat /tmp/mcp-preflight.log; exit 1; }
           cat /tmp/mcp-preflight.log
 
