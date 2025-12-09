@@ -269,6 +269,31 @@ jobs:
           docker logs unity-mcp --tail 200 | sed -E 's/((email|serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig'
           exit 1
 
+      # ---------- Debug Unity bridge status ----------
+      - name: Debug Unity bridge status
+        if: always()
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "--- Unity container state ---"
+          docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' unity-mcp || true
+          echo "--- Unity container logs (tail 200) ---"
+          docker logs unity-mcp --tail 200 | sed -E 's/((email|serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig' || true
+          echo "--- Container status dir ---"
+          docker exec unity-mcp ls -la /root/.unity-mcp || true
+          echo "--- Host status dir ---"
+          ls -la "$HOME/.unity-mcp" || true
+          echo "--- Host status file (first 120 lines) ---"
+          jq -r . "$HOME"/.unity-mcp/unity-mcp-status-*.json | sed -n '1,120p' || true
+          echo "--- Port probe from host ---"
+          port="$(jq -r '.unity_port // empty' "$HOME"/.unity-mcp/unity-mcp-status-*.json 2>/dev/null | head -n1 || true)"
+          echo "unity_port=${port:-}"
+          if [[ -n "${port:-}" ]]; then
+            timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port" && echo "TCP OK" || echo "TCP probe failed"
+          else
+            echo "No unity_port in status file"
+          fi
+
       # (moved) — return license after Unity is stopped
 
       # ---------- MCP client config ----------
