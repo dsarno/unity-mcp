@@ -397,7 +397,17 @@ jobs:
             timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port" && echo "TCP OK"
           fi
 
-      # (removed) Revert helper and baseline snapshot are no longer used
+      - name: Preflight MCP server
+        run: |
+          set -euxo pipefail
+          export PYTHONUNBUFFERED=1
+          export MCP_LOG_LEVEL=debug
+          export UNITY_PROJECT_ROOT="$GITHUB_WORKSPACE/TestProjects/UnityMCPTests"
+          export UNITY_MCP_STATUS_DIR="$HOME/.unity-mcp"
+          export UNITY_MCP_HOST=127.0.0.1
+          uv run --active --directory Server python server.py --help \
+            > /tmp/mcp-preflight.log 2>&1 || { cat /tmp/mcp-preflight.log; exit 1; }
+          cat /tmp/mcp-preflight.log
 
       # ---------- Run suite in two passes ----------
       - name: Run Claude NL pass
