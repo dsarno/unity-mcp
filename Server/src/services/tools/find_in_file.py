@@ -97,7 +97,7 @@ async def find_in_file(
 
     data = read_resp.get("data", {})
     contents = data.get("contents")
-    if not contents and data.get("contentsEncoded"):
+    if not contents and data.get("contentsEncoded") and data.get("encodedContents"):
         try:
             contents = base64.b64decode(data.get("encodedContents", "").encode(
                 "utf-8")).decode("utf-8", "replace")
@@ -105,7 +105,7 @@ async def find_in_file(
             contents = contents or ""
     
     if contents is None:
-         return {"success": False, "message": "Could not read file content."}
+        return {"success": False, "message": "Could not read file content."}
 
     # 2. Perform regex search
     flags = re.MULTILINE
