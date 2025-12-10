@@ -34,10 +34,13 @@ class PortDiscovery:
     @staticmethod
     def get_registry_path() -> Path:
         """Get the path to the port registry file"""
-        return Path.home() / ".unity-mcp" / PortDiscovery.REGISTRY_FILE
+        return PortDiscovery.get_registry_dir() / PortDiscovery.REGISTRY_FILE
 
     @staticmethod
     def get_registry_dir() -> Path:
+        env_dir = os.environ.get("UNITY_MCP_STATUS_DIR")
+        if env_dir:
+            return Path(env_dir)
         return Path.home() / ".unity-mcp"
 
     @staticmethod

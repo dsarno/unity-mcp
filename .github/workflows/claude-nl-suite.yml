@@ -660,8 +660,8 @@ jobs:
           settings: .claude/settings.json
           allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
           disallowed_tools: "Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: claude-sonnet-4-5-20250929
-          fallback_model: claude-haiku-4-5-20251001
+          model: claude-haiku-4-5-20251001
+          fallback_model: claude-sonnet-4-5-20250929
           append_system_prompt: |
             You are running the T pass (A–J) only.
             Output requirements:
