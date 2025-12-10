@@ -73,6 +73,7 @@ async def find_in_file(
     max_results: Annotated[int, "Cap results to avoid huge payloads"] = 200,
     ignore_case: Annotated[bool | str | None, "Case insensitive search"] = True,
 ) -> dict[str, Any]:
+    # project_root is currently unused but kept for interface consistency
     unity_instance = get_unity_instance_from_context(ctx)
     await ctx.info(
         f"Processing find_in_file: {uri} (unity_instance={unity_instance or 'default'})")
@@ -100,7 +101,7 @@ async def find_in_file(
         try:
             contents = base64.b64decode(data.get("encodedContents", "").encode(
                 "utf-8")).decode("utf-8", "replace")
-        except Exception:
+        except (ValueError, TypeError, base64.binascii.Error):
             contents = contents or ""
     
     if contents is None:
@@ -119,18 +120,6 @@ async def find_in_file(
         regex = re.compile(pattern, flags)
     except re.error as e:
         return {"success": False, "message": f"Invalid regex pattern: {e}"}
-
-    matches = []
-    lines = contents.splitlines()
-    
-    # Helper to map index to line number
-    def get_line_number(index, content_lines):
-        # This is a bit slow for large files if we do it for every match, 
-        # but robust. 
-        # Better: iterate matches and count newlines?
-        # Or just search line by line?
-        # Searching line by line is safer for line-based results, but regex might span lines.
-        pass
 
     # If the regex is not multiline specific (doesn't contain \n literal match logic), 
     # we could iterate lines. But users might use multiline regexes.

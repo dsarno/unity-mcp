@@ -816,10 +816,10 @@ jobs:
 
           def id_from_filename(p: Path):
             n = p.name
-            m = re.match(r'NL(\d+)_results\.xml$', n, re.I)
+            m = re.match(r'NL-?(\d+)_results\.xml$', n, re.I)
             if m:
               return f"NL-{int(m.group(1))}"
-            m = re.match(r'T([A-J])_results\.xml$', n, re.I)
+            m = re.match(r'T-?([A-J])_results\.xml$', n, re.I)
             if m:
               return f"T-{m.group(1).upper()}"
             return None
@@ -863,10 +863,10 @@ jobs:
           seen = set()
           def id_from_filename(p: Path):
             n = p.name
-            m = re.match(r'NL(\d+)_results\.xml$', n, re.I)
+            m = re.match(r'NL-?(\d+)_results\.xml$', n, re.I)
             if m:
               return f"NL-{int(m.group(1))}"
-            m = re.match(r'T([A-J])_results\.xml$', n, re.I)
+            m = re.match(r'T-?([A-J])_results\.xml$', n, re.I)
             if m:
               return f"T-{m.group(1).upper()}"
             return None
