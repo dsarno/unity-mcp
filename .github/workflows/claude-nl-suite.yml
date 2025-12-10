@@ -443,8 +443,8 @@ jobs:
               mkdir -p "$(dirname "$LOG")"
               echo "" >> "$LOG"
               echo "[ $(date -Iseconds) ] Starting unity MCP server" >> "$LOG"
-              exec >> "$LOG" 2>&1
-              exec {uv_cmd} "$@"
+              # Redirect stderr to log, keep stdout for MCP communication
+              exec {uv_cmd} "$@" 2>> "$LOG"
               """)
           runner_script.write_text(script)
           runner_script.chmod(0o755)
