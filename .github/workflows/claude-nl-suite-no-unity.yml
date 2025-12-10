@@ -1,0 +1,361 @@
+name: Claude NL/T No Unity (fake instance)
+
+on: [workflow_dispatch]
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  no-unity:
+    runs-on: ubuntu-24.04  # Ubuntu 24.04 required for Claude Code installer
+    timeout-minutes: 20
+    steps:
+      # ---------- Secrets check ----------
+      - name: Detect secrets (outputs)
+        id: detect
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -e
+          if [ -n "$ANTHROPIC_API_KEY" ]; then echo "anthropic_ok=true" >> "$GITHUB_OUTPUT"; else echo "anthropic_ok=false" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install MCP server deps
+        run: |
+          set -eux
+          uv venv
+          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          if [ -f Server/pyproject.toml ]; then
+            uv pip install -e Server
+          elif [ -f Server/requirements.txt ]; then
+            uv pip install -r Server/requirements.txt
+          else
+            echo "No MCP Python deps found" >&2
+            exit 1
+          fi
+
+      - name: Create fake Unity instance (status + listener)
+        env:
+          UNITY_PORT: 6400
+        run: |
+          set -euxo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/.unity-mcp"
+
+          HASH="$(python3 <<'PY'
+          import hashlib, os
+          path = os.path.join(os.environ['GITHUB_WORKSPACE'], 'TestProjects/UnityMCPTests/Assets')
+          print(hashlib.sha1(path.encode()).hexdigest()[:8])
+          PY
+          )"
+          export HASH
+          echo "UNITY_MCP_DEFAULT_INSTANCE=UnityMCPTests@${HASH}" >> "$GITHUB_ENV"
+
+          python3 <<'PY'
+          import json, os, time, pathlib
+          ws = os.environ["GITHUB_WORKSPACE"]
+          h = os.environ["HASH"]
+          port = int(os.environ.get("UNITY_PORT", "6400"))
+          status = {
+              "unity_port": port,
+              "reloading": False,
+              "reason": "ready",
+              "seq": 1,
+              "project_path": f"{ws}/TestProjects/UnityMCPTests/Assets",
+              "project_name": "UnityMCPTests",
+              "unity_version": "fake-0.0.0",
+              "last_heartbeat": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+              "instance_id": f"UnityMCPTests@{h}",
+          }
+          status_path = pathlib.Path(ws) / ".unity-mcp" / f"unity-mcp-status-{h}.json"
+          status_path.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
+          # Also mirror to home registry dir to satisfy any default lookups
+          home_dir = pathlib.Path.home() / ".unity-mcp"
+          home_dir.mkdir(parents=True, exist_ok=True)
+          home_path = home_dir / f"unity-mcp-status-{h}.json"
+          home_path.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
+          # Optional port registry (legacy helpers)
+          port_file = home_dir / f"unity-mcp-port-{h}.json"
+          port_file.write_text(json.dumps({"unity_port": port}) + "\n", encoding="utf-8")
+          PY
+
+          cat > /tmp/fake-unity-listener.py <<'PY'
+          import socket, struct, os
+          host = "0.0.0.0"
+          port = int(os.environ.get("UNITY_PORT", "6400"))
+          handshake = b"UnityMCP Ready\nFRAMING=1\n\n"
+          def recv_exact(conn, n):
+              data = b""
+              while len(data) < n:
+                  chunk = conn.recv(n - len(data))
+                  if not chunk:
+                      return None
+                  data += chunk
+              return data
+          s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+          s.bind((host, port))
+          s.listen(5)
+          while True:
+              conn, _ = s.accept()
+              try:
+                  conn.sendall(handshake)
+                  header = recv_exact(conn, 8)
+                  if not header:
+                      # Legacy probe path: expect plain "ping" and reply JSON pong
+                      data = conn.recv(512)
+                      if data == b"ping":
+                          conn.sendall(b'{"message":"pong"}')
+                      conn.close(); continue
+                  length = struct.unpack('>Q', header)[0]
+                  payload = recv_exact(conn, length) or b""
+                  if payload == b"ping":
+                      resp = b'{"message":"pong"}'
+                      conn.sendall(struct.pack('>Q', len(resp)) + resp)
+              finally:
+                  conn.close()
+          PY
+          nohup python3 /tmp/fake-unity-listener.py >/tmp/fake-unity-listener.log 2>&1 &
+
+          # Give listener a moment to bind before verification
+          sleep 1
+
+          # Self-check: handshake + framed ping/pong against fake listener
+          python3 <<'PY'
+          import socket, struct, time, os, sys
+          port = int(os.environ.get("UNITY_PORT", "6400"))
+          s = socket.create_connection(("127.0.0.1", port), timeout=2)
+          s.settimeout(2)
+          handshake = s.recv(512)
+          if b"FRAMING=1" not in handshake:
+              print("::error::Fake listener handshake missing FRAMING=1")
+              sys.exit(1)
+          payload = b"ping"
+          s.sendall(struct.pack(">Q", len(payload)) + payload)
+          header = s.recv(8)
+          if len(header) != 8:
+              print("::error::Fake listener missing pong header")
+              sys.exit(1)
+          length = struct.unpack(">Q", header)[0]
+          resp = s.recv(length)
+          if b"pong" not in resp:
+              print(f"::error::Fake listener pong mismatch: {resp!r}")
+              sys.exit(1)
+          s.close()
+          PY
+
+          chmod -R a+rwx "$GITHUB_WORKSPACE/.unity-mcp"
+
+      - name: Write MCP config (.claude/mcp.json)
+        run: |
+          set -eux
+          mkdir -p .claude
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          workspace = os.environ["GITHUB_WORKSPACE"]
+          default_inst = os.environ.get("UNITY_MCP_DEFAULT_INSTANCE", "").strip()
+
+          cfg = {
+              "mcpServers": {
+                  "unity": {
+                      "command": "uv",
+                      "args": [
+                          "run",
+                          "--active",
+                          "--directory",
+                          "Server",
+                          "mcp-for-unity",
+                          "--transport",
+                          "stdio",
+                          "--status-dir",
+                          f"{workspace}/.unity-mcp",
+                      ],
+                      "transport": {"type": "stdio"},
+                      "env": {
+                          "PYTHONUNBUFFERED": "1",
+                          "MCP_LOG_LEVEL": "debug",
+                          "UNITY_PROJECT_ROOT": f"{workspace}/TestProjects/UnityMCPTests",
+                          "UNITY_MCP_STATUS_DIR": f"{workspace}/.unity-mcp",
+                          "UNITY_MCP_HOST": "127.0.0.1",
+                          "UNITY_MCP_SKIP_STARTUP_CONNECT": "1",
+                      },
+                  }
+              }
+          }
+
+          if default_inst:
+              unity = cfg["mcpServers"]["unity"]
+              unity["env"]["UNITY_MCP_DEFAULT_INSTANCE"] = default_inst
+              if "--default-instance" not in unity["args"]:
+                  unity["args"] += ["--default-instance", default_inst]
+
+          path = Path(".claude/mcp.json")
+          path.write_text(json.dumps(cfg, indent=2) + "\n")
+          print(f"Wrote {path} (UNITY_MCP_DEFAULT_INSTANCE={default_inst or 'unset'})")
+          PY
+
+      - name: Pin Claude tool permissions (.claude/settings.json)
+        run: |
+          set -eux
+          mkdir -p .claude
+          cat > .claude/settings.json <<'JSON'
+          {
+            "permissions": {
+              "allow": [
+                "mcp__unity",
+                "Edit(reports/**)",
+                "MultiEdit(reports/**)"
+              ],
+              "deny": [
+                "Bash",
+                "WebFetch",
+                "WebSearch",
+                "Task",
+                "TodoWrite",
+                "NotebookEdit",
+                "NotebookRead"
+              ]
+            }
+          }
+          JSON
+
+      - name: Verify MCP fake Unity instance
+        env:
+          PYTHONUNBUFFERED: "1"
+          MCP_LOG_LEVEL: debug
+          UNITY_PROJECT_ROOT: ${{ github.workspace }}/TestProjects/UnityMCPTests
+          UNITY_MCP_STATUS_DIR: ${{ github.workspace }}/.unity-mcp
+          UNITY_MCP_HOST: 127.0.0.1
+          UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
+        run: |
+          set -euxo pipefail
+          ls -la "$UNITY_MCP_STATUS_DIR"
+          jq -r . "$UNITY_MCP_STATUS_DIR"/unity-mcp-status-*.json
+          echo "--- Listener process ---"
+          pgrep -fl fake-unity-listener || true
+          echo "--- Socket listeners ---"
+          ss -ltnp || true
+          echo "--- Fake listener log ---"
+          cat /tmp/fake-unity-listener.log || true
+
+          # Extra probe from this step
+          python3 <<'PY'
+          import socket, struct, sys, os
+          port = int(os.environ.get("UNITY_PORT", "6400"))
+          s = socket.create_connection(("127.0.0.1", port), timeout=2)
+          s.settimeout(2)
+          hs = s.recv(512)
+          print("probe-handshake:", hs)
+          s.sendall(struct.pack(">Q", 4) + b"ping")
+          hdr = s.recv(8)
+          print("probe-hdr-len:", len(hdr), "data:", hdr)
+          if len(hdr) == 8:
+              ln = struct.unpack(">Q", hdr)[0]
+              resp = s.recv(ln)
+              print("probe-resp:", resp)
+          s.close()
+          PY
+          echo "--- Port discovery debug ---"
+          python3 <<'PY'
+          import glob, json, os, socket, struct
+          from pathlib import Path
+          status_dir = Path(os.environ["UNITY_MCP_STATUS_DIR"])
+          files = sorted(glob.glob(str(status_dir / "unity-mcp-status-*.json")))
+          print("status_dir", status_dir)
+          print("files", files)
+          for f in files:
+              try:
+                  data = json.loads(Path(f).read_text())
+                  port = data.get("unity_port")
+                  print(f"file={f} port={port}")
+                  if isinstance(port, int):
+                      s = socket.create_connection(("127.0.0.1", port), timeout=2)
+                      hs = s.recv(512)
+                      s.sendall(struct.pack(">Q", 4) + b"ping")
+                      hdr = s.recv(8)
+                      resp = s.recv(struct.unpack(">Q", hdr)[0]) if len(hdr) == 8 else b""
+                      print("probe", f, "hs_ok", b"FRAMING=1" in hs, "hdr_len", len(hdr), "resp", resp)
+                      s.close()
+              except Exception as e:
+                  print("probe error", f, e)
+          PY
+
+          echo "--- PortDiscovery.discover_all_unity_instances ---"
+          python3 - <<'PY'
+          from transport.legacy.port_discovery import PortDiscovery
+          inst = PortDiscovery.discover_all_unity_instances()
+          print(inst)
+          print("try_probe_direct", PortDiscovery._try_probe_unity_mcp(6400))
+          print("discover_unity_port", PortDiscovery.discover_unity_port())
+          PY
+
+          python - <<'PY'
+          import json
+          import subprocess
+          cmd = [
+              "uv", "run", "--active", "--directory", "Server", "python", "-c",
+              "from transport.legacy.stdio_port_registry import stdio_port_registry; "
+              "inst = stdio_port_registry.get_instances(force_refresh=True); "
+              "import json; print(json.dumps([{'id':i.id,'port':i.port} for i in inst]))"
+          ]
+          result = subprocess.run(cmd, capture_output=True, text=True)
+          print(result.stdout.strip())
+          if result.returncode != 0:
+              print(result.stderr)
+              raise SystemExit(1)
+          try:
+              data = json.loads(result.stdout.strip() or "[]")
+              if not data:
+                  print("::error::No Unity instances discovered by MCP registry")
+                  raise SystemExit(1)
+          except Exception as e:
+              print(f"::error::Failed to parse instances: {e}")
+              raise SystemExit(1)
+          PY
+
+      - name: Claude smoke (fake Unity)
+        uses: anthropics/claude-code-base-action@beta
+        if: steps.detect.outputs.anthropic_ok == 'true'
+        continue-on-error: true
+        env:
+          UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
+        with:
+          use_node_cache: false
+          prompt: |
+            You are running against a fake Unity MCP instance for connectivity debug.
+            - Call one unity tool (any) or report the registry instances you see.
+            - If tools fail to connect, print the exact error and stop.
+            - Do not write or edit files.
+          mcp_config: .claude/mcp.json
+          settings: .claude/settings.json
+          allowed_tools: "mcp__unity"
+          disallowed_tools: "Edit(reports/**),MultiEdit(reports/**),Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
+          max_turns: 1
+          timeout_minutes: "5"
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Debug MCP server startup (after Claude)
+        if: always()
+        run: |
+          set -eux
+          echo "=== MCP Server Startup Debug Log ==="
+          cat "$GITHUB_WORKSPACE/.unity-mcp/mcp-server-startup-debug.log" 2>/dev/null || echo "(no debug log found)"
+          echo ""
+          echo "=== Fake listener log ==="
+          cat /tmp/fake-unity-listener.log 2>/dev/null || echo "(no listener log)"
+

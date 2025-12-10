@@ -391,6 +391,12 @@ async def create_script(
         return {"success": False, "code": "bad_path", "message": "path must include a script file name."}
     if not norm_path.lower().endswith(".cs"):
         return {"success": False, "code": "bad_extension", "message": "script file must end with .cs."}
+    # Strip "Assets/" prefix from directory - C# ManageScript expects paths relative to Assets/
+    # (e.g., "Assets/Scripts" -> "Scripts", "Assets" -> "")
+    if directory.lower().startswith("assets/"):
+        directory = directory[7:]  # Remove "Assets/" prefix
+    elif directory.lower() == "assets":
+        directory = ""  # Root Assets folder
     params: dict[str, Any] = {
         "action": "create",
         "name": name,
