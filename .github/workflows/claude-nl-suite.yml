@@ -14,54 +14,8 @@ env:
   UNITY_IMAGE: unityci/editor:ubuntu-2021.3.45f2-linux-il2cpp-3
 
 jobs:
-  mcp-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: astral-sh/setup-uv@v4
-        with:
-          python-version: "3.11"
-
-      - name: Install MCP server deps
-        run: |
-          set -eux
-          uv venv
-          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
-          if [ -f Server/pyproject.toml ]; then
-            uv pip install -e Server
-          elif [ -f Server/requirements.txt ]; then
-            uv pip install -r Server/requirements.txt
-          else
-            echo "No MCP Python deps found" >&2
-            exit 1
-          fi
-
-      - name: Preflight MCP server (stdio)
-        env:
-          PYTHONUNBUFFERED: "1"
-          MCP_LOG_LEVEL: debug
-          UNITY_PROJECT_ROOT: ${{ github.workspace }}/TestProjects/UnityMCPTests
-          UNITY_MCP_STATUS_DIR: ${{ github.workspace }}/.unity-mcp-dummy
-          UNITY_MCP_HOST: 127.0.0.1
-          UNITY_MCP_SKIP_STARTUP_CONNECT: "1"
-        run: |
-          set -euxo pipefail
-          mkdir -p "$UNITY_MCP_STATUS_DIR"
-          cat > "$UNITY_MCP_STATUS_DIR/unity-mcp-status-dummy.json" <<JSON
-          { "unity_port": 0, "reason": "dummy", "reloading": false, "project_path": "$UNITY_PROJECT_ROOT/Assets" }
-          JSON
-          uv run --active --directory Server mcp-for-unity --transport stdio --help \
-            > /tmp/mcp-preflight.log 2>&1 || { cat /tmp/mcp-preflight.log; exit 1; }
-          cat /tmp/mcp-preflight.log
-
   nl-suite:
     runs-on: ubuntu-24.04
-    needs: mcp-smoke
     timeout-minutes: 60
     env:
       JUNIT_OUT: reports/junit-nl-suite.xml
@@ -497,7 +451,7 @@ jobs:
           echo "=== Status file content ==="
           cat "$GITHUB_WORKSPACE"/.unity-mcp/unity-mcp-status-*.json 2>/dev/null || echo "(no status files)"
 
-      - name: Preflight MCP server
+      - name: Preflight MCP server (with retries)
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
         run: |
@@ -538,34 +492,22 @@ jobs:
               print(f"probe error: {e}")
           PY
 
-          uv run --active --directory Server mcp-for-unity --transport stdio --help \
-            > /tmp/mcp-preflight.log 2>&1 || { cat /tmp/mcp-preflight.log; exit 1; }
-          cat /tmp/mcp-preflight.log
-
-      - name: MCP server settle (retry connect)
-        env:
-          UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
-        run: |
-          set -euxo pipefail
-          export PYTHONUNBUFFERED=1 MCP_LOG_LEVEL=debug
-          export UNITY_PROJECT_ROOT="$GITHUB_WORKSPACE/TestProjects/UnityMCPTests"
-          export UNITY_MCP_STATUS_DIR="$GITHUB_WORKSPACE/.unity-mcp"
-          export UNITY_MCP_HOST=127.0.0.1
-          if [[ -n "${UNITY_MCP_DEFAULT_INSTANCE:-}" ]]; then
-            export UNITY_MCP_DEFAULT_INSTANCE
-          fi
-          for i in {1..10}; do
-            if uv run --active --directory Server mcp-for-unity --transport stdio --help >/tmp/mcp-settle.log 2>&1; then
-              cat /tmp/mcp-settle.log
-              exit 0
+          attempt=0
+          while true; do
+            attempt=$((attempt+1))
+            if uv run --active --directory Server mcp-for-unity --transport stdio --help > /tmp/mcp-preflight.log 2>&1; then
+              cat /tmp/mcp-preflight.log
+              break
+            fi
+            if [ "$attempt" -ge 5 ]; then
+              echo "::error::MCP server did not settle after $attempt attempts"
+              cat /tmp/mcp-preflight.log || true
+              exit 1
             fi
             sleep 2
           done
-          echo "::error::MCP server did not settle after retries"
-          cat /tmp/mcp-settle.log || true
-          exit 1
 
-      - name: Verify MCP Unity instance
+      - name: Verify MCP Unity instance and Claude args
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
         run: |
@@ -617,12 +559,6 @@ jobs:
               raise SystemExit(1)
           PY
 
-      - name: Test MCP server with exact Claude args
-        env:
-          UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
-          UNITY_MCP_STATUS_DIR: ${{ github.workspace }}/.unity-mcp
-        run: |
-          set -euxo pipefail
           echo "=== Testing MCP server startup with --status-dir flag ==="
           uv run --active --directory Server python <<'PYTEST'
           import os
@@ -1181,18 +1117,6 @@ jobs:
 
           md_out.write_text('\n'.join(lines), encoding='utf-8')
           PY
-
-      - name: "Debug: list report files"
-        if: always()
-        shell: bash
-        run: |
-          set -eux
-          ls -la reports || true
-          shopt -s nullglob
-          for f in reports/*.xml; do
-            echo "===== $f ====="
-            head -n 40 "$f" || true
-          done
 
       # ---------- Collect execution transcript (if present) ----------
       - name: Collect action execution transcript
