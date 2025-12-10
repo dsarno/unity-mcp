@@ -14,8 +14,54 @@ env:
   UNITY_IMAGE: unityci/editor:ubuntu-2021.3.45f2-linux-il2cpp-3
 
 jobs:
-  nl-suite:
+  mcp-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install MCP server deps
+        run: |
+          set -eux
+          uv venv
+          echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          if [ -f Server/pyproject.toml ]; then
+            uv pip install -e Server
+          elif [ -f Server/requirements.txt ]; then
+            uv pip install -r Server/requirements.txt
+          else
+            echo "No MCP Python deps found" >&2
+            exit 1
+          fi
+
+      - name: Preflight MCP server (stdio)
+        env:
+          PYTHONUNBUFFERED: "1"
+          MCP_LOG_LEVEL: debug
+          UNITY_PROJECT_ROOT: ${{ github.workspace }}/TestProjects/UnityMCPTests
+          UNITY_MCP_STATUS_DIR: ${{ github.workspace }}/.unity-mcp-dummy
+          UNITY_MCP_HOST: 127.0.0.1
+          UNITY_MCP_SKIP_STARTUP_CONNECT: "1"
+        run: |
+          set -euxo pipefail
+          mkdir -p "$UNITY_MCP_STATUS_DIR"
+          cat > "$UNITY_MCP_STATUS_DIR/unity-mcp-status-dummy.json" <<JSON
+          { "unity_port": 0, "reason": "dummy", "reloading": false, "project_path": "$UNITY_PROJECT_ROOT/Assets" }
+          JSON
+          uv run --active --directory Server mcp-for-unity --transport stdio --help \
+            > /tmp/mcp-preflight.log 2>&1 || { cat /tmp/mcp-preflight.log; exit 1; }
+          cat /tmp/mcp-preflight.log
+
+  nl-suite:
+    runs-on: ubuntu-24.04
+    needs: mcp-smoke
     timeout-minutes: 60
     env:
       JUNIT_OUT: reports/junit-nl-suite.xml
@@ -169,12 +215,12 @@ jobs:
           fi
           docker run --rm --network host \
             -e HOME=/root \
-            -v "${{ github.workspace }}:/workspace" -w /workspace \
+            -v "${{ github.workspace }}:${{ github.workspace }}" -w "${{ github.workspace }}" \
             -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d" \
             -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d" \
             -v "$RUNNER_TEMP/unity-cache:/root/.cache/unity3d" \
             "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile - \
-              -projectPath /workspace/TestProjects/UnityMCPTests \
+              -projectPath "${{ github.workspace }}/TestProjects/UnityMCPTests" \
               "${manual_args[@]}" \
               -quit
 
@@ -182,8 +228,8 @@ jobs:
       - name: Clean old MCP status
         run: |
           set -eux
-          mkdir -p "$HOME/.unity-mcp"
-          rm -f "$HOME/.unity-mcp"/unity-mcp-status-*.json || true
+          mkdir -p "$GITHUB_WORKSPACE/.unity-mcp"
+          rm -f "$GITHUB_WORKSPACE/.unity-mcp"/unity-mcp-status-*.json || true
 
       # ---------- Start headless Unity (persistent bridge) ----------
       - name: Start Unity (persistent bridge)
@@ -199,23 +245,22 @@ jobs:
             manual_args=(-manualLicenseFile "/root/.local/share/unity3d/Unity/Unity_lic.ulf")
           fi
 
-          mkdir -p "$HOME/.unity-mcp"
+          mkdir -p "$GITHUB_WORKSPACE/.unity-mcp"
           docker rm -f unity-mcp >/dev/null 2>&1 || true
           docker run -d --name unity-mcp --network host \
             -e HOME=/root \
             -e UNITY_MCP_ALLOW_BATCH=1 \
-            -e UNITY_MCP_STATUS_DIR=/root/.unity-mcp \
+            -e UNITY_MCP_STATUS_DIR="${{ github.workspace }}/.unity-mcp" \
             -e UNITY_MCP_BIND_HOST=127.0.0.1 \
-            -v "${{ github.workspace }}:/workspace" -w /workspace \
-            -v "$HOME/.unity-mcp:/root/.unity-mcp" \
+            -v "${{ github.workspace }}:${{ github.workspace }}" -w "${{ github.workspace }}" \
             -v "$RUNNER_TEMP/unity-config:/root/.config/unity3d" \
             -v "$RUNNER_TEMP/unity-local:/root/.local/share/unity3d" \
             -v "$RUNNER_TEMP/unity-cache:/root/.cache/unity3d" \
             "$UNITY_IMAGE" /opt/unity/Editor/Unity -batchmode -nographics -logFile /root/.config/unity3d/Editor.log \
               -stackTraceLogType Full \
-              -projectPath /workspace/TestProjects/UnityMCPTests \
+              -projectPath "${{ github.workspace }}/TestProjects/UnityMCPTests" \
               "${manual_args[@]}" \
-              -executeMethod MCPForUnity.Editor.Services.Transport.Transports.StdioBridgeHost.StartAutoConnect
+              -executeMethod MCPForUnity.Editor.McpCiBoot.StartStdioForCi
 
       # ---------- Wait for Unity bridge ----------
       - name: Wait for Unity bridge (robust)
@@ -239,15 +284,18 @@ jobs:
             logs="$(docker logs unity-mcp 2>&1 || true)"
 
             # 1) Primary: status JSON exposes TCP port
-            port="$(jq -r '.unity_port // empty' "$HOME"/.unity-mcp/unity-mcp-status-*.json 2>/dev/null | head -n1 || true)"
+            port="$(jq -r '.unity_port // empty' "$GITHUB_WORKSPACE"/.unity-mcp/unity-mcp-status-*.json 2>/dev/null | head -n1 || true)"
             if [[ -n "${port:-}" ]] && timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port"; then
               echo "Bridge ready on port $port"
+              # Ensure status file is readable by all (Claude container might run as different user)
+              docker exec unity-mcp chmod -R a+rwx "$GITHUB_WORKSPACE/.unity-mcp" || chmod -R a+rwx "$GITHUB_WORKSPACE/.unity-mcp" || true
               exit 0
             fi
 
             # 2) Secondary: log markers
             if echo "$logs" | grep -qiE "$ok_pat"; then
               echo "Bridge ready (log markers)"
+              docker exec unity-mcp chmod -R a+rwx "$GITHUB_WORKSPACE/.unity-mcp" || chmod -R a+rwx "$GITHUB_WORKSPACE/.unity-mcp" || true
               exit 0
             fi
 
@@ -283,13 +331,13 @@ jobs:
           echo "--- Unity container logs (tail 200) ---"
           docker logs unity-mcp --tail 200 | sed -E 's/((email|serial|license|password|token)[^[:space:]]*)/[REDACTED]/Ig' || true
           echo "--- Container status dir ---"
-          docker exec unity-mcp ls -la /root/.unity-mcp || true
+          docker exec unity-mcp ls -la "${{ github.workspace }}/.unity-mcp" || true
           echo "--- Host status dir ---"
-          ls -la "$HOME/.unity-mcp" || true
+          ls -la "$GITHUB_WORKSPACE/.unity-mcp" || true
           echo "--- Host status file (first 120 lines) ---"
-          jq -r . "$HOME"/.unity-mcp/unity-mcp-status-*.json | sed -n '1,120p' || true
+          jq -r . "$GITHUB_WORKSPACE"/.unity-mcp/unity-mcp-status-*.json | sed -n '1,120p' || true
           echo "--- Port probe from host ---"
-          port="$(jq -r '.unity_port // empty' "$HOME"/.unity-mcp/unity-mcp-status-*.json 2>/dev/null | head -n1 || true)"
+          port="$(jq -r '.unity_port // empty' "$GITHUB_WORKSPACE"/.unity-mcp/unity-mcp-status-*.json 2>/dev/null | head -n1 || true)"
           echo "unity_port=${port:-}"
           if [[ -n "${port:-}" ]]; then
             timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port" && echo "TCP OK" || echo "TCP probe failed"
@@ -302,37 +350,13 @@ jobs:
           docker exec unity-mcp tail -n 200 /root/.config/unity3d/Editor.log || true
           # Fail fast if no status file was written
           shopt -s nullglob
-          status_files=("$HOME"/.unity-mcp/unity-mcp-status-*.json)
+          status_files=("$GITHUB_WORKSPACE"/.unity-mcp/unity-mcp-status-*.json)
           if ((${#status_files[@]} == 0)); then
             echo "::error::No Unity MCP status file found; failing fast."
             exit 1
           fi
 
       # (moved) — return license after Unity is stopped
-
-      # ---------- MCP client config ----------
-      - name: Write MCP config (.claude/mcp.json)
-        run: |
-          set -eux
-          mkdir -p .claude
-          cat > .claude/mcp.json <<JSON
-          {
-            "mcpServers": {
-              "unity": {
-                "command": "uv",
-                "args": ["run","--active","--directory","Server","mcp-for-unity","--transport","stdio"],
-                "transport": { "type": "stdio" },
-                "env": {
-                  "PYTHONUNBUFFERED": "1",
-                  "MCP_LOG_LEVEL": "debug",
-                  "UNITY_PROJECT_ROOT": "$GITHUB_WORKSPACE/TestProjects/UnityMCPTests",
-                  "UNITY_MCP_STATUS_DIR": "$HOME/.unity-mcp",
-                  "UNITY_MCP_HOST": "127.0.0.1"
-                }
-              }
-            }
-          }
-          JSON
 
       - name: Pin Claude tool permissions (.claude/settings.json)
         run: |
@@ -382,11 +406,11 @@ jobs:
       - name: Verify Unity bridge status/port
         run: |
           set -euxo pipefail
-          ls -la "$HOME/.unity-mcp" || true
-          jq -r . "$HOME"/.unity-mcp/unity-mcp-status-*.json | sed -n '1,80p' || true
+          ls -la "$GITHUB_WORKSPACE/.unity-mcp" || true
+          jq -r . "$GITHUB_WORKSPACE"/.unity-mcp/unity-mcp-status-*.json | sed -n '1,80p' || true
 
           shopt -s nullglob
-          status_files=("$HOME"/.unity-mcp/unity-mcp-status-*.json)
+          status_files=("$GITHUB_WORKSPACE"/.unity-mcp/unity-mcp-status-*.json)
           if ((${#status_files[@]})); then
             port="$(grep -hEo '"unity_port"[[:space:]]*:[[:space:]]*[0-9]+' "${status_files[@]}" \
               | sed -E 's/.*: *([0-9]+).*/\1/' | head -n1 || true)"
@@ -399,23 +423,267 @@ jobs:
             timeout 1 bash -lc "exec 3<>/dev/tcp/127.0.0.1/$port" && echo "TCP OK"
           fi
 
+          if ((${#status_files[@]})); then
+            first_status="${status_files[0]}"
+            fname="$(basename "$first_status")"
+            hash_part="${fname%.json}"; hash_part="${hash_part#unity-mcp-status-}"
+            proj="$(jq -r '.project_name // empty' "$first_status" || true)"
+            if [[ -n "${proj:-}" && -n "${hash_part:-}" ]]; then
+              echo "UNITY_MCP_DEFAULT_INSTANCE=${proj}@${hash_part}" >> "$GITHUB_ENV"
+              echo "Default instance set to ${proj}@${hash_part}"
+            fi
+          fi
+
+      # ---------- MCP client config ----------
+      - name: Write MCP config (.claude/mcp.json)
+        run: |
+          set -eux
+          mkdir -p .claude
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          workspace = os.environ["GITHUB_WORKSPACE"]
+          default_inst = os.environ.get("UNITY_MCP_DEFAULT_INSTANCE", "").strip()
+
+          cfg = {
+              "mcpServers": {
+                  "unity": {
+                      "command": "uv",
+                      "args": [
+                          "run",
+                          "--active",
+                          "--directory",
+                          "Server",
+                          "mcp-for-unity",
+                          "--transport",
+                          "stdio",
+                          "--status-dir",
+                          f"{workspace}/.unity-mcp",
+                      ],
+                      "transport": {"type": "stdio"},
+                      "env": {
+                          "PYTHONUNBUFFERED": "1",
+                          "MCP_LOG_LEVEL": "debug",
+                          "UNITY_PROJECT_ROOT": f"{workspace}/TestProjects/UnityMCPTests",
+                          "UNITY_MCP_STATUS_DIR": f"{workspace}/.unity-mcp",
+                          "UNITY_MCP_HOST": "127.0.0.1",
+                      },
+                  }
+              }
+          }
+
+          if default_inst:
+              unity = cfg["mcpServers"]["unity"]
+              unity["env"]["UNITY_MCP_DEFAULT_INSTANCE"] = default_inst
+              if "--default-instance" not in unity["args"]:
+                  unity["args"] += ["--default-instance", default_inst]
+
+          path = Path(".claude/mcp.json")
+          path.write_text(json.dumps(cfg, indent=2) + "\n")
+          print(f"Wrote {path} (UNITY_MCP_DEFAULT_INSTANCE={default_inst or 'unset'})")
+          PY
+
+      - name: Debug MCP config
+        run: |
+          set -eux
+          echo "=== .claude/mcp.json ==="
+          cat .claude/mcp.json
+          echo ""
+          echo "=== Status dir contents ==="
+          ls -la "$GITHUB_WORKSPACE/.unity-mcp" || true
+          echo ""
+          echo "=== Status file content ==="
+          cat "$GITHUB_WORKSPACE"/.unity-mcp/unity-mcp-status-*.json 2>/dev/null || echo "(no status files)"
+
       - name: Preflight MCP server
+        env:
+          UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
         run: |
           set -euxo pipefail
           export PYTHONUNBUFFERED=1
           export MCP_LOG_LEVEL=debug
           export UNITY_PROJECT_ROOT="$GITHUB_WORKSPACE/TestProjects/UnityMCPTests"
-          export UNITY_MCP_STATUS_DIR="$HOME/.unity-mcp"
+          export UNITY_MCP_STATUS_DIR="$GITHUB_WORKSPACE/.unity-mcp"
           export UNITY_MCP_HOST=127.0.0.1
+          if [[ -n "${UNITY_MCP_DEFAULT_INSTANCE:-}" ]]; then
+            export UNITY_MCP_DEFAULT_INSTANCE
+          fi
+
+          # Debug: probe Unity's actual ping/pong response
+          echo "--- Unity ping/pong probe ---"
+          python3 <<'PY'
+          import socket, struct, sys
+          port = 6400
+          try:
+              s = socket.create_connection(("127.0.0.1", port), timeout=2)
+              s.settimeout(2)
+              hs = s.recv(512)
+              print(f"handshake: {hs!r}")
+              hs_ok = b"FRAMING=1" in hs
+              print(f"FRAMING=1 present: {hs_ok}")
+              if hs_ok:
+                  s.sendall(struct.pack(">Q", 4) + b"ping")
+                  hdr = s.recv(8)
+                  print(f"response header len: {len(hdr)}")
+                  if len(hdr) == 8:
+                      length = struct.unpack(">Q", hdr)[0]
+                      resp = s.recv(length)
+                      print(f"response payload: {resp!r}")
+                      pong_check = b'"message":"pong"'
+                      print(f"contains pong_check: {pong_check in resp}")
+              s.close()
+          except Exception as e:
+              print(f"probe error: {e}")
+          PY
+
           uv run --active --directory Server mcp-for-unity --transport stdio --help \
             > /tmp/mcp-preflight.log 2>&1 || { cat /tmp/mcp-preflight.log; exit 1; }
           cat /tmp/mcp-preflight.log
+
+      - name: MCP server settle (retry connect)
+        env:
+          UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
+        run: |
+          set -euxo pipefail
+          export PYTHONUNBUFFERED=1 MCP_LOG_LEVEL=debug
+          export UNITY_PROJECT_ROOT="$GITHUB_WORKSPACE/TestProjects/UnityMCPTests"
+          export UNITY_MCP_STATUS_DIR="$GITHUB_WORKSPACE/.unity-mcp"
+          export UNITY_MCP_HOST=127.0.0.1
+          if [[ -n "${UNITY_MCP_DEFAULT_INSTANCE:-}" ]]; then
+            export UNITY_MCP_DEFAULT_INSTANCE
+          fi
+          for i in {1..10}; do
+            if uv run --active --directory Server mcp-for-unity --transport stdio --help >/tmp/mcp-settle.log 2>&1; then
+              cat /tmp/mcp-settle.log
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::MCP server did not settle after retries"
+          cat /tmp/mcp-settle.log || true
+          exit 1
+
+      - name: Verify MCP Unity instance
+        env:
+          UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
+        run: |
+          set -euxo pipefail
+          export PYTHONUNBUFFERED=1 MCP_LOG_LEVEL=debug
+          export UNITY_PROJECT_ROOT="$GITHUB_WORKSPACE/TestProjects/UnityMCPTests"
+          export UNITY_MCP_STATUS_DIR="$GITHUB_WORKSPACE/.unity-mcp"
+          export UNITY_MCP_HOST=127.0.0.1
+          if [[ -n "${UNITY_MCP_DEFAULT_INSTANCE:-}" ]]; then
+            export UNITY_MCP_DEFAULT_INSTANCE
+          fi
+
+          # Debug: check what PortDiscovery sees
+          echo "--- PortDiscovery debug ---"
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, "Server/src")
+          from transport.legacy.port_discovery import PortDiscovery
+          import json
+
+          print(f"status_dir: {PortDiscovery.get_registry_dir()}")
+          instances = PortDiscovery.discover_all_unity_instances()
+          print(f"discover_all_unity_instances: {[{'id':i.id,'port':i.port} for i in instances]}")
+          print(f"try_probe_direct(6400): {PortDiscovery._try_probe_unity_mcp(6400)}")
+          print(f"discover_unity_port: {PortDiscovery.discover_unity_port()}")
+          PY
+
+          python3 - <<'PY'
+          import json
+          import subprocess
+          cmd = [
+              "uv", "run", "--active", "--directory", "Server", "python", "-c",
+              "from transport.legacy.stdio_port_registry import stdio_port_registry; "
+              "inst = stdio_port_registry.get_instances(force_refresh=True); "
+              "import json; print(json.dumps([{'id':i.id,'port':i.port} for i in inst]))"
+          ]
+          result = subprocess.run(cmd, capture_output=True, text=True)
+          print(result.stdout.strip())
+          if result.returncode != 0:
+              print(result.stderr)
+              raise SystemExit(1)
+          try:
+              data = json.loads(result.stdout.strip() or "[]")
+              if not data:
+                  print("::error::No Unity instances discovered by MCP registry")
+                  raise SystemExit(1)
+          except Exception as e:
+              print(f"::error::Failed to parse instances: {e}")
+              raise SystemExit(1)
+          PY
+
+      - name: Test MCP server with exact Claude args
+        env:
+          UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
+          UNITY_MCP_STATUS_DIR: ${{ github.workspace }}/.unity-mcp
+        run: |
+          set -euxo pipefail
+          echo "=== Testing MCP server startup with --status-dir flag ==="
+          uv run --active --directory Server python <<'PYTEST'
+          import os
+          import sys
+          import glob
+          sys.path.insert(0, 'src')
+          from transport.legacy.port_discovery import PortDiscovery
+          status_dir = PortDiscovery.get_registry_dir()
+          print('Status dir:', status_dir)
+          print('Exists:', status_dir.exists())
+          pattern = str(status_dir / 'unity-mcp-status-*.json')
+          files = glob.glob(pattern)
+          print('Files:', files)
+          instances = PortDiscovery.discover_all_unity_instances()
+          print('Instances:', [i.id for i in instances])
+          if not instances:
+              print('::error::Discovery returned empty list!')
+              sys.exit(1)
+          PYTEST
+
+      # ---------- Final Unity check before Claude ----------
+      - name: Verify Unity IMMEDIATELY before Claude
+        run: |
+          set -euxo pipefail
+          echo "=== Unity container status ==="
+          docker inspect -f '{{.State.Status}} {{.State.Running}}' unity-mcp || echo "Container not found!"
+          
+          echo "=== Raw socket probe to Unity ==="
+          # Try raw TCP connect without Python overhead
+          for host in 127.0.0.1 localhost; do
+            echo "Probing $host:6400..."
+            if timeout 2 bash -c "exec 3<>/dev/tcp/$host/6400" 2>/dev/null; then
+              echo "$host:6400 - SUCCESS"
+            else
+              echo "$host:6400 - FAILED"
+            fi
+          done
+          
+          echo "=== Netstat for port 6400 ==="
+          docker exec unity-mcp netstat -tlnp 2>/dev/null | grep 6400 || ss -tlnp | grep 6400 || echo "No listener found on 6400"
+          
+          echo "=== Python probe with timing ==="
+          python3 <<'PY'
+          import socket, time
+          start = time.time()
+          for host in ['127.0.0.1', 'localhost']:
+              try:
+                  s = socket.create_connection((host, 6400), timeout=2)
+                  s.close()
+                  print(f"{host}:6400 OK ({time.time()-start:.2f}s)")
+              except Exception as e:
+                  print(f"{host}:6400 FAILED: {e} ({time.time()-start:.2f}s)")
+          PY
 
       # ---------- Run suite in two passes ----------
       - name: Run Claude NL pass
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         continue-on-error: true
+        env:
+          UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
         with:
           use_node_cache: false
           prompt_file: .claude/prompts/nl-unity-suite-nl.md
@@ -433,10 +701,22 @@ jobs:
           timeout_minutes: "30"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
+      - name: Debug MCP server startup (after NL pass)
+        if: always()
+        run: |
+          set -eux
+          echo "=== MCP Server Startup Debug Log ==="
+          cat "$GITHUB_WORKSPACE/.unity-mcp/mcp-server-startup-debug.log" 2>/dev/null || echo "(no debug log found - MCP server may not have started)"
+          echo ""
+          echo "=== Status dir after Claude ==="
+          ls -la "$GITHUB_WORKSPACE/.unity-mcp" || true
+
       - name: Run Claude T pass A-J
         uses: anthropics/claude-code-base-action@beta
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         continue-on-error: true
+        env:
+          UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
         with:
           use_node_cache: false
           prompt_file: .claude/prompts/nl-unity-suite-t.md
@@ -444,7 +724,8 @@ jobs:
           settings: .claude/settings.json
           allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
           disallowed_tools: "Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: claude-3-7-sonnet-20250219
+          model: claude-sonnet-4-5-20250929
+          fallback_model: claude-haiku-4-5-20251001
           append_system_prompt: |
             You are running the T pass (A–J) only.
             Output requirements:
@@ -982,7 +1263,7 @@ jobs:
           require_tests: false
           fail_on_parse_error: true
 
-      - name: Upload artifacts (reports + fragments + transcript)
+      - name: Upload artifacts (reports + fragments + transcript + debug)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -992,6 +1273,7 @@ jobs:
             ${{ env.MD_OUT }}
             reports/*_results.xml
             reports/claude-execution-output.json
+            ${{ github.workspace }}/.unity-mcp/mcp-server-startup-debug.log
           retention-days: 7
 
       # ---------- Always stop Unity ----------
