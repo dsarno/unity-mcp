@@ -413,8 +413,6 @@ jobs:
                           "mcp-for-unity",
                           "--transport",
                           "stdio",
-                          "--status-dir",
-                          f"{workspace}/.unity-mcp",
                       ],
                       "transport": {"type": "stdio"},
                       "env": {
