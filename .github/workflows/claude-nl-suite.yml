@@ -396,6 +396,7 @@ jobs:
           python3 - <<'PY'
           import json
           import os
+          import textwrap
           from pathlib import Path
 
           workspace = os.environ["GITHUB_WORKSPACE"]
@@ -437,15 +438,16 @@ jobs:
           workspace_path = Path(workspace)
           uv_candidate = workspace_path / ".venv" / "bin" / "uv"
           uv_cmd = uv_candidate.as_posix() if uv_candidate.exists() else "uv"
-          script = f'''#!/usr/bin/env bash
-set -euo pipefail
-LOG="{workspace}/.unity-mcp/mcp-server-startup-debug.log"
-mkdir -p "$(dirname "$LOG")"
-echo "" >> "$LOG"
-echo "[ $(date -Iseconds) ] Starting unity MCP server" >> "$LOG"
-exec >> "$LOG" 2>&1
-exec {uv_cmd} "$@"
-'''
+          script = textwrap.dedent(f"""\
+              #!/usr/bin/env bash
+              set -euo pipefail
+              LOG="{workspace}/.unity-mcp/mcp-server-startup-debug.log"
+              mkdir -p "$(dirname "$LOG")"
+              echo "" >> "$LOG"
+              echo "[ $(date -Iseconds) ] Starting unity MCP server" >> "$LOG"
+              exec >> "$LOG" 2>&1
+              exec {uv_cmd} "$@"
+              """)
           runner_script.write_text(script)
           runner_script.chmod(0o755)
 
