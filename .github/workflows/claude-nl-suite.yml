@@ -404,7 +404,6 @@ jobs:
           cfg = {
               "mcpServers": {
                   "unity": {
-                      "command": "uv",
                       "args": [
                           "run",
                           "--active",
@@ -428,15 +427,33 @@ jobs:
               }
           }
 
+          unity = cfg["mcpServers"]["unity"]
           if default_inst:
-              unity = cfg["mcpServers"]["unity"]
               unity["env"]["UNITY_MCP_DEFAULT_INSTANCE"] = default_inst
               if "--default-instance" not in unity["args"]:
                   unity["args"] += ["--default-instance", default_inst]
 
+          runner_script = Path(".claude/run-unity-mcp.sh")
+          workspace_path = Path(workspace)
+          uv_candidate = workspace_path / ".venv" / "bin" / "uv"
+          uv_cmd = uv_candidate.as_posix() if uv_candidate.exists() else "uv"
+          script = f'''#!/usr/bin/env bash
+set -euo pipefail
+LOG="{workspace}/.unity-mcp/mcp-server-startup-debug.log"
+mkdir -p "$(dirname "$LOG")"
+echo "" >> "$LOG"
+echo "[ $(date -Iseconds) ] Starting unity MCP server" >> "$LOG"
+exec >> "$LOG" 2>&1
+exec {uv_cmd} "$@"
+'''
+          runner_script.write_text(script)
+          runner_script.chmod(0o755)
+
+          unity["command"] = runner_script.resolve().as_posix()
+
           path = Path(".claude/mcp.json")
           path.write_text(json.dumps(cfg, indent=2) + "\n")
-          print(f"Wrote {path} (UNITY_MCP_DEFAULT_INSTANCE={default_inst or 'unset'})")
+          print(f"Wrote {path} and {runner_script} (UNITY_MCP_DEFAULT_INSTANCE={default_inst or 'unset'})")
           PY
 
       - name: Debug MCP config
