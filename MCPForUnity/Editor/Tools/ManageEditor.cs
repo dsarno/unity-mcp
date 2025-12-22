@@ -2,6 +2,7 @@ using System;
 using MCPForUnity.Editor.Helpers;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
+using UnityEditor.Compilation;
 using UnityEditorInternal; // Required for tag management
 
 namespace MCPForUnity.Editor.Tools
@@ -83,6 +84,29 @@ namespace MCPForUnity.Editor.Tools
                     {
                         return new ErrorResponse($"Error stopping play mode: {e.Message}");
                     }
+                case "request_script_compilation":
+                    try
+                    {
+                        bool wasCompiling = CompilationPipeline.isCompiling;
+                        CompilationPipeline.RequestScriptCompilation();
+                        bool nowCompiling = CompilationPipeline.isCompiling;
+                        string detail = nowCompiling
+                            ? "Unity reports compilation in progress."
+                            : "Unity is not currently compiling; if no pending script changes exist, the request may be a no-op.";
+                        return new SuccessResponse(
+                            "Script compilation request sent.",
+                            new
+                            {
+                                wasCompiling,
+                                nowCompiling,
+                                note = detail
+                            }
+                        );
+                    }
+                    catch (Exception e)
+                    {
+                        return new ErrorResponse($"Error requesting script compilation: {e.Message}");
+                    }
 
                 // Tool Control
                 case "set_active_tool":
@@ -121,7 +145,7 @@ namespace MCPForUnity.Editor.Tools
 
                 default:
                     return new ErrorResponse(
-                        $"Unknown action: '{action}'. Supported actions: play, pause, stop, set_active_tool, add_tag, remove_tag, add_layer, remove_layer. Use MCP resources for reading editor state, project info, tags, layers, selection, windows, prefab stage, and active tool."
+                        $"Unknown action: '{action}'. Supported actions: play, pause, stop, request_script_compilation, set_active_tool, add_tag, remove_tag, add_layer, remove_layer. Use MCP resources for reading editor state, project info, tags, layers, selection, windows, prefab stage, and active tool."
                     );
             }
         }

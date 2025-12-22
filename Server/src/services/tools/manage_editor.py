@@ -14,7 +14,7 @@ from services.tools.utils import coerce_bool
 )
 async def manage_editor(
     ctx: Context,
-    action: Annotated[Literal["telemetry_status", "telemetry_ping", "play", "pause", "stop", "set_active_tool", "add_tag", "remove_tag", "add_layer", "remove_layer"], "Get and update the Unity Editor state."],
+    action: Annotated[Literal["telemetry_status", "telemetry_ping", "play", "pause", "stop", "request_script_compilation", "set_active_tool", "add_tag", "remove_tag", "add_layer", "remove_layer"], "Get and update the Unity Editor state."],
     wait_for_completion: Annotated[bool | str,
                                    "Optional. If True, waits for certain actions (accepts true/false or 'true'/'false')"] | None = None,
     tool_name: Annotated[str,
