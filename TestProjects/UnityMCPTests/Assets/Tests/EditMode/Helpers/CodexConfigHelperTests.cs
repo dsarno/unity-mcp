@@ -54,8 +54,11 @@ namespace MCPForUnityTests.Editor.Helpers
         [TearDown]
         public void TearDown()
         {
-            // Reset service locator after each test
-            MCPServiceLocator.Reset();
+            // IMPORTANT:
+            // These tests can be executed while an MCP session is active (e.g., when running tests via MCP).
+            // MCPServiceLocator.Reset() disposes the bridge + transport manager, which can kill the MCP connection
+            // mid-run. Instead, restore only what this fixture mutates.
+            MCPServiceLocator.Register<IPlatformService>(new PlatformService());
         }
 
         [OneTimeTearDown]
