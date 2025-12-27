@@ -249,7 +249,7 @@ namespace MCPForUnity.Editor.Tools
                     // AssetDatabase.ImportAsset(fullPath); // Let Unity try to import it
                     // newAsset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(fullPath);
                     return new ErrorResponse(
-                        $"Creation for asset type '{assetType}' is not explicitly supported yet. Supported: Folder, Material."
+                        $"Creation for asset type '{assetType}' is not explicitly supported yet. Supported: Folder, Material, PhysicsMaterial."
                     );
                 }
 

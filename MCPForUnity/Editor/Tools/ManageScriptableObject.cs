@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using MCPForUnity.Editor.Helpers;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
@@ -687,7 +688,9 @@ namespace MCPForUnity.Editor.Tools
             var s = SanitizeSlashes(folderPath.Trim());
 
             // Reject obvious non-project/invalid roots. We only support Assets/ (and relative paths that will be rooted under Assets/).
-            if (s.StartsWith("/", StringComparison.Ordinal) || s.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+            if (s.StartsWith("/", StringComparison.Ordinal) 
+                || s.StartsWith("file:", StringComparison.OrdinalIgnoreCase)
+                || Regex.IsMatch(s, @"^[a-zA-Z]:"))
             {
                 error = "Folder path must be a project-relative path under Assets/.";
                 return false;
