@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using MCPForUnity.Editor.Helpers;
@@ -171,7 +172,7 @@ namespace MCPForUnity.Editor.Tools
                     AssetDatabase.CreateAsset(instance, finalPath);
                 }
                 
-                AssetDatabase.ImportAsset(finalPath);
+                // AssetDatabase.ImportAsset(finalPath); 
             }
             catch (Exception ex)
             {
