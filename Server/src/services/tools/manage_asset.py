@@ -22,7 +22,7 @@ async def manage_asset(
     action: Annotated[Literal["import", "create", "modify", "delete", "duplicate", "move", "rename", "search", "get_info", "create_folder", "get_components"], "Perform CRUD operations on assets."],
     path: Annotated[str, "Asset path (e.g., 'Materials/MyMaterial.mat') or search scope."],
     asset_type: Annotated[str,
-                          "Asset type (e.g., 'Material', 'Folder') - required for 'create'."] | None = None,
+                          "Asset type (e.g., 'Material', 'Folder') - required for 'create'. Note: For ScriptableObjects, use manage_scriptable_object."] | None = None,
     properties: Annotated[dict[str, Any] | str,
                           "Dictionary (or JSON string) of properties for 'create'/'modify'."] | None = None,
     destination: Annotated[str,

@@ -32,6 +32,7 @@ namespace MCPForUnityTests.Editor.Helpers
         private string _originalGitOverride;
         private bool _hadHttpTransport;
         private bool _originalHttpTransport;
+        private IPlatformService _originalPlatformService;
 
         [OneTimeSetUp]
         public void OneTimeSetUp()
@@ -40,6 +41,7 @@ namespace MCPForUnityTests.Editor.Helpers
             _originalGitOverride = EditorPrefs.GetString(EditorPrefKeys.GitUrlOverride, string.Empty);
             _hadHttpTransport = EditorPrefs.HasKey(EditorPrefKeys.UseHttpTransport);
             _originalHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
+            _originalPlatformService = MCPServiceLocator.Platform;
         }
 
         [SetUp]
@@ -54,8 +56,16 @@ namespace MCPForUnityTests.Editor.Helpers
         [TearDown]
         public void TearDown()
         {
-            // Reset service locator after each test
-            MCPServiceLocator.Reset();
+            // IMPORTANT:
+            // These tests can be executed while an MCP session is active (e.g., when running tests via MCP).
+            // MCPServiceLocator.Reset() disposes the bridge + transport manager, which can kill the MCP connection
+            // mid-run. Instead, restore only what this fixture mutates.
+            // To avoid leaking global state to other tests/fixtures, restore the original platform service
+            // instance captured before this fixture started running.
+            if (_originalPlatformService != null)
+            {
+                MCPServiceLocator.Register<IPlatformService>(_originalPlatformService);
+            }
         }
 
         [OneTimeTearDown]
