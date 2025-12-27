@@ -29,14 +29,12 @@ namespace MCPForUnity.Editor.Tools
 
         private static readonly HashSet<string> ValidActions = new(StringComparer.OrdinalIgnoreCase)
         {
+            // NOTE: Action strings are normalized by NormalizeAction() (lowercased, '_'/'-' removed),
+            // so we only need the canonical normalized forms here.
             "create",
             "createso",
-            "create_so",
-            "createSO",
             "modify",
             "modifyso",
-            "modify_so",
-            "modifySO",
         };
 
         public static object HandleCommand(JObject @params)
@@ -561,11 +559,7 @@ namespace MCPForUnity.Editor.Tools
             }
 
             // Expect normalized input here (Assets/... or Assets).
-            string sanitized = folderPath.Replace('\\', '/');
-            while (sanitized.IndexOf("//", StringComparison.Ordinal) >= 0)
-            {
-                sanitized = sanitized.Replace("//", "/", StringComparison.Ordinal);
-            }
+            string sanitized = SanitizeSlashes(folderPath);
 
             if (!sanitized.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(sanitized, "Assets", StringComparison.OrdinalIgnoreCase))
@@ -612,6 +606,21 @@ namespace MCPForUnity.Editor.Tools
             return AssetDatabase.IsValidFolder(sanitized);
         }
 
+        private static string SanitizeSlashes(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return path;
+            }
+
+            var s = path.Replace('\\', '/');
+            while (s.IndexOf("//", StringComparison.Ordinal) >= 0)
+            {
+                s = s.Replace("//", "/", StringComparison.Ordinal);
+            }
+            return s;
+        }
+
         private static bool TryNormalizeFolderPath(string folderPath, out string normalized, out string error)
         {
             normalized = null;
@@ -623,11 +632,7 @@ namespace MCPForUnity.Editor.Tools
                 return false;
             }
 
-            var s = folderPath.Trim().Replace('\\', '/');
-            while (s.IndexOf("//", StringComparison.Ordinal) >= 0)
-            {
-                s = s.Replace("//", "/", StringComparison.Ordinal);
-            }
+            var s = SanitizeSlashes(folderPath.Trim());
 
             // Reject obvious non-project/invalid roots. We only support Assets/ (and relative paths that will be rooted under Assets/).
             if (s.StartsWith("/", StringComparison.Ordinal) || s.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
