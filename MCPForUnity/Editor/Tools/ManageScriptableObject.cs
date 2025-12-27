@@ -143,6 +143,12 @@ namespace MCPForUnity.Editor.Tools
                     {
                         // Preserve GUID by overwriting existing asset data in-place
                         EditorUtility.CopySerialized(instance, existingAsset);
+                        
+                        // Fix for "Main Object Name does not match filename" warning:
+                        // CopySerialized overwrites the name with the (empty) name of the new instance.
+                        // We must restore the correct name to match the filename.
+                        existingAsset.name = Path.GetFileNameWithoutExtension(finalPath);
+
                         UnityEngine.Object.DestroyImmediate(instance); // Destroy temporary instance
                         instance = existingAsset; // Proceed with patching the existing asset
                         isNewAsset = false;
@@ -160,6 +166,8 @@ namespace MCPForUnity.Editor.Tools
 
                 if (isNewAsset)
                 {
+                    // Ensure the new instance has the correct name before creating asset to avoid warnings
+                    instance.name = Path.GetFileNameWithoutExtension(finalPath);
                     AssetDatabase.CreateAsset(instance, finalPath);
                 }
                 
