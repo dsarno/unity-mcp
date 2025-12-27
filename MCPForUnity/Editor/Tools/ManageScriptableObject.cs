@@ -300,17 +300,24 @@ namespace MCPForUnity.Editor.Tools
             // - the array/list property itself (prop.isArray -> prop.arraySize)
             // - the synthetic leaf property "<array>.Array.size" (prop.intValue)
             //
-            // Different Unity versions/serialization edge cases can fail to resolve the synthetic leaf via FindProperty,
-            // so we fallback to resolving the array property and setting arraySize.
+            // Different Unity versions/serialization edge cases can fail to resolve the synthetic leaf via FindProperty
+            // (or can return different property types), so we keep a "best-effort" fallback:
+            // - Prefer acting on the requested path if it resolves.
+            // - If the requested path doesn't resolve, try to resolve the *array property* and set arraySize directly.
             SerializedProperty prop = so.FindProperty(propertyPath);
             SerializedProperty arrayProp = null;
             if (propertyPath.EndsWith(".Array.size", StringComparison.Ordinal))
             {
+                // Caller explicitly targeted the synthetic leaf. Resolve the parent array property as a fallback
+                // (Unity sometimes fails to resolve the synthetic leaf in certain serialization contexts).
                 var arrayPath = propertyPath.Substring(0, propertyPath.Length - ".Array.size".Length);
                 arrayProp = so.FindProperty(arrayPath);
             }
             else
             {
+                // Caller targeted either the array property itself (e.g., "items") or some other property.
+                // If it's already an array, we can resize it directly. Otherwise, we attempt to resolve
+                // a synthetic ".Array.size" leaf as a convenience, which some clients may pass.
                 arrayProp = prop != null && prop.isArray ? prop : so.FindProperty(propertyPath + ".Array.size");
             }
 
@@ -341,6 +348,7 @@ namespace MCPForUnity.Editor.Tools
             if ((prop.propertyType == SerializedPropertyType.Integer || prop.propertyType == SerializedPropertyType.ArraySize)
                 && propertyPath.EndsWith(".Array.size", StringComparison.Ordinal))
             {
+                // We successfully resolved the synthetic leaf; write the size through its intValue.
                 if (prop.intValue != newSize)
                 {
                     prop.intValue = newSize;
@@ -351,6 +359,7 @@ namespace MCPForUnity.Editor.Tools
 
             if (prop.isArray)
             {
+                // We resolved the array property itself; write through arraySize.
                 if (prop.arraySize != newSize)
                 {
                     prop.arraySize = newSize;
