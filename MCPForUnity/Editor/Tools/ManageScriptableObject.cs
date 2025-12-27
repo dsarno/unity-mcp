@@ -97,6 +97,11 @@ namespace MCPForUnity.Editor.Tools
                 return new ErrorResponse(CodeInvalidParams, new { message = "'assetName' is required." });
             }
 
+            if (assetName.Contains("/") || assetName.Contains("\\"))
+            {
+                return new ErrorResponse(CodeInvalidParams, new { message = "'assetName' must not contain path separators." });
+            }
+
             if (!TryNormalizeFolderPath(folderPath, out var normalizedFolder, out var folderNormalizeError))
             {
                 return new ErrorResponse(CodeInvalidFolderPath, new { message = folderNormalizeError, folderPath });
@@ -171,8 +176,6 @@ namespace MCPForUnity.Editor.Tools
                     instance.name = Path.GetFileNameWithoutExtension(finalPath);
                     AssetDatabase.CreateAsset(instance, finalPath);
                 }
-                
-                // AssetDatabase.ImportAsset(finalPath); 
             }
             catch (Exception ex)
             {
@@ -774,10 +777,7 @@ namespace MCPForUnity.Editor.Tools
             // Handle { "x": ..., "y": ... }
             if (token is JObject obj)
             {
-                float x = 0, y = 0;
-                bool hasX = TryGetFloat(obj["x"], out x);
-                bool hasY = TryGetFloat(obj["y"], out y);
-                if (hasX || hasY) // partial okay? usually stricter is better, but allow flexible
+                if (TryGetFloat(obj["x"], out float x) && TryGetFloat(obj["y"], out float y))
                 {
                     value = new Vector2(x, y);
                     return true;
@@ -803,12 +803,11 @@ namespace MCPForUnity.Editor.Tools
             // Handle { "x": ..., "y": ..., "z": ... }
             if (token is JObject obj)
             {
-                float x = 0, y = 0, z = 0;
-                TryGetFloat(obj["x"], out x);
-                TryGetFloat(obj["y"], out y);
-                TryGetFloat(obj["z"], out z);
-                value = new Vector3(x, y, z);
-                return true;
+                if (TryGetFloat(obj["x"], out float x) && TryGetFloat(obj["y"], out float y) && TryGetFloat(obj["z"], out float z))
+                {
+                    value = new Vector3(x, y, z);
+                    return true;
+                }
             }
             return false;
         }
@@ -831,13 +830,12 @@ namespace MCPForUnity.Editor.Tools
             // Handle { "x": ..., "y": ..., "z": ..., "w": ... }
             if (token is JObject obj)
             {
-                float x = 0, y = 0, z = 0, w = 0;
-                TryGetFloat(obj["x"], out x);
-                TryGetFloat(obj["y"], out y);
-                TryGetFloat(obj["z"], out z);
-                TryGetFloat(obj["w"], out w);
-                value = new Vector4(x, y, z, w);
-                return true;
+                if (TryGetFloat(obj["x"], out float x) && TryGetFloat(obj["y"], out float y) 
+                    && TryGetFloat(obj["z"], out float z) && TryGetFloat(obj["w"], out float w))
+                {
+                    value = new Vector4(x, y, z, w);
+                    return true;
+                }
             }
             return false;
         }
@@ -862,13 +860,14 @@ namespace MCPForUnity.Editor.Tools
             // Handle { "r": ..., "g": ..., "b": ..., "a": ... }
             if (token is JObject obj)
             {
-                float r = 0, g = 0, b = 0, a = 1;
-                TryGetFloat(obj["r"], out r);
-                TryGetFloat(obj["g"], out g);
-                TryGetFloat(obj["b"], out b);
-                TryGetFloat(obj["a"], out a);
-                value = new Color(r, g, b, a);
-                return true;
+                if (TryGetFloat(obj["r"], out float r) && TryGetFloat(obj["g"], out float g) && TryGetFloat(obj["b"], out float b))
+                {
+                    // Alpha is optional, defaults to 1.0
+                    float a = 1.0f;
+                    TryGetFloat(obj["a"], out a); 
+                    value = new Color(r, g, b, a);
+                    return true;
+                }
             }
             return false;
         }
