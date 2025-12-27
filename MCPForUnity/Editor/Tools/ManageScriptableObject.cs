@@ -118,11 +118,6 @@ namespace MCPForUnity.Editor.Tools
             string desiredPath = $"{normalizedFolder.TrimEnd('/')}/{fileName}";
             string finalPath = overwrite ? desiredPath : AssetDatabase.GenerateUniqueAssetPath(desiredPath);
 
-            if (overwrite && AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(finalPath) != null)
-            {
-                AssetDatabase.DeleteAsset(finalPath);
-            }
-
             ScriptableObject instance;
             try
             {
@@ -137,9 +132,37 @@ namespace MCPForUnity.Editor.Tools
                 return new ErrorResponse(CodeAssetCreateFailed, new { message = ex.Message, typeName = resolvedType.FullName });
             }
 
+            // GUID-preserving overwrite logic
+            bool isNewAsset = true;
             try
             {
-                AssetDatabase.CreateAsset(instance, finalPath);
+                if (overwrite)
+                {
+                    var existingAsset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(finalPath);
+                    if (existingAsset != null && existingAsset.GetType() == resolvedType)
+                    {
+                        // Preserve GUID by overwriting existing asset data in-place
+                        EditorUtility.CopySerialized(instance, existingAsset);
+                        UnityEngine.Object.DestroyImmediate(instance); // Destroy temporary instance
+                        instance = existingAsset; // Proceed with patching the existing asset
+                        isNewAsset = false;
+                        
+                        // Mark dirty to ensure changes are picked up
+                        EditorUtility.SetDirty(instance);
+                    }
+                    else if (existingAsset != null)
+                    {
+                        // Type mismatch or not a ScriptableObject - must delete and recreate to change type, losing GUID
+                        // (Or we could warn, but overwrite usually implies replacing)
+                        AssetDatabase.DeleteAsset(finalPath);
+                    }
+                }
+
+                if (isNewAsset)
+                {
+                    AssetDatabase.CreateAsset(instance, finalPath);
+                }
+                
                 AssetDatabase.ImportAsset(finalPath);
             }
             catch (Exception ex)
@@ -426,6 +449,7 @@ namespace MCPForUnity.Editor.Tools
             message = null;
             try
             {
+                // Supported Types: Integer, Boolean, Float, String, Enum, Vector2, Vector3, Vector4, Color
                 switch (prop.propertyType)
                 {
                     case SerializedPropertyType.Integer:
@@ -446,6 +470,22 @@ namespace MCPForUnity.Editor.Tools
 
                     case SerializedPropertyType.Enum:
                         return TrySetEnum(prop, valueToken, out message);
+
+                    case SerializedPropertyType.Vector2:
+                        if (!TryGetVector2(valueToken, out var v2)) { message = "Expected Vector2 (array or object)."; return false; }
+                        prop.vector2Value = v2; message = "Set Vector2."; return true;
+
+                    case SerializedPropertyType.Vector3:
+                        if (!TryGetVector3(valueToken, out var v3)) { message = "Expected Vector3 (array or object)."; return false; }
+                        prop.vector3Value = v3; message = "Set Vector3."; return true;
+
+                    case SerializedPropertyType.Vector4:
+                        if (!TryGetVector4(valueToken, out var v4)) { message = "Expected Vector4 (array or object)."; return false; }
+                        prop.vector4Value = v4; message = "Set Vector4."; return true;
+
+                    case SerializedPropertyType.Color:
+                        if (!TryGetColor(valueToken, out var col)) { message = "Expected Color (array or object)."; return false; }
+                        prop.colorValue = col; message = "Set Color."; return true;
 
                     default:
                         message = $"Unsupported SerializedPropertyType: {prop.propertyType}";
@@ -706,6 +746,124 @@ namespace MCPForUnity.Editor.Tools
             catch { return false; }
         }
 
+        // --- Vector/Color Parsing Helpers ---
+
+        private static bool TryGetVector2(JToken token, out Vector2 value)
+        {
+            value = default;
+            if (token == null || token.Type == JTokenType.Null) return false;
+
+            // Handle [x, y]
+            if (token is JArray arr && arr.Count >= 2)
+            {
+                if (TryGetFloat(arr[0], out float x) && TryGetFloat(arr[1], out float y))
+                {
+                    value = new Vector2(x, y);
+                    return true;
+                }
+            }
+            // Handle { "x": ..., "y": ... }
+            if (token is JObject obj)
+            {
+                float x = 0, y = 0;
+                bool hasX = TryGetFloat(obj["x"], out x);
+                bool hasY = TryGetFloat(obj["y"], out y);
+                if (hasX || hasY) // partial okay? usually stricter is better, but allow flexible
+                {
+                    value = new Vector2(x, y);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool TryGetVector3(JToken token, out Vector3 value)
+        {
+            value = default;
+            if (token == null || token.Type == JTokenType.Null) return false;
+
+            // Handle [x, y, z]
+            if (token is JArray arr && arr.Count >= 3)
+            {
+                if (TryGetFloat(arr[0], out float x) && TryGetFloat(arr[1], out float y) && TryGetFloat(arr[2], out float z))
+                {
+                    value = new Vector3(x, y, z);
+                    return true;
+                }
+            }
+            // Handle { "x": ..., "y": ..., "z": ... }
+            if (token is JObject obj)
+            {
+                float x = 0, y = 0, z = 0;
+                TryGetFloat(obj["x"], out x);
+                TryGetFloat(obj["y"], out y);
+                TryGetFloat(obj["z"], out z);
+                value = new Vector3(x, y, z);
+                return true;
+            }
+            return false;
+        }
+
+        private static bool TryGetVector4(JToken token, out Vector4 value)
+        {
+            value = default;
+            if (token == null || token.Type == JTokenType.Null) return false;
+
+            // Handle [x, y, z, w]
+            if (token is JArray arr && arr.Count >= 4)
+            {
+                if (TryGetFloat(arr[0], out float x) && TryGetFloat(arr[1], out float y) 
+                    && TryGetFloat(arr[2], out float z) && TryGetFloat(arr[3], out float w))
+                {
+                    value = new Vector4(x, y, z, w);
+                    return true;
+                }
+            }
+            // Handle { "x": ..., "y": ..., "z": ..., "w": ... }
+            if (token is JObject obj)
+            {
+                float x = 0, y = 0, z = 0, w = 0;
+                TryGetFloat(obj["x"], out x);
+                TryGetFloat(obj["y"], out y);
+                TryGetFloat(obj["z"], out z);
+                TryGetFloat(obj["w"], out w);
+                value = new Vector4(x, y, z, w);
+                return true;
+            }
+            return false;
+        }
+
+        private static bool TryGetColor(JToken token, out Color value)
+        {
+            value = default;
+            if (token == null || token.Type == JTokenType.Null) return false;
+
+            // Handle [r, g, b, a]
+            if (token is JArray arr && arr.Count >= 3)
+            {
+                float r = 0, g = 0, b = 0, a = 1;
+                bool ok = TryGetFloat(arr[0], out r) && TryGetFloat(arr[1], out g) && TryGetFloat(arr[2], out b);
+                if (arr.Count > 3) TryGetFloat(arr[3], out a);
+                if (ok)
+                {
+                    value = new Color(r, g, b, a);
+                    return true;
+                }
+            }
+            // Handle { "r": ..., "g": ..., "b": ..., "a": ... }
+            if (token is JObject obj)
+            {
+                float r = 0, g = 0, b = 0, a = 1;
+                TryGetFloat(obj["r"], out r);
+                TryGetFloat(obj["g"], out g);
+                TryGetFloat(obj["b"], out b);
+                TryGetFloat(obj["a"], out a);
+                value = new Color(r, g, b, a);
+                return true;
+            }
+            return false;
+        }
+
         private static string NormalizeAction(string raw)
         {
             var s = raw.Trim();
@@ -760,5 +918,3 @@ namespace MCPForUnity.Editor.Tools
         }
     }
 }
-
-
