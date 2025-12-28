@@ -500,7 +500,9 @@ namespace MCPForUnity.Editor.Tools
                 }
 
                 // Defaults tuned for safety; callers can override but we clamp to sane maxes.
-                int resolvedPageSize = Mathf.Clamp(cmd.pageSize ?? 200, 1, 500);
+                // NOTE: pageSize is "items per page", not "number of pages".
+                // Keep this conservative to reduce peak response sizes when callers omit page_size.
+                int resolvedPageSize = Mathf.Clamp(cmd.pageSize ?? 50, 1, 500);
                 int resolvedCursor = Mathf.Max(0, cmd.cursor ?? 0);
                 int resolvedMaxNodes = Mathf.Clamp(cmd.maxNodes ?? 1000, 1, 5000);
                 int effectiveTake = Mathf.Min(resolvedPageSize, resolvedMaxNodes);
