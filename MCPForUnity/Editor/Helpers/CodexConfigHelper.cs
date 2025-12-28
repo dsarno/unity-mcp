@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Services;
 using MCPForUnity.External.Tommy;
 using UnityEditor;
+using UnityEngine;
 
 namespace MCPForUnity.Editor.Helpers
 {
@@ -37,9 +39,17 @@ namespace MCPForUnity.Editor.Helpers
             {
                 // Stdio mode: Use command and args
                 var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+                bool devForceRefresh = false;
+                try { devForceRefresh = EditorPrefs.GetBool(EditorPrefKeys.DevModeForceServerRefresh, false); } catch { }
+
                 unityMCP["command"] = uvxPath;
 
                 var args = new TomlArray();
+                if (devForceRefresh)
+                {
+                    args.Add(new TomlString { Value = "--no-cache" });
+                    args.Add(new TomlString { Value = "--refresh" });
+                }
                 if (!string.IsNullOrEmpty(fromUrl))
                 {
                     args.Add(new TomlString { Value = "--from" });
@@ -184,9 +194,17 @@ namespace MCPForUnity.Editor.Helpers
             {
                 // Stdio mode: Use command and args
                 var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
+                bool devForceRefresh = false;
+                try { devForceRefresh = EditorPrefs.GetBool(EditorPrefKeys.DevModeForceServerRefresh, false); } catch { }
+
                 unityMCP["command"] = new TomlString { Value = uvxPath };
 
                 var argsArray = new TomlArray();
+                if (devForceRefresh)
+                {
+                    argsArray.Add(new TomlString { Value = "--no-cache" });
+                    argsArray.Add(new TomlString { Value = "--refresh" });
+                }
                 if (!string.IsNullOrEmpty(fromUrl))
                 {
                     argsArray.Add(new TomlString { Value = "--from" });

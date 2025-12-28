@@ -81,7 +81,10 @@ namespace MCPForUnity.Editor.Helpers
                 // Stdio mode: Use uvx command
                 var (uvxPath, fromUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
 
-                var toolArgs = BuildUvxArgs(fromUrl, packageName);
+                bool devForceRefresh = false;
+                try { devForceRefresh = EditorPrefs.GetBool(EditorPrefKeys.DevModeForceServerRefresh, false); } catch { }
+
+                var toolArgs = BuildUvxArgs(fromUrl, packageName, devForceRefresh);
 
                 if (ShouldUseWindowsCmdShim(client))
                 {
@@ -149,9 +152,13 @@ namespace MCPForUnity.Editor.Helpers
             return created;
         }
 
-        private static IList<string> BuildUvxArgs(string fromUrl, string packageName)
+        private static IList<string> BuildUvxArgs(string fromUrl, string packageName, bool devForceRefresh)
         {
-            var args = new List<string> { packageName };
+            // Dev mode: force a fresh install/resolution (avoids stale cached builds while iterating).
+            // `--no-cache` is the key flag; `--refresh` ensures metadata is revalidated.
+            var args = devForceRefresh
+                ? new List<string> { "--no-cache", "--refresh", packageName }
+                : new List<string> { packageName };
 
             if (!string.IsNullOrEmpty(fromUrl))
             {

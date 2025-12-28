@@ -8,6 +8,32 @@ import time
 from typing import AsyncIterator, Any
 from urllib.parse import urlparse
 
+# Workaround for environments where tool signature evaluation runs with a globals
+# dict that does not include common `typing` names (e.g. when annotations are strings
+# and evaluated via `eval()` during schema generation).
+# Making these names available in builtins avoids `NameError: Annotated/Literal/... is not defined`.
+try:  # pragma: no cover - startup safety guard
+    import builtins
+    import typing as _typing
+
+    _typing_names = (
+        "Annotated",
+        "Literal",
+        "Any",
+        "Union",
+        "Optional",
+        "Dict",
+        "List",
+        "Tuple",
+        "Set",
+        "FrozenSet",
+    )
+    for _name in _typing_names:
+        if not hasattr(builtins, _name) and hasattr(_typing, _name):
+            setattr(builtins, _name, getattr(_typing, _name))  # type: ignore[attr-defined]
+except Exception:
+    pass
+
 from fastmcp import FastMCP
 from logging.handlers import RotatingFileHandler
 from starlette.requests import Request
