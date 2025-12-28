@@ -27,6 +27,14 @@ async def manage_scene(
                            "Unity build index (quote as string, e.g., '0')."] | None = None,
     screenshot_file_name: Annotated[str, "Screenshot file name (optional). Defaults to timestamp when omitted."] | None = None,
     screenshot_super_size: Annotated[int | str, "Screenshot supersize multiplier (integer ≥1). Optional." ] | None = None,
+    # --- get_hierarchy paging/safety ---
+    parent: Annotated[str | int, "Optional parent GameObject reference (name/path/instanceID) to list direct children."] | None = None,
+    page_size: Annotated[int | str, "Page size for get_hierarchy paging."] | None = None,
+    cursor: Annotated[int | str, "Opaque cursor for paging (offset)."] | None = None,
+    max_nodes: Annotated[int | str, "Hard cap on returned nodes per request (safety)."] | None = None,
+    max_depth: Annotated[int | str, "Accepted for forward-compatibility; current paging returns a single level."] | None = None,
+    max_children_per_node: Annotated[int | str, "Child paging hint (safety)."] | None = None,
+    include_transform: Annotated[bool | str, "If true, include local transform in node summaries."] | None = None,
 ) -> dict[str, Any]:
     # Get active instance from session state
     # Removed session_state import
@@ -47,9 +55,32 @@ async def manage_scene(
                 return int(float(s))
             except Exception:
                 return default
+        
+        def _coerce_bool(value, default=None):
+            if value is None:
+                return default
+            if isinstance(value, bool):
+                return value
+            try:
+                s = str(value).strip().lower()
+                if s in ("", "none", "null"):
+                    return default
+                if s in ("true", "1", "yes", "y", "on"):
+                    return True
+                if s in ("false", "0", "no", "n", "off"):
+                    return False
+            except Exception:
+                return default
+            return default
 
         coerced_build_index = _coerce_int(build_index, default=None)
         coerced_super_size = _coerce_int(screenshot_super_size, default=None)
+        coerced_page_size = _coerce_int(page_size, default=None)
+        coerced_cursor = _coerce_int(cursor, default=None)
+        coerced_max_nodes = _coerce_int(max_nodes, default=None)
+        coerced_max_depth = _coerce_int(max_depth, default=None)
+        coerced_max_children_per_node = _coerce_int(max_children_per_node, default=None)
+        coerced_include_transform = _coerce_bool(include_transform, default=None)
 
         params: dict[str, Any] = {"action": action}
         if name:
@@ -62,6 +93,22 @@ async def manage_scene(
             params["fileName"] = screenshot_file_name
         if coerced_super_size is not None:
             params["superSize"] = coerced_super_size
+        
+        # get_hierarchy paging/safety params (optional)
+        if parent is not None:
+            params["parent"] = parent
+        if coerced_page_size is not None:
+            params["pageSize"] = coerced_page_size
+        if coerced_cursor is not None:
+            params["cursor"] = coerced_cursor
+        if coerced_max_nodes is not None:
+            params["maxNodes"] = coerced_max_nodes
+        if coerced_max_depth is not None:
+            params["maxDepth"] = coerced_max_depth
+        if coerced_max_children_per_node is not None:
+            params["maxChildrenPerNode"] = coerced_max_children_per_node
+        if coerced_include_transform is not None:
+            params["includeTransform"] = coerced_include_transform
 
         # Use centralized retry helper with instance routing
         response = await send_with_unity_instance(async_send_command_with_retry, unity_instance, "manage_scene", params)

@@ -68,6 +68,11 @@ async def manage_gameobject(
     # Controls whether serialization of private [SerializeField] fields is included
     includeNonPublicSerialized: Annotated[bool | str,
                                           "Controls whether serialization of private [SerializeField] fields is included (accepts true/false or 'true'/'false')"] | None = None,
+    # --- Paging/safety for get_components ---
+    page_size: Annotated[int | str, "Page size for get_components paging."] | None = None,
+    cursor: Annotated[int | str, "Opaque cursor for get_components paging (offset)."] | None = None,
+    max_components: Annotated[int | str, "Hard cap on returned components per request (safety)."] | None = None,
+    include_properties: Annotated[bool | str, "If true, include serialized component properties (bounded)."] | None = None,
     # --- Parameters for 'duplicate' ---
     new_name: Annotated[str,
                         "New name for the duplicated object (default: SourceName_Copy)"] | None = None,
@@ -92,6 +97,21 @@ async def manage_gameobject(
             "success": False,
             "message": "Missing required parameter 'action'. Valid actions: create, modify, delete, find, add_component, remove_component, set_component_property, get_components, get_component, duplicate, move_relative"
         }
+
+    def _coerce_int(value, default=None):
+        if value is None:
+            return default
+        try:
+            if isinstance(value, bool):
+                return default
+            if isinstance(value, int):
+                return int(value)
+            s = str(value).strip()
+            if s.lower() in ("", "none", "null"):
+                return default
+            return int(float(s))
+        except Exception:
+            return default
 
     # Coercers to tolerate stringified booleans and vectors
     def _coerce_vec(value, default=None):
@@ -134,7 +154,11 @@ async def manage_gameobject(
     search_in_children = coerce_bool(search_in_children)
     search_inactive = coerce_bool(search_inactive)
     includeNonPublicSerialized = coerce_bool(includeNonPublicSerialized)
+    include_properties = coerce_bool(include_properties)
     world_space = coerce_bool(world_space, default=True)
+    page_size = _coerce_int(page_size, default=page_size)
+    cursor = _coerce_int(cursor, default=cursor)
+    max_components = _coerce_int(max_components, default=max_components)
 
     # Coerce 'component_properties' from JSON string to dict for client compatibility
     component_properties = parse_json_payload(component_properties)
@@ -194,6 +218,10 @@ async def manage_gameobject(
             "searchInactive": search_inactive,
             "componentName": component_name,
             "includeNonPublicSerialized": includeNonPublicSerialized,
+            "pageSize": page_size,
+            "cursor": cursor,
+            "maxComponents": max_components,
+            "includeProperties": include_properties,
             # Parameters for 'duplicate'
             "new_name": new_name,
             "offset": offset,
