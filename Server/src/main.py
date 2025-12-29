@@ -275,10 +275,10 @@ Payload sizing & paging (important):
   - Use `page_size` + `cursor` and follow `next_cursor` until null.
   - `page_size` is **items per page**; recommended starting point: **50**.
 - `manage_gameobject(action="get_components")`:
-  - Start with `include_properties=false` (metadata-only) and small `page_size` (e.g. **10–25**).
-  - Only request `include_properties=true` when needed; keep `page_size` small (e.g. **3–10**) to bound payloads.
+  - Start with `include_properties=false` (metadata-only) and small `page_size` (e.g. **10-25**).
+  - Only request `include_properties=true` when needed; keep `page_size` small (e.g. **3-10**) to bound payloads.
 - `manage_asset(action="search")`:
-  - Use paging (`page_size`, `page_number`) and keep `page_size` modest (e.g. **25–50**) to avoid token-heavy responses.
+  - Use paging (`page_size`, `page_number`) and keep `page_size` modest (e.g. **25-50**) to avoid token-heavy responses.
   - Keep `generate_preview=false` unless you explicitly need thumbnails (previews may include large base64 payloads).
 """
 )

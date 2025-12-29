@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
-from services.tools.utils import parse_json_payload
+from services.tools.utils import parse_json_payload, coerce_int
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 
@@ -89,24 +89,8 @@ async def manage_asset(
         await ctx.error(parse_error)
         return {"success": False, "message": parse_error}
 
-    # Coerce numeric inputs defensively
-    def _coerce_int(value, default=None):
-        if value is None:
-            return default
-        try:
-            if isinstance(value, bool):
-                return default
-            if isinstance(value, int):
-                return int(value)
-            s = str(value).strip()
-            if s.lower() in ("", "none", "null"):
-                return default
-            return int(float(s))
-        except Exception:
-            return default
-
-    page_size = _coerce_int(page_size)
-    page_number = _coerce_int(page_number)
+    page_size = coerce_int(page_size)
+    page_number = coerce_int(page_number)
 
     # --- Payload-safe normalization for common LLM mistakes (search) ---
     # Unity's C# handler treats `path` as a folder scope. If a model mistakenly puts a query like
@@ -116,7 +100,8 @@ async def manage_asset(
     if action_l == "search":
         try:
             raw_path = (path or "").strip()
-        except Exception:
+        except (AttributeError, TypeError):
+            # Handle case where path is not a string despite type annotation
             raw_path = ""
 
         # If the caller put an AssetDatabase query into `path`, treat it as `search_pattern`.

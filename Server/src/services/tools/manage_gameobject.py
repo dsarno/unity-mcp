@@ -7,7 +7,7 @@ from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
-from services.tools.utils import coerce_bool, parse_json_payload
+from services.tools.utils import coerce_bool, parse_json_payload, coerce_int
 
 
 @mcp_for_unity_tool(
@@ -98,21 +98,6 @@ async def manage_gameobject(
             "message": "Missing required parameter 'action'. Valid actions: create, modify, delete, find, add_component, remove_component, set_component_property, get_components, get_component, duplicate, move_relative"
         }
 
-    def _coerce_int(value, default=None):
-        if value is None:
-            return default
-        try:
-            if isinstance(value, bool):
-                return default
-            if isinstance(value, int):
-                return int(value)
-            s = str(value).strip()
-            if s.lower() in ("", "none", "null"):
-                return default
-            return int(float(s))
-        except Exception:
-            return default
-
     # Coercers to tolerate stringified booleans and vectors
     def _coerce_vec(value, default=None):
         if value is None:
@@ -156,9 +141,10 @@ async def manage_gameobject(
     includeNonPublicSerialized = coerce_bool(includeNonPublicSerialized)
     include_properties = coerce_bool(include_properties)
     world_space = coerce_bool(world_space, default=True)
-    page_size = _coerce_int(page_size, default=page_size)
-    cursor = _coerce_int(cursor, default=cursor)
-    max_components = _coerce_int(max_components, default=max_components)
+    # If coercion fails, omit these fields (None) rather than preserving invalid input.
+    page_size = coerce_int(page_size, default=None)
+    cursor = coerce_int(cursor, default=None)
+    max_components = coerce_int(max_components, default=None)
 
     # Coerce 'component_properties' from JSON string to dict for client compatibility
     component_properties = parse_json_payload(component_properties)

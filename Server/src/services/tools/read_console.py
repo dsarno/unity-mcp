@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import Context
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
+from services.tools.utils import coerce_int
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 
@@ -58,22 +59,7 @@ async def read_console(
         action = action.lower()
 
     # Coerce count defensively (string/float -> int)
-    def _coerce_int(value, default=None):
-        if value is None:
-            return default
-        try:
-            if isinstance(value, bool):
-                return default
-            if isinstance(value, int):
-                return int(value)
-            s = str(value).strip()
-            if s.lower() in ("", "none", "null"):
-                return default
-            return int(float(s))
-        except Exception:
-            return default
-
-    count = _coerce_int(count)
+    count = coerce_int(count)
 
     # Prepare parameters for the C# handler
     params_dict = {

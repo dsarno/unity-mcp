@@ -156,15 +156,19 @@ namespace MCPForUnity.Editor.Helpers
         {
             // Dev mode: force a fresh install/resolution (avoids stale cached builds while iterating).
             // `--no-cache` is the key flag; `--refresh` ensures metadata is revalidated.
-            var args = devForceRefresh
-                ? new List<string> { "--no-cache", "--refresh", packageName }
-                : new List<string> { packageName };
-
+            // Keep ordering consistent with other uvx builders: dev flags first, then --from <url>, then package name.
+            var args = new List<string>();
+            if (devForceRefresh)
+            {
+                args.Add("--no-cache");
+                args.Add("--refresh");
+            }
             if (!string.IsNullOrEmpty(fromUrl))
             {
-                args.Insert(0, fromUrl);
-                args.Insert(0, "--from");
+                args.Add("--from");
+                args.Add(fromUrl);
             }
+            args.Add(packageName);
 
             args.Add("--transport");
             args.Add("stdio");

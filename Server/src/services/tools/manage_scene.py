@@ -3,6 +3,7 @@ from typing import Annotated, Literal, Any
 from fastmcp import Context
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
+from services.tools.utils import coerce_int
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 
@@ -42,19 +43,7 @@ async def manage_scene(
     try:
         # Coerce numeric inputs defensively
         def _coerce_int(value, default=None):
-            if value is None:
-                return default
-            try:
-                if isinstance(value, bool):
-                    return default
-                if isinstance(value, int):
-                    return int(value)
-                s = str(value).strip()
-                if s.lower() in ("", "none", "null"):
-                    return default
-                return int(float(s))
-            except Exception:
-                return default
+            return coerce_int(value, default=default)
         
         def _coerce_bool(value, default=None):
             if value is None:

@@ -543,9 +543,10 @@ namespace MCPForUnity.Editor.Clients
             string gitUrl = AssetPathUtility.GetMcpServerGitUrl();
             bool devForceRefresh = false;
             try { devForceRefresh = EditorPrefs.GetBool(EditorPrefKeys.DevModeForceServerRefresh, false); } catch { }
+            string devFlags = devForceRefresh ? "--no-cache --refresh " : string.Empty;
 
             return "# Register the MCP server with Claude Code:\n" +
-                   $"claude mcp add --transport stdio UnityMCP -- \"{uvxPath}\" {(devForceRefresh ? "--no-cache --refresh " : string.Empty)}--from \"{gitUrl}\" mcp-for-unity\n\n" +
+                   $"claude mcp add --transport stdio UnityMCP -- \"{uvxPath}\" {devFlags}--from \"{gitUrl}\" mcp-for-unity\n\n" +
                    "# Unregister the MCP server:\n" +
                    "claude mcp remove UnityMCP\n\n" +
                    "# List registered servers:\n" +

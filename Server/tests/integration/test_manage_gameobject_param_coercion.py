@@ -32,8 +32,8 @@ async def test_manage_gameobject_boolean_and_tag_mapping(monkeypatch):
     assert "data" in resp
     # ensure tag mapped to searchTerm and booleans passed through; C# side coerces true/false already
     assert captured["params"]["searchTerm"] == "Player"
-    assert captured["params"]["findAll"] == "true" or captured["params"]["findAll"] is True
-    assert captured["params"]["searchInactive"] in ("0", False, 0)
+    assert captured["params"]["findAll"] is True
+    assert captured["params"]["searchInactive"] is False
 
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_manage_gameobject_get_components_paging_params_pass_through(monke
     assert p["action"] == "get_components"
     assert p["target"] == "Player"
     assert p["searchMethod"] == "by_name"
-    assert p["pageSize"] in (25, "25")
-    assert p["cursor"] in (50, "50")
-    assert p["maxComponents"] in (100, "100")
-    assert p["includeProperties"] in (True, "true")
+    assert p["pageSize"] == 25
+    assert p["cursor"] == 50
+    assert p["maxComponents"] == 100
+    assert p["includeProperties"] is True
