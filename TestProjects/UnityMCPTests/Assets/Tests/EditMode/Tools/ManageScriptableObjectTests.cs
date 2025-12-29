@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using System.Threading;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Tools;
 using MCPForUnityTests.Editor.Tools.Fixtures;
@@ -22,6 +23,7 @@ namespace MCPForUnityTests.Editor.Tools
         [SetUp]
         public void SetUp()
         {
+            WaitForUnityReady();
             EnsureFolder("Assets/Temp");
             // Start from a clean slate every time (prevents intermittent setup failures).
             if (AssetDatabase.IsValidFolder(TempRoot))
@@ -45,6 +47,7 @@ namespace MCPForUnityTests.Editor.Tools
             AssetDatabase.CreateAsset(new Material(shader), _matBPath);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
+            WaitForUnityReady();
         }
 
         [TearDown]
@@ -303,6 +306,22 @@ namespace MCPForUnityTests.Editor.Tools
         private static JObject ToJObject(object result)
         {
             return result as JObject ?? JObject.FromObject(result);
+        }
+
+        private static void WaitForUnityReady(double timeoutSeconds = 30.0)
+        {
+            // Some EditMode tests trigger script compilation/domain reload. Tools like ManageScriptableObject
+            // intentionally return "compiling_or_reloading" during these windows. Wait until Unity is stable
+            // to make tests deterministic.
+            double start = EditorApplication.timeSinceStartup;
+            while (EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                if (EditorApplication.timeSinceStartup - start > timeoutSeconds)
+                {
+                    Assert.Fail($"Timed out waiting for Unity to finish compiling/updating (>{timeoutSeconds:0.0}s).");
+                }
+                Thread.Sleep(50);
+            }
         }
     }
 }

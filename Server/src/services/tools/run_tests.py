@@ -55,10 +55,6 @@ async def run_tests(
 ) -> RunTestsResponse:
     unity_instance = get_unity_instance_from_context(ctx)
 
-    # Coerce timeout defensively (string/float -> int)
-    def _coerce_int(value, default=None):
-        return coerce_int(value, default=default)
-
     # Coerce string or list to list of strings
     def _coerce_string_list(value) -> list[str] | None:
         if value is None:
@@ -71,7 +67,7 @@ async def run_tests(
         return None
 
     params: dict[str, Any] = {"mode": mode}
-    ts = _coerce_int(timeout_seconds)
+    ts = coerce_int(timeout_seconds)
     if ts is not None:
         params["timeoutSeconds"] = ts
 

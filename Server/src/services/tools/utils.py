@@ -68,7 +68,7 @@ def coerce_int(value: Any, default: int | None = None) -> int | None:
         if isinstance(value, bool):
             return default
         if isinstance(value, int):
-            return int(value)
+            return value
         s = str(value).strip()
         if s.lower() in ("", "none", "null"):
             return default

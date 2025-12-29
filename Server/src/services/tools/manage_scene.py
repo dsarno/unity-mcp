@@ -3,7 +3,7 @@ from typing import Annotated, Literal, Any
 from fastmcp import Context
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
-from services.tools.utils import coerce_int
+from services.tools.utils import coerce_int, coerce_bool
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 
@@ -41,35 +41,14 @@ async def manage_scene(
     # Removed session_state import
     unity_instance = get_unity_instance_from_context(ctx)
     try:
-        # Coerce numeric inputs defensively
-        def _coerce_int(value, default=None):
-            return coerce_int(value, default=default)
-        
-        def _coerce_bool(value, default=None):
-            if value is None:
-                return default
-            if isinstance(value, bool):
-                return value
-            try:
-                s = str(value).strip().lower()
-                if s in ("", "none", "null"):
-                    return default
-                if s in ("true", "1", "yes", "y", "on"):
-                    return True
-                if s in ("false", "0", "no", "n", "off"):
-                    return False
-            except Exception:
-                return default
-            return default
-
-        coerced_build_index = _coerce_int(build_index, default=None)
-        coerced_super_size = _coerce_int(screenshot_super_size, default=None)
-        coerced_page_size = _coerce_int(page_size, default=None)
-        coerced_cursor = _coerce_int(cursor, default=None)
-        coerced_max_nodes = _coerce_int(max_nodes, default=None)
-        coerced_max_depth = _coerce_int(max_depth, default=None)
-        coerced_max_children_per_node = _coerce_int(max_children_per_node, default=None)
-        coerced_include_transform = _coerce_bool(include_transform, default=None)
+        coerced_build_index = coerce_int(build_index, default=None)
+        coerced_super_size = coerce_int(screenshot_super_size, default=None)
+        coerced_page_size = coerce_int(page_size, default=None)
+        coerced_cursor = coerce_int(cursor, default=None)
+        coerced_max_nodes = coerce_int(max_nodes, default=None)
+        coerced_max_depth = coerce_int(max_depth, default=None)
+        coerced_max_children_per_node = coerce_int(max_children_per_node, default=None)
+        coerced_include_transform = coerce_bool(include_transform, default=None)
 
         params: dict[str, Any] = {"action": action}
         if name:
