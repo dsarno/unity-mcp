@@ -73,6 +73,10 @@ namespace MCPForUnityTests.Editor.Helpers
             {
                 MCPServiceLocator.Register<IPlatformService>(_originalPlatformService);
             }
+            else
+            {
+                MCPServiceLocator.Register<IPlatformService>(new PlatformService());
+            }
         }
 
         [OneTimeTearDown]
