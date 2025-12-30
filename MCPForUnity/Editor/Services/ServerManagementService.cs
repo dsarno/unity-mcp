@@ -2,6 +2,9 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
 using UnityEditor;
@@ -14,6 +17,136 @@ namespace MCPForUnity.Editor.Services
     /// </summary>
     public class ServerManagementService : IServerManagementService
     {
+        private static readonly HashSet<int> LoggedStopDiagnosticsPids = new HashSet<int>();
+        private static readonly object LocalHttpServerProcessLock = new object();
+        private static System.Diagnostics.Process LocalHttpServerProcess;
+        private static bool OpenedHttpServerLogViewerThisSession;
+
+        private static string GetProjectRootPath()
+        {
+            try
+            {
+                // Application.dataPath is ".../<Project>/Assets"
+                return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            }
+            catch
+            {
+                return Application.dataPath;
+            }
+        }
+
+        private static string GetLocalHttpServerLogDirectory()
+        {
+            // Prefer Library so it stays project-scoped and out of version control.
+            return Path.Combine(GetProjectRootPath(), "Library", "MCPForUnity", "Logs");
+        }
+
+        private static string GetLocalHttpServerLogPath()
+        {
+            return Path.Combine(GetLocalHttpServerLogDirectory(), "mcp_http_server.log");
+        }
+
+        private static string QuoteIfNeeded(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            return s.IndexOf(' ') >= 0 ? $"\"{s}\"" : s;
+        }
+
+        private static string NormalizeForMatch(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            var sb = new StringBuilder(s.Length);
+            foreach (char c in s)
+            {
+                if (char.IsWhiteSpace(c)) continue;
+                sb.Append(char.ToLowerInvariant(c));
+            }
+            return sb.ToString();
+        }
+
+        private static void ClearLocalServerPidTracking()
+        {
+            try { EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerPid); } catch { }
+            try { EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerPort); } catch { }
+            try { EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerStartedUtc); } catch { }
+            try { EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerPidArgsHash); } catch { }
+        }
+
+        private static void StoreLocalServerPidTracking(int pid, int port, string argsHash = null)
+        {
+            try { EditorPrefs.SetInt(EditorPrefKeys.LastLocalHttpServerPid, pid); } catch { }
+            try { EditorPrefs.SetInt(EditorPrefKeys.LastLocalHttpServerPort, port); } catch { }
+            try { EditorPrefs.SetString(EditorPrefKeys.LastLocalHttpServerStartedUtc, DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)); } catch { }
+            try
+            {
+                if (!string.IsNullOrEmpty(argsHash))
+                {
+                    EditorPrefs.SetString(EditorPrefKeys.LastLocalHttpServerPidArgsHash, argsHash);
+                }
+                else
+                {
+                    EditorPrefs.DeleteKey(EditorPrefKeys.LastLocalHttpServerPidArgsHash);
+                }
+            }
+            catch { }
+        }
+
+        private static string ComputeShortHash(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return string.Empty;
+            try
+            {
+                using var sha = SHA256.Create();
+                byte[] bytes = Encoding.UTF8.GetBytes(input);
+                byte[] hash = sha.ComputeHash(bytes);
+                // 8 bytes => 16 hex chars is plenty as a stable fingerprint for our purposes.
+                var sb = new StringBuilder(16);
+                for (int i = 0; i < 8 && i < hash.Length; i++)
+                {
+                    sb.Append(hash[i].ToString("x2"));
+                }
+                return sb.ToString();
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static bool TryGetStoredLocalServerPid(int expectedPort, out int pid)
+        {
+            pid = 0;
+            try
+            {
+                int storedPid = EditorPrefs.GetInt(EditorPrefKeys.LastLocalHttpServerPid, 0);
+                int storedPort = EditorPrefs.GetInt(EditorPrefKeys.LastLocalHttpServerPort, 0);
+                string storedUtc = EditorPrefs.GetString(EditorPrefKeys.LastLocalHttpServerStartedUtc, string.Empty);
+
+                if (storedPid <= 0 || storedPort != expectedPort)
+                {
+                    return false;
+                }
+
+                // Only trust the stored PID for a short window to avoid PID reuse issues.
+                // (We still verify the PID is listening on the expected port before killing.)
+                if (!string.IsNullOrEmpty(storedUtc)
+                    && DateTime.TryParse(storedUtc, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var startedAt))
+                {
+                    if ((DateTime.UtcNow - startedAt) > TimeSpan.FromHours(6))
+                    {
+                        return false;
+                    }
+                }
+
+                pid = storedPid;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary>
         /// Clear the local uvx cache for the MCP server package
         /// </summary>
@@ -155,12 +288,12 @@ namespace MCPForUnity.Editor.Services
         }
 
         /// <summary>
-        /// Start the local HTTP server in a new terminal window.
+        /// Start the local HTTP server as a Unity-owned process.
         /// Stops any existing server on the port and clears the uvx cache first.
         /// </summary>
         public bool StartLocalHttpServer()
         {
-            if (!TryGetLocalHttpServerCommand(out var command, out var error))
+            if (!TryGetLocalHttpServerCommandParts(out var fileName, out var arguments, out var displayCommand, out var error))
             {
                 EditorUtility.DisplayDialog(
                     "Cannot Start HTTP Server",
@@ -169,29 +302,147 @@ namespace MCPForUnity.Editor.Services
                 return false;
             }
 
-            // First, try to stop any existing server
-            StopLocalHttpServer();
+            // First, try to stop any existing server (quietly; we'll only warn if the port remains occupied).
+            StopLocalHttpServerInternal(quiet: true);
+
+            // If the port is still occupied, don't start and explain why (avoid confusing "refusing to stop" warnings).
+            try
+            {
+                string httpUrl = HttpEndpointUtility.GetBaseUrl();
+                if (Uri.TryCreate(httpUrl, UriKind.Absolute, out var uri) && uri.Port > 0)
+                {
+                    var remaining = GetListeningProcessIdsForPort(uri.Port);
+                    if (remaining.Count > 0)
+                    {
+                        EditorUtility.DisplayDialog(
+                            "Port In Use",
+                            $"Cannot start the local HTTP server because port {uri.Port} is already in use by PID(s): " +
+                            $"{string.Join(", ", remaining)}\n\n" +
+                            "MCP For Unity will not terminate unrelated processes. Stop the owning process manually or change the HTTP URL.",
+                            "OK");
+                        return false;
+                    }
+                }
+            }
+            catch { }
 
             // Note: Dev mode cache-busting is handled by `uvx --no-cache --refresh` in the generated command.
 
+            string logPath = GetLocalHttpServerLogPath();
             if (EditorUtility.DisplayDialog(
                 "Start Local HTTP Server",
-                $"This will start the MCP server in HTTP mode:\n\n{command}\n\n" +
-                "The server will run in a separate terminal window. " +
-                "Close the terminal to stop the server.\n\n" +
+                $"This will start the MCP server in HTTP mode:\n\n{displayCommand}\n\n" +
+                "The server will run as a background process managed by Unity.\n\n" +
+                $"Logs will be written to:\n{logPath}\n\n" +
                 "Continue?",
                 "Start Server",
                 "Cancel"))
             {
                 try
                 {
-                    // Start the server in a new terminal window (cross-platform)
-                    var startInfo = CreateTerminalProcessStartInfo(command);
+                    Directory.CreateDirectory(GetLocalHttpServerLogDirectory());
 
-                    System.Diagnostics.Process.Start(startInfo);
+                    // Start the server as a child process owned by Unity (no Terminal / AppleScript ownership issues).
+                    var startInfo = CreateLocalHttpServerProcessStartInfo(fileName, arguments);
+                    var process = new System.Diagnostics.Process
+                    {
+                        StartInfo = startInfo,
+                        EnableRaisingEvents = true
+                    };
 
-                    McpLog.Info($"Started local HTTP server: {command}");
-                    return true;
+                    // Append-only log file, so restarts keep history.
+                    StreamWriter logWriter = null;
+                    bool startedProcess = false;
+                    object logLock = new object();
+                    try
+                    {
+                        logWriter = new StreamWriter(logPath, append: true, encoding: new UTF8Encoding(false)) { AutoFlush = true };
+
+                        process.OutputDataReceived += (_, e) =>
+                        {
+                            if (e.Data == null) return;
+                            try
+                            {
+                                lock (logLock)
+                                {
+                                    if (logWriter == null) return;
+                                    logWriter.WriteLine(e.Data);
+                                }
+                            }
+                            catch { }
+                        };
+                        process.ErrorDataReceived += (_, e) =>
+                        {
+                            if (e.Data == null) return;
+                            try
+                            {
+                                lock (logLock)
+                                {
+                                    if (logWriter == null) return;
+                                    logWriter.WriteLine(e.Data);
+                                }
+                            }
+                            catch { }
+                        };
+                        process.Exited += (_, _) =>
+                        {
+                            try
+                            {
+                                lock (logLock)
+                                {
+                                    if (logWriter != null)
+                                    {
+                                        logWriter.WriteLine($"[MCPForUnity] Server process exited (PID {process.Id}) at {DateTime.UtcNow:O}");
+                                        logWriter.Flush();
+                                        logWriter.Dispose();
+                                        logWriter = null;
+                                    }
+                                }
+                            }
+                            catch { }
+                        };
+
+                        lock (logLock)
+                        {
+                            logWriter.WriteLine();
+                            logWriter.WriteLine($"[MCPForUnity] Starting local HTTP server at {DateTime.UtcNow:O}");
+                            logWriter.WriteLine($"[MCPForUnity] Command: {displayCommand}");
+                        }
+
+                        if (!process.Start())
+                        {
+                            throw new Exception("Failed to start the server process.");
+                        }
+                        startedProcess = true;
+
+                        process.BeginOutputReadLine();
+                        process.BeginErrorReadLine();
+
+                        lock (LocalHttpServerProcessLock)
+                        {
+                            try { LocalHttpServerProcess?.Dispose(); } catch { }
+                            LocalHttpServerProcess = process;
+                        }
+
+                        McpLog.Info($"Started local HTTP server (PID {process.Id}): {displayCommand}");
+
+                        // Best-effort: capture and remember the actual PID that bound the port so Stop Server can be reliable.
+                        // (uvx/uvicorn can involve wrapper/reloader processes; port PID capture is the most accurate.)
+                        TryCaptureAndStoreLocalServerPid();
+
+                        // Optional UX: open a Terminal window that tails the log file (no AppleScript required).
+                        TryOpenLogInTerminal(logPath);
+                        return true;
+                    }
+                    catch
+                    {
+                        // If we never actually started the process, make sure the log writer isn't leaked.
+                        if (!startedProcess)
+                        {
+                            try { logWriter?.Dispose(); } catch { }
+                        }
+                        throw;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -207,15 +458,233 @@ namespace MCPForUnity.Editor.Services
             return false;
         }
 
+        private System.Diagnostics.ProcessStartInfo CreateLocalHttpServerProcessStartInfo(string fileName, string arguments)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                throw new ArgumentException("Executable cannot be empty", nameof(fileName));
+            }
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments ?? string.Empty,
+                WorkingDirectory = GetProjectRootPath(),
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+
+            // Unity's environment PATH can be missing common package manager locations;
+            // prepend platform-specific bins so uv/uvx resolves reliably.
+            string extraPathPrepend = GetPlatformSpecificPathPrepend();
+            if (!string.IsNullOrEmpty(extraPathPrepend))
+            {
+                string currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+                psi.EnvironmentVariables["PATH"] = string.IsNullOrEmpty(currentPath)
+                    ? extraPathPrepend
+                    : (extraPathPrepend + Path.PathSeparator + currentPath);
+            }
+
+            return psi;
+        }
+
+        private void TryOpenLogInTerminal(string logPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(logPath))
+                {
+                    return;
+                }
+
+                // Note:
+                // - The server may log transient HTTP 400 responses on /mcp during startup probing/retries.
+                // - On shutdown, uvicorn/FastMCP may log CancelledError stack traces when streaming requests are cancelled.
+                // These are expected and not necessarily indicative of a Unity-side problem.
+
+                // Best-effort: don't keep spawning new Terminal windows/tabs for the same log file every time the server is restarted.
+                // Without AppleScript, we can't reliably detect whether a Terminal window is already tailing this file, so we
+                // avoid re-opening within the same Unity Editor session.
+                if (OpenedHttpServerLogViewerThisSession)
+                {
+                    return;
+                }
+
+                string tailCommand = $"tail -n 200 -f \"{logPath.Replace("\"", "\\\"")}\"";
+
+#if UNITY_EDITOR_OSX
+                // Avoid AppleScript (which can trigger automation permission prompts).
+                // Create a .command script and open it with Terminal.
+                string scriptsDir = Path.Combine(GetProjectRootPath(), "Library", "MCPForUnity", "TerminalScripts");
+                Directory.CreateDirectory(scriptsDir);
+                string scriptPath = Path.Combine(scriptsDir, "tail-mcp-http-server.command");
+                File.WriteAllText(
+                    scriptPath,
+                    "#!/bin/bash\n" +
+                    "set -e\n" +
+                    "clear\n" +
+                    "echo \"Tailing MCP For Unity server log...\"\n" +
+                    $"{tailCommand}\n");
+
+                ExecPath.TryRun("/bin/chmod", $"+x \"{scriptPath}\"", Application.dataPath, out _, out _, 3000);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "/usr/bin/open",
+                    Arguments = $"-a Terminal \"{scriptPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                OpenedHttpServerLogViewerThisSession = true;
+#elif UNITY_EDITOR_WIN
+                // Use PowerShell tail for better behavior.
+                string ps = $"powershell -NoProfile -Command \"Get-Content -Path '{logPath.Replace("'", "''")}' -Wait -Tail 200\"";
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c start \"MCP Server Logs\" {ps}",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                OpenedHttpServerLogViewerThisSession = true;
+#else
+                // Linux: reuse terminal launcher for a simple tail command.
+                var startInfo = CreateTerminalProcessStartInfo(tailCommand);
+                System.Diagnostics.Process.Start(startInfo);
+                OpenedHttpServerLogViewerThisSession = true;
+#endif
+            }
+            catch { }
+        }
+
+        private void TryCaptureAndStoreLocalServerPid()
+        {
+            try
+            {
+                string httpUrl = HttpEndpointUtility.GetBaseUrl();
+                if (!IsLocalUrl(httpUrl))
+                {
+                    return;
+                }
+
+                if (!Uri.TryCreate(httpUrl, UriKind.Absolute, out var uri))
+                {
+                    return;
+                }
+
+                int port = uri.Port;
+                if (port <= 0) return;
+
+                // Poll briefly for the listener to appear.
+                int unityPid = GetCurrentProcessIdSafe();
+                var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+                while (DateTime.UtcNow < deadline)
+                {
+                    var pids = GetListeningProcessIdsForPort(port);
+                    foreach (var pid in pids)
+                    {
+                        if (pid <= 0) continue;
+                        if (unityPid > 0 && pid == unityPid) continue;
+
+                        // At this point StartLocalHttpServer already ensured the port was free before launching.
+                        // So whichever PID is now listening on the port is very likely the server we started.
+                        // We store a short fingerprint of the process args to reduce PID-reuse risk across domain reloads.
+                        string argsHash = string.Empty;
+                        if (TryGetUnixProcessArgs(pid, out var argsLower))
+                        {
+                            argsHash = ComputeShortHash(argsLower);
+                        }
+                        StoreLocalServerPidTracking(pid, port, argsHash);
+                        return;
+                    }
+
+                    System.Threading.Thread.Sleep(150);
+                }
+            }
+            catch { }
+        }
+
         /// <summary>
         /// Stop the local HTTP server by finding the process listening on the configured port
         /// </summary>
         public bool StopLocalHttpServer()
         {
+            return StopLocalHttpServerInternal(quiet: false);
+        }
+
+        public bool IsLocalHttpServerRunning()
+        {
+            try
+            {
+                string httpUrl = HttpEndpointUtility.GetBaseUrl();
+                if (!IsLocalUrl(httpUrl))
+                {
+                    return false;
+                }
+
+                if (!Uri.TryCreate(httpUrl, UriKind.Absolute, out var uri) || uri.Port <= 0)
+                {
+                    return false;
+                }
+
+                int port = uri.Port;
+
+                // Fast path: if Unity still has a live Process handle, trust it.
+                lock (LocalHttpServerProcessLock)
+                {
+                    try
+                    {
+                        if (LocalHttpServerProcess != null && !LocalHttpServerProcess.HasExited)
+                        {
+                            return true;
+                        }
+                    }
+                    catch { }
+                }
+
+                var pids = GetListeningProcessIdsForPort(port);
+                if (pids.Count == 0)
+                {
+                    return false;
+                }
+
+                // Strong signal: stored PID is still the listener.
+                if (TryGetStoredLocalServerPid(port, out int storedPid) && storedPid > 0)
+                {
+                    if (pids.Contains(storedPid))
+                    {
+                        return true;
+                    }
+                }
+
+                // Best-effort: if anything listening looks like our server, treat as running.
+                foreach (var pid in pids)
+                {
+                    if (pid <= 0) continue;
+                    if (LooksLikeMcpServerProcess(pid))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool StopLocalHttpServerInternal(bool quiet)
+        {
             string httpUrl = HttpEndpointUtility.GetBaseUrl();
             if (!IsLocalUrl(httpUrl))
             {
-                McpLog.Warn("Cannot stop server: URL is not local.");
+                if (!quiet)
+                {
+                    McpLog.Warn("Cannot stop server: URL is not local.");
+                }
                 return false;
             }
 
@@ -226,7 +695,10 @@ namespace MCPForUnity.Editor.Services
 
                 if (port <= 0)
                 {
-                    McpLog.Warn("Cannot stop server: Invalid port.");
+                    if (!quiet)
+                    {
+                        McpLog.Warn("Cannot stop server: Invalid port.");
+                    }
                     return false;
                 }
 
@@ -235,27 +707,138 @@ namespace MCPForUnity.Editor.Services
                 // - Only terminate processes that look like the MCP server (uv/uvx/python running mcp-for-unity).
                 // This prevents accidental termination of unrelated services (including Unity itself).
                 int unityPid = GetCurrentProcessIdSafe();
+                bool stoppedAny = false;
+
+                // If Unity started a local server process in this editor session, try to terminate it first.
+                // (We still fall back to port-based termination for robustness.)
+                lock (LocalHttpServerProcessLock)
+                {
+                    try
+                    {
+                        if (LocalHttpServerProcess != null && !LocalHttpServerProcess.HasExited)
+                        {
+                            int pidToKill = LocalHttpServerProcess.Id;
+                            if (unityPid <= 0 || pidToKill != unityPid)
+                            {
+                                if (TerminateProcess(pidToKill))
+                                {
+                                    stoppedAny = true;
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                    finally
+                    {
+                        try { LocalHttpServerProcess?.Dispose(); } catch { }
+                        LocalHttpServerProcess = null;
+                    }
+                }
 
                 var pids = GetListeningProcessIdsForPort(port);
                 if (pids.Count == 0)
                 {
-                    McpLog.Info($"No process found listening on port {port}");
+                    if (stoppedAny)
+                    {
+                        // We stopped what Unity started; the port is now free.
+                        if (!quiet)
+                        {
+                            McpLog.Info($"Stopped local HTTP server on port {port}");
+                        }
+                        ClearLocalServerPidTracking();
+                        return true;
+                    }
+
+                    if (!quiet)
+                    {
+                        McpLog.Info($"No process found listening on port {port}");
+                    }
+                    ClearLocalServerPidTracking();
                     return false;
                 }
 
-                bool stoppedAny = false;
+                // Prefer killing the PID that we previously observed binding this port (if still valid).
+                if (TryGetStoredLocalServerPid(port, out int storedPid))
+                {
+                    if (pids.Contains(storedPid))
+                    {
+                        string expectedHash = string.Empty;
+                        try { expectedHash = EditorPrefs.GetString(EditorPrefKeys.LastLocalHttpServerPidArgsHash, string.Empty); } catch { }
+
+                        // Prefer a fingerprint match (reduces PID reuse risk). If missing (older installs),
+                        // fall back to a looser check to avoid leaving orphaned servers after domain reload.
+                        if (TryGetUnixProcessArgs(storedPid, out var storedArgsLowerNow))
+                        {
+                            // Never kill Unity/Hub.
+                            if (storedArgsLowerNow.Contains("unityhub") || storedArgsLowerNow.Contains("unity hub") || storedArgsLowerNow.Contains("unity"))
+                            {
+                                if (!quiet)
+                                {
+                                    McpLog.Warn($"Refusing to stop port {port}: stored PID {storedPid} appears to be a Unity process.");
+                                }
+                            }
+                            else
+                            {
+                                bool allowKill = false;
+                                if (!string.IsNullOrEmpty(expectedHash))
+                                {
+                                    allowKill = string.Equals(expectedHash, ComputeShortHash(storedArgsLowerNow), StringComparison.OrdinalIgnoreCase);
+                                }
+                                else
+                                {
+                                    // Older versions didn't store a fingerprint; accept common server indicators.
+                                    allowKill = storedArgsLowerNow.Contains("uvicorn")
+                                                || storedArgsLowerNow.Contains("fastmcp")
+                                                || storedArgsLowerNow.Contains("mcpforunity")
+                                                || storedArgsLowerNow.Contains("mcp-for-unity")
+                                                || storedArgsLowerNow.Contains("mcp_for_unity")
+                                                || storedArgsLowerNow.Contains("uvx")
+                                                || storedArgsLowerNow.Contains("python");
+                                }
+
+                                if (allowKill && TerminateProcess(storedPid))
+                                {
+                                    if (!quiet)
+                                    {
+                                        McpLog.Info($"Stopped local HTTP server on port {port} (PID: {storedPid})");
+                                    }
+                                    stoppedAny = true;
+                                    ClearLocalServerPidTracking();
+                                    // Refresh the PID list to avoid double-work.
+                                    pids = GetListeningProcessIdsForPort(port);
+                                }
+                                else if (!allowKill && !quiet)
+                                {
+                                    McpLog.Warn($"Refusing to stop port {port}: stored PID {storedPid} did not match expected server fingerprint.");
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Stale PID (no longer listening). Clear.
+                        ClearLocalServerPidTracking();
+                    }
+                }
+
                 foreach (var pid in pids)
                 {
                     if (pid <= 0) continue;
                     if (unityPid > 0 && pid == unityPid)
                     {
-                        McpLog.Warn($"Refusing to stop port {port}: owning PID appears to be the Unity Editor process (PID {pid}).");
+                        if (!quiet)
+                        {
+                            McpLog.Warn($"Refusing to stop port {port}: owning PID appears to be the Unity Editor process (PID {pid}).");
+                        }
                         continue;
                     }
 
                     if (!LooksLikeMcpServerProcess(pid))
                     {
-                        McpLog.Warn($"Refusing to stop port {port}: owning PID {pid} does not look like mcp-for-unity (uvx/uv/python).");
+                        if (!quiet)
+                        {
+                            McpLog.Warn($"Refusing to stop port {port}: owning PID {pid} does not look like mcp-for-unity.");
+                        }
                         continue;
                     }
 
@@ -266,7 +849,10 @@ namespace MCPForUnity.Editor.Services
                     }
                     else
                     {
-                        McpLog.Warn($"Failed to stop process PID {pid} on port {port}");
+                        if (!quiet)
+                        {
+                            McpLog.Warn($"Failed to stop process PID {pid} on port {port}");
+                        }
                     }
                 }
 
@@ -274,7 +860,36 @@ namespace MCPForUnity.Editor.Services
             }
             catch (Exception ex)
             {
-                McpLog.Error($"Failed to stop server: {ex.Message}");
+                if (!quiet)
+                {
+                    McpLog.Error($"Failed to stop server: {ex.Message}");
+                }
+                return false;
+            }
+        }
+
+        private static bool TryGetUnixProcessArgs(int pid, out string argsLower)
+        {
+            argsLower = string.Empty;
+            try
+            {
+                if (Application.platform == RuntimePlatform.WindowsEditor)
+                {
+                    return false;
+                }
+
+                string psPath = "/bin/ps";
+                if (!File.Exists(psPath)) psPath = "ps";
+
+                ExecPath.TryRun(psPath, $"-p {pid} -ww -o args=", Application.dataPath, out var stdout, out var stderr, 5000);
+                string combined = ((stdout ?? string.Empty) + "\n" + (stderr ?? string.Empty)).Trim();
+                if (string.IsNullOrEmpty(combined)) return false;
+                // Normalize for matching to tolerate ps wrapping/newlines.
+                argsLower = NormalizeForMatch(combined);
+                return true;
+            }
+            catch
+            {
                 return false;
             }
         }
@@ -346,27 +961,31 @@ namespace MCPForUnity.Editor.Services
         {
             try
             {
+                bool debugLogs = false;
+                try { debugLogs = EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false); } catch { }
+
                 // Windows best-effort: tasklist /FI "PID eq X"
                 if (Application.platform == RuntimePlatform.WindowsEditor)
                 {
-                    if (ExecPath.TryRun("cmd.exe", $"/c tasklist /FI \"PID eq {pid}\"", Application.dataPath, out var stdout, out var stderr, 5000))
-                    {
-                        string combined = (stdout ?? string.Empty) + "\n" + (stderr ?? string.Empty);
-                        combined = combined.ToLowerInvariant();
-                        // Common process names: python.exe, uv.exe, uvx.exe
-                        return combined.Contains("python") || combined.Contains("uvx") || combined.Contains("uv.exe") || combined.Contains("uvx.exe");
-                    }
-                    return false;
+                    ExecPath.TryRun("cmd.exe", $"/c tasklist /FI \"PID eq {pid}\"", Application.dataPath, out var stdout, out var stderr, 5000);
+                    string combined = ((stdout ?? string.Empty) + "\n" + (stderr ?? string.Empty)).ToLowerInvariant();
+                    // Common process names: python.exe, uv.exe, uvx.exe
+                    return combined.Contains("python") || combined.Contains("uvx") || combined.Contains("uv.exe") || combined.Contains("uvx.exe");
                 }
 
-                // macOS/Linux: ps -p pid -o comm= -o args=
-                if (ExecPath.TryRun("ps", $"-p {pid} -o comm= -o args=", Application.dataPath, out var psOut, out var psErr, 5000))
+                // macOS/Linux: ps -p pid -ww -o comm= -o args=
+                // Use -ww to avoid truncating long command lines (important for reliably spotting 'mcp-for-unity').
+                // Use an absolute ps path to avoid relying on PATH inside the Unity Editor process.
+                string psPath = "/bin/ps";
+                if (!File.Exists(psPath)) psPath = "ps";
+                // Important: ExecPath.TryRun returns false when exit code != 0, but ps output can still be useful.
+                // Always parse stdout/stderr regardless of exit code to avoid false negatives.
+                ExecPath.TryRun(psPath, $"-p {pid} -ww -o comm= -o args=", Application.dataPath, out var psOut, out var psErr, 5000);
+                string raw = ((psOut ?? string.Empty) + "\n" + (psErr ?? string.Empty)).Trim();
+                string s = raw.ToLowerInvariant();
+                string sCompact = NormalizeForMatch(raw);
+                if (!string.IsNullOrEmpty(s))
                 {
-                    string s = (psOut ?? string.Empty).Trim().ToLowerInvariant();
-                    if (string.IsNullOrEmpty(s))
-                    {
-                        s = (psErr ?? string.Empty).Trim().ToLowerInvariant();
-                    }
 
                     // Explicitly never kill Unity / Unity Hub processes
                     if (s.Contains("unity") || s.Contains("unityhub") || s.Contains("unity hub"))
@@ -378,19 +997,60 @@ namespace MCPForUnity.Editor.Services
                     bool mentionsUvx = s.Contains("uvx") || s.Contains(" uvx ");
                     bool mentionsUv = s.Contains("uv ") || s.Contains("/uv");
                     bool mentionsPython = s.Contains("python");
-                    bool mentionsMcp = s.Contains("mcp-for-unity") || s.Contains("mcp_for_unity") || s.Contains("mcp for unity");
-                    bool mentionsTransport = s.Contains("--transport") && s.Contains("http");
+                    bool mentionsUvicorn = s.Contains("uvicorn");
+                    bool mentionsMcp = sCompact.Contains("mcp-for-unity")
+                                       || sCompact.Contains("mcp_for_unity")
+                                       || sCompact.Contains("mcpforunity");
+                    bool mentionsTransport = sCompact.Contains("--transporthttp") || (sCompact.Contains("--transport") && sCompact.Contains("http"));
 
-                    // Accept if it looks like uv/uvx/python launching our server package/entrypoint
-                    if ((mentionsUvx || mentionsUv || mentionsPython) && (mentionsMcp || mentionsTransport))
+                    // If it explicitly mentions the server package/entrypoint, that is sufficient
+                    // (we already only evaluate this for PIDs that are listening on our configured port).
+                    if (mentionsMcp)
                     {
                         return true;
                     }
+
+                    // Accept if it looks like uv/uvx/python launching our server package/entrypoint
+                    if ((mentionsUvx || mentionsUv || mentionsPython || mentionsUvicorn) && mentionsTransport)
+                    {
+                        return true;
+                    }
+
+                    if (debugLogs)
+                    {
+                        LogStopDiagnosticsOnce(pid, $"ps='{TrimForLog(s)}' uvx={mentionsUvx} uv={mentionsUv} py={mentionsPython} uvicorn={mentionsUvicorn} mcp={mentionsMcp} transportHttp={mentionsTransport}");
+                    }
+                }
+                else if (debugLogs)
+                {
+                    LogStopDiagnosticsOnce(pid, "ps output was empty (could not classify process).");
                 }
             }
             catch { }
 
             return false;
+        }
+
+        private static void LogStopDiagnosticsOnce(int pid, string details)
+        {
+            try
+            {
+                if (LoggedStopDiagnosticsPids.Contains(pid))
+                {
+                    return;
+                }
+                LoggedStopDiagnosticsPids.Add(pid);
+                McpLog.Debug($"[StopLocalHttpServer] PID {pid} did not match server heuristics. {details}");
+            }
+            catch { }
+        }
+
+        private static string TrimForLog(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            const int max = 500;
+            if (s.Length <= max) return s;
+            return s.Substring(0, max) + "...(truncated)";
         }
 
         private bool TerminateProcess(int pid)
@@ -401,22 +1061,36 @@ namespace MCPForUnity.Editor.Services
                 if (Application.platform == RuntimePlatform.WindowsEditor)
                 {
                     // taskkill without /F first; fall back to /F if needed.
-                    bool ok = ExecPath.TryRun("taskkill", $"/PID {pid}", Application.dataPath, out stdout, out stderr);
+                    bool ok = ExecPath.TryRun("taskkill", $"/PID {pid} /T", Application.dataPath, out stdout, out stderr);
                     if (!ok)
                     {
-                        ok = ExecPath.TryRun("taskkill", $"/F /PID {pid}", Application.dataPath, out stdout, out stderr);
+                        ok = ExecPath.TryRun("taskkill", $"/F /PID {pid} /T", Application.dataPath, out stdout, out stderr);
                     }
                     return ok;
                 }
                 else
                 {
-                    // Try a graceful termination first, then escalate.
-                    bool ok = ExecPath.TryRun("kill", $"-15 {pid}", Application.dataPath, out stdout, out stderr);
-                    if (!ok)
+                    // Try a graceful termination first, then escalate if the process is still alive.
+                    // Note: `kill -15` can succeed (exit 0) even if the process takes time to exit,
+                    // so we verify and only escalate when needed.
+                    string killPath = "/bin/kill";
+                    if (!File.Exists(killPath)) killPath = "kill";
+                    ExecPath.TryRun(killPath, $"-15 {pid}", Application.dataPath, out stdout, out stderr);
+
+                    // Wait briefly for graceful shutdown.
+                    var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+                    while (DateTime.UtcNow < deadline)
                     {
-                        ok = ExecPath.TryRun("kill", $"-9 {pid}", Application.dataPath, out stdout, out stderr);
+                        if (!ProcessExistsUnix(pid))
+                        {
+                            return true;
+                        }
+                        System.Threading.Thread.Sleep(100);
                     }
-                    return ok;
+
+                    // Escalate.
+                    ExecPath.TryRun(killPath, $"-9 {pid}", Application.dataPath, out stdout, out stderr);
+                    return !ProcessExistsUnix(pid);
                 }
             }
             catch (Exception ex)
@@ -426,12 +1100,45 @@ namespace MCPForUnity.Editor.Services
             }
         }
 
+        private static bool ProcessExistsUnix(int pid)
+        {
+            try
+            {
+                // ps exits non-zero when PID is not found.
+                string psPath = "/bin/ps";
+                if (!File.Exists(psPath)) psPath = "ps";
+                ExecPath.TryRun(psPath, $"-p {pid} -o pid=", Application.dataPath, out var stdout, out var stderr, 2000);
+                string combined = ((stdout ?? string.Empty) + "\n" + (stderr ?? string.Empty)).Trim();
+                return !string.IsNullOrEmpty(combined) && combined.Any(char.IsDigit);
+            }
+            catch
+            {
+                return true; // Assume it exists if we cannot verify.
+            }
+        }
+
         /// <summary>
         /// Attempts to build the command used for starting the local HTTP server
         /// </summary>
         public bool TryGetLocalHttpServerCommand(out string command, out string error)
         {
             command = null;
+            error = null;
+            if (!TryGetLocalHttpServerCommandParts(out var fileName, out var args, out var displayCommand, out error))
+            {
+                return false;
+            }
+
+            // Maintain existing behavior: return a single command string suitable for display/copy.
+            command = displayCommand;
+            return true;
+        }
+
+        private bool TryGetLocalHttpServerCommandParts(out string fileName, out string arguments, out string displayCommand, out string error)
+        {
+            fileName = null;
+            arguments = null;
+            displayCommand = null;
             error = null;
 
             bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
@@ -463,7 +1170,9 @@ namespace MCPForUnity.Editor.Services
                 ? $"{devFlags}{packageName} --transport http --http-url {httpUrl}"
                 : $"{devFlags}--from {fromUrl} {packageName} --transport http --http-url {httpUrl}";
 
-            command = $"{uvxPath} {args}";
+            fileName = uvxPath;
+            arguments = args;
+            displayCommand = $"{QuoteIfNeeded(uvxPath)} {args}";
             return true;
         }
 
@@ -516,13 +1225,21 @@ namespace MCPForUnity.Editor.Services
             command = command.Replace("\r", "").Replace("\n", "");
 
 #if UNITY_EDITOR_OSX
-            // macOS: Use osascript directly to avoid shell metacharacter injection via bash
-            // Escape for AppleScript: backslash and double quotes
-            string escapedCommand = command.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            // macOS: Avoid AppleScript (automation permission prompts). Use a .command script and open it.
+            string scriptsDir = Path.Combine(GetProjectRootPath(), "Library", "MCPForUnity", "TerminalScripts");
+            Directory.CreateDirectory(scriptsDir);
+            string scriptPath = Path.Combine(scriptsDir, "mcp-terminal.command");
+            File.WriteAllText(
+                scriptPath,
+                "#!/bin/bash\n" +
+                "set -e\n" +
+                "clear\n" +
+                $"{command}\n");
+            ExecPath.TryRun("/bin/chmod", $"+x \"{scriptPath}\"", Application.dataPath, out _, out _, 3000);
             return new System.Diagnostics.ProcessStartInfo
             {
-                FileName = "/usr/bin/osascript",
-                Arguments = $"-e \"tell application \\\"Terminal\\\" to do script \\\"{escapedCommand}\\\" activate\"",
+                FileName = "/usr/bin/open",
+                Arguments = $"-a Terminal \"{scriptPath}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
