@@ -336,6 +336,12 @@ namespace MCPForUnity.Editor.Clients
 
         public override McpStatus CheckStatus(bool attemptAutoRewrite = true)
         {
+            return CheckStatusWithProjectDir(null, null, attemptAutoRewrite);
+        }
+
+        // Internal version that accepts projectDir and useHttpTransport to allow calling from background threads
+        internal McpStatus CheckStatusWithProjectDir(string projectDir, bool? useHttpTransport, bool attemptAutoRewrite = true)
+        {
             try
             {
                 var pathService = MCPServiceLocator.Paths;
@@ -347,7 +353,11 @@ namespace MCPForUnity.Editor.Clients
                     return client.status;
                 }
 
-                string projectDir = Path.GetDirectoryName(Application.dataPath);
+                // Use provided projectDir or get it from Application.dataPath (main thread only)
+                if (string.IsNullOrEmpty(projectDir))
+                {
+                    projectDir = Path.GetDirectoryName(Application.dataPath);
+                }
 
                 string pathPrepend = null;
                 if (Application.platform == RuntimePlatform.OSXEditor)
@@ -372,15 +382,16 @@ namespace MCPForUnity.Editor.Clients
                 catch { }
 
                 // Check if UnityMCP exists
-                if (ExecPath.TryRun(claudePath, "mcp list", projectDir, out var listStdout, out _, 10000, pathPrepend))
+                if (ExecPath.TryRun(claudePath, "mcp list", projectDir, out var listStdout, out var listStderr, 10000, pathPrepend))
                 {
                     if (!string.IsNullOrEmpty(listStdout) && listStdout.IndexOf("UnityMCP", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         // UnityMCP is registered - now verify transport mode matches
-                        bool currentUseHttp = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
+                        // Use provided value or get from EditorPrefs (main thread only)
+                        bool currentUseHttp = useHttpTransport ?? EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
 
                         // Get detailed info about the registration to check transport type
-                        if (ExecPath.TryRun(claudePath, "mcp get UnityMCP", projectDir, out var getStdout, out _, 7000, pathPrepend))
+                        if (ExecPath.TryRun(claudePath, "mcp get UnityMCP", projectDir, out var getStdout, out var getStderr, 7000, pathPrepend))
                         {
                             // Parse the output to determine registered transport mode
                             // The CLI output format contains "Type: http" or "Type: stdio"
@@ -495,7 +506,9 @@ namespace MCPForUnity.Editor.Clients
 
             McpLog.Info($"Successfully registered with Claude Code using {(useHttpTransport ? "HTTP" : "stdio")} transport.");
 
-            CheckStatus();
+            // Set status to Configured immediately after successful registration
+            // The UI will trigger an async verification check separately to avoid blocking
+            client.SetStatus(McpStatus.Configured);
         }
 
         private void Unregister()
@@ -538,7 +551,7 @@ namespace MCPForUnity.Editor.Clients
             }
 
             client.SetStatus(McpStatus.NotConfigured);
-            CheckStatus();
+            // Status is already set - no need for blocking CheckStatus() call
         }
 
         public override string GetManualSnippet()

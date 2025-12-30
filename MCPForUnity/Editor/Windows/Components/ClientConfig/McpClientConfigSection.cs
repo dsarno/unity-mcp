@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using MCPForUnity.Editor.Clients;
+using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Services;
@@ -288,13 +289,14 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
             McpLog.Info("Configuration copied to clipboard");
         }
 
-        public void RefreshSelectedClient()
+        public void RefreshSelectedClient(bool forceImmediate = false)
         {
             if (selectedClientIndex >= 0 && selectedClientIndex < configurators.Count)
             {
                 var client = configurators[selectedClientIndex];
-                bool forceImmediate = client is not ClaudeCliMcpConfigurator;
-                RefreshClientStatus(client, forceImmediate);
+                // Force immediate for non-Claude CLI, or when explicitly requested
+                bool shouldForceImmediate = forceImmediate || client is not ClaudeCliMcpConfigurator;
+                RefreshClientStatus(client, shouldForceImmediate);
                 UpdateManualConfiguration();
                 UpdateClaudeCliPathVisibility();
             }
@@ -336,9 +338,21 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
                 statusRefreshInFlight.Add(client);
                 ApplyStatusToUi(client, showChecking: true);
 
+                // Capture main-thread-only values before async task
+                string projectDir = Path.GetDirectoryName(Application.dataPath);
+                bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
+
                 Task.Run(() =>
                 {
-                    MCPServiceLocator.Client.CheckClientStatus(client, attemptAutoRewrite: false);
+                    // For Claude CLI configurator, use thread-safe version with captured values
+                    if (client is ClaudeCliMcpConfigurator claudeConfigurator)
+                    {
+                        claudeConfigurator.CheckStatusWithProjectDir(projectDir, useHttpTransport, attemptAutoRewrite: false);
+                    }
+                    else
+                    {
+                        MCPServiceLocator.Client.CheckClientStatus(client, attemptAutoRewrite: false);
+                    }
                 }).ContinueWith(t =>
                 {
                     bool faulted = false;
