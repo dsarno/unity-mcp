@@ -293,7 +293,8 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
             if (selectedClientIndex >= 0 && selectedClientIndex < configurators.Count)
             {
                 var client = configurators[selectedClientIndex];
-                RefreshClientStatus(client, forceImmediate: true);
+                bool forceImmediate = client is not ClaudeCliMcpConfigurator;
+                RefreshClientStatus(client, forceImmediate);
                 UpdateManualConfiguration();
                 UpdateClaudeCliPathVisibility();
             }
@@ -318,14 +319,6 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
 
         private void RefreshClaudeCliStatus(IMcpClientConfigurator client, bool forceImmediate)
         {
-            if (forceImmediate)
-            {
-                MCPServiceLocator.Client.CheckClientStatus(client, attemptAutoRewrite: false);
-                lastStatusChecks[client] = DateTime.UtcNow;
-                ApplyStatusToUi(client);
-                return;
-            }
-
             bool hasStatus = lastStatusChecks.ContainsKey(client);
             bool needsRefresh = !hasStatus || ShouldRefreshClient(client);
 
@@ -338,7 +331,7 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
                 ApplyStatusToUi(client);
             }
 
-            if (needsRefresh && !statusRefreshInFlight.Contains(client))
+            if ((forceImmediate || needsRefresh) && !statusRefreshInFlight.Contains(client))
             {
                 statusRefreshInFlight.Add(client);
                 ApplyStatusToUi(client, showChecking: true);
