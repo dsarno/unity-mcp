@@ -44,6 +44,8 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
         private Button testConnectionButton;
 
         private bool connectionToggleInProgress;
+        private bool autoStartInProgress;
+        private bool httpServerToggleInProgress;
         private Task verificationTask;
         private string lastHealthStatus;
 
@@ -115,6 +117,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 EditorPrefs.SetBool(EditorPrefKeys.UseHttpTransport, useHttp);
                 UpdateHttpFieldVisibility();
                 RefreshHttpUi();
+                UpdateConnectionStatus();
                 OnManualConfigUpdateRequested?.Invoke();
                 OnTransportChanged?.Invoke();
                 McpLog.Info($"Transport changed to: {evt.newValue}");
@@ -130,12 +133,19 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
 
             if (startHttpServerButton != null)
             {
-                startHttpServerButton.clicked += OnStartLocalHttpServerClicked;
+                startHttpServerButton.clicked += OnHttpServerToggleClicked;
             }
 
             if (stopHttpServerButton != null)
             {
-                stopHttpServerButton.clicked += OnStopLocalHttpServerClicked;
+                // Stop button removed from UXML as part of consolidated Start/Stop UX.
+                // Kept null-check for backward compatibility if older UXML is loaded.
+                stopHttpServerButton.clicked += () =>
+                {
+                    // In older UXML layouts, route the stop button to the consolidated toggle behavior.
+                    // If a session is active, this will end it and attempt to stop the local server.
+                    OnHttpServerToggleClicked();
+                };
             }
 
             if (copyHttpServerCommandButton != null)
@@ -168,6 +178,15 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
         {
             var bridgeService = MCPServiceLocator.Bridge;
             bool isRunning = bridgeService.IsRunning;
+            bool showLocalServerControls = MCPServiceLocator.Server.CanStartLocalServer();
+
+            // If local-server controls are active, hide the manual session toggle controls and
+            // rely on the Start/Stop Server button. We still keep the session status text visible
+            // next to the dot for clarity.
+            if (connectionToggleButton != null)
+            {
+                connectionToggleButton.style.display = showLocalServerControls ? DisplayStyle.None : DisplayStyle.Flex;
+            }
 
             if (isRunning)
             {
@@ -209,8 +228,11 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             }
 
             bool useHttp = transportDropdown != null && (TransportProtocol)transportDropdown.value == TransportProtocol.HTTP;
+            bool isLocalHttpUrl = MCPServiceLocator.Server.IsLocalUrl();
 
-            if (!useHttp)
+            // Only show the local-server helper UI when HTTP transport is selected AND the configured URL is local.
+            // For remote HTTP URLs, the "start local server" command/buttons are not applicable and are hidden.
+            if (!useHttp || !isLocalHttpUrl)
             {
                 httpServerCommandSection.style.display = DisplayStyle.None;
                 httpServerCommandField.value = string.Empty;
@@ -277,19 +299,19 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 return;
             }
 
-            bool canStart = MCPServiceLocator.Server.CanStartLocalServer();
-            startHttpServerButton.SetEnabled(canStart);
-            startHttpServerButton.tooltip = canStart
-                ? string.Empty
-                : "Start Local HTTP Server is available only for localhost URLs.";
+            bool canStartLocalServer = MCPServiceLocator.Server.CanStartLocalServer();
+            bool sessionRunning = MCPServiceLocator.Bridge.IsRunning;
 
-            if (stopHttpServerButton != null)
-            {
-                stopHttpServerButton.SetEnabled(canStart);
-                stopHttpServerButton.tooltip = canStart
-                    ? string.Empty
-                    : "Stop Local HTTP Server is available only for localhost URLs.";
-            }
+            // Single consolidated button: Start Server (launch local server + start session) or
+            // Stop Server (end session + attempt to stop local server).
+            startHttpServerButton.text = sessionRunning ? "Stop Server" : "Start Server";
+            startHttpServerButton.SetEnabled(canStartLocalServer && !httpServerToggleInProgress && !autoStartInProgress);
+            startHttpServerButton.tooltip = canStartLocalServer
+                ? string.Empty
+                : "Local server controls are available only for localhost URLs.";
+
+            // Stop button is no longer used; it may be null depending on UXML version.
+            stopHttpServerButton?.SetEnabled(false);
         }
 
         private void RefreshHttpUi()
@@ -298,46 +320,48 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             UpdateHttpServerCommandDisplay();
         }
 
-        private void OnStartLocalHttpServerClicked()
+        private async void OnHttpServerToggleClicked()
         {
-            if (startHttpServerButton != null)
+            if (httpServerToggleInProgress)
             {
-                startHttpServerButton.SetEnabled(false);
+                return;
             }
+
+            var bridgeService = MCPServiceLocator.Bridge;
+            httpServerToggleInProgress = true;
+            startHttpServerButton?.SetEnabled(false);
 
             try
             {
-                MCPServiceLocator.Server.StartLocalHttpServer();
-            }
-            finally
-            {
-                RefreshHttpUi();
-            }
-        }
-
-        private void OnStopLocalHttpServerClicked()
-        {
-            if (stopHttpServerButton != null)
-            {
-                stopHttpServerButton.SetEnabled(false);
-            }
-
-            try
-            {
-                bool stopped = MCPServiceLocator.Server.StopLocalHttpServer();
-                if (!stopped)
+                // If a session is active, treat this as "Stop Server" (end session first, then try to stop server).
+                if (bridgeService.IsRunning)
                 {
-                    McpLog.Warn("Failed to stop HTTP server or no server was running");
+                    await bridgeService.StopAsync();
+                    bool stopped = MCPServiceLocator.Server.StopLocalHttpServer();
+                    if (!stopped)
+                    {
+                        McpLog.Warn("Failed to stop HTTP server or no server was running");
+                    }
+                    return;
+                }
+
+                // Otherwise, "Start Server" and then auto-start the session.
+                bool started = MCPServiceLocator.Server.StartLocalHttpServer();
+                if (started)
+                {
+                    await TryAutoStartSessionAfterHttpServerAsync();
                 }
             }
             catch (Exception ex)
             {
-                McpLog.Error($"Failed to stop server: {ex.Message}");
-                EditorUtility.DisplayDialog("Error", $"Failed to stop server:\n\n{ex.Message}", "OK");
+                McpLog.Error($"HTTP server toggle failed: {ex.Message}");
+                EditorUtility.DisplayDialog("Error", $"Failed to toggle local HTTP server:\n\n{ex.Message}", "OK");
             }
             finally
             {
+                httpServerToggleInProgress = false;
                 RefreshHttpUi();
+                UpdateConnectionStatus();
             }
         }
 
@@ -420,6 +444,52 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
         private async void OnTestConnectionClicked()
         {
             await VerifyBridgeConnectionAsync();
+        }
+
+        private async Task TryAutoStartSessionAfterHttpServerAsync()
+        {
+            if (autoStartInProgress)
+            {
+                return;
+            }
+
+            var bridgeService = MCPServiceLocator.Bridge;
+            if (bridgeService.IsRunning)
+            {
+                return;
+            }
+
+            autoStartInProgress = true;
+            connectionToggleButton?.SetEnabled(false);
+            const int maxAttempts = 10;
+            var delay = TimeSpan.FromSeconds(1);
+
+            try
+            {
+                for (int attempt = 0; attempt < maxAttempts; attempt++)
+                {
+                    bool started = await bridgeService.StartAsync();
+                    if (started)
+                    {
+                        await VerifyBridgeConnectionAsync();
+                        UpdateConnectionStatus();
+                        return;
+                    }
+
+                    if (attempt < maxAttempts - 1)
+                    {
+                        await Task.Delay(delay);
+                    }
+                }
+
+                McpLog.Warn("Failed to auto-start MCP session after launching the HTTP server.");
+            }
+            finally
+            {
+                autoStartInProgress = false;
+                connectionToggleButton?.SetEnabled(true);
+                UpdateConnectionStatus();
+            }
         }
 
         public async Task VerifyBridgeConnectionAsync()
