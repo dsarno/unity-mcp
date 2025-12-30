@@ -334,13 +334,24 @@ namespace MCPForUnity.Editor.Clients
 
         public override string GetConfigPath() => "Managed via Claude CLI";
 
+        /// <summary>
+        /// Checks the Claude CLI registration status.
+        /// MUST be called from the main Unity thread due to EditorPrefs and Application.dataPath access.
+        /// </summary>
         public override McpStatus CheckStatus(bool attemptAutoRewrite = true)
         {
-            return CheckStatusWithProjectDir(null, null, attemptAutoRewrite);
+            // Capture main-thread-only values before delegating to thread-safe method
+            string projectDir = Path.GetDirectoryName(Application.dataPath);
+            bool useHttpTransport = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
+            return CheckStatusWithProjectDir(projectDir, useHttpTransport, attemptAutoRewrite);
         }
 
-        // Internal version that accepts projectDir and useHttpTransport to allow calling from background threads
-        internal McpStatus CheckStatusWithProjectDir(string projectDir, bool? useHttpTransport, bool attemptAutoRewrite = true)
+        /// <summary>
+        /// Internal thread-safe version of CheckStatus.
+        /// Can be called from background threads because all main-thread-only values are passed as parameters.
+        /// Both projectDir and useHttpTransport are REQUIRED (non-nullable) to enforce thread safety at compile time.
+        /// </summary>
+        internal McpStatus CheckStatusWithProjectDir(string projectDir, bool useHttpTransport, bool attemptAutoRewrite = true)
         {
             try
             {
@@ -353,10 +364,10 @@ namespace MCPForUnity.Editor.Clients
                     return client.status;
                 }
 
-                // Use provided projectDir or get it from Application.dataPath (main thread only)
+                // projectDir is required - no fallback to Application.dataPath
                 if (string.IsNullOrEmpty(projectDir))
                 {
-                    projectDir = Path.GetDirectoryName(Application.dataPath);
+                    throw new ArgumentNullException(nameof(projectDir), "Project directory must be provided for thread-safe execution");
                 }
 
                 string pathPrepend = null;
@@ -387,8 +398,8 @@ namespace MCPForUnity.Editor.Clients
                     if (!string.IsNullOrEmpty(listStdout) && listStdout.IndexOf("UnityMCP", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         // UnityMCP is registered - now verify transport mode matches
-                        // Use provided value or get from EditorPrefs (main thread only)
-                        bool currentUseHttp = useHttpTransport ?? EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
+                        // useHttpTransport parameter is required (non-nullable) to ensure thread safety
+                        bool currentUseHttp = useHttpTransport;
 
                         // Get detailed info about the registration to check transport type
                         if (ExecPath.TryRun(claudePath, "mcp get UnityMCP", projectDir, out var getStdout, out var getStderr, 7000, pathPrepend))
