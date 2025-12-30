@@ -55,6 +55,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
 
         // Events
         public event Action OnManualConfigUpdateRequested;
+        public event Action OnTransportChanged;
 
         public VisualElement Root { get; private set; }
 
@@ -115,6 +116,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 UpdateHttpFieldVisibility();
                 RefreshHttpUi();
                 OnManualConfigUpdateRequested?.Invoke();
+                OnTransportChanged?.Invoke();
                 McpLog.Info($"Transport changed to: {evt.newValue}");
             });
 
