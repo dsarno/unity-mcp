@@ -452,24 +452,25 @@ namespace MCPForUnity.Editor.Clients
             }
             catch { }
 
-            bool already = false;
-            if (!ExecPath.TryRun(claudePath, args, projectDir, out var stdout, out var stderr, 15000, pathPrepend))
+            // Check if UnityMCP already exists and remove it first to ensure clean registration
+            // This ensures we always use the current transport mode setting
+            bool serverExists = ExecPath.TryRun(claudePath, "mcp get UnityMCP", projectDir, out _, out _, 7000, pathPrepend);
+            if (serverExists)
             {
-                string combined = ($"{stdout}\n{stderr}") ?? string.Empty;
-                if (combined.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0)
+                McpLog.Info("Existing UnityMCP registration found - removing to ensure transport mode is up-to-date");
+                if (!ExecPath.TryRun(claudePath, "mcp remove UnityMCP", projectDir, out var removeStdout, out var removeStderr, 10000, pathPrepend))
                 {
-                    already = true;
-                }
-                else
-                {
-                    throw new InvalidOperationException($"Failed to register with Claude Code:\n{stderr}\n{stdout}");
+                    McpLog.Warn($"Failed to remove existing UnityMCP registration: {removeStderr}. Attempting to register anyway...");
                 }
             }
 
-            if (!already)
+            // Now add the registration with the current transport mode
+            if (!ExecPath.TryRun(claudePath, args, projectDir, out var stdout, out var stderr, 15000, pathPrepend))
             {
-                McpLog.Info("Successfully registered with Claude Code.");
+                throw new InvalidOperationException($"Failed to register with Claude Code:\n{stderr}\n{stdout}");
             }
+
+            McpLog.Info($"Successfully registered with Claude Code using {(useHttpTransport ? "HTTP" : "stdio")} transport.");
 
             CheckStatus();
         }
