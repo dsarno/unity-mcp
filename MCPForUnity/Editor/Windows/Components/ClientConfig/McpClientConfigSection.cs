@@ -344,10 +344,13 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
 
                 Task.Run(() =>
                 {
-                    // This method is only called for Claude CLI configurators, so we can safely cast
-                    // Use thread-safe version with captured main-thread values
-                    var claudeConfigurator = (ClaudeCliMcpConfigurator)client;
-                    claudeConfigurator.CheckStatusWithProjectDir(projectDir, useHttpTransport, attemptAutoRewrite: false);
+                    // Defensive: RefreshClientStatus routes Claude CLI clients here, but avoid hard-cast
+                    // so accidental future call sites can't crash the UI.
+                    if (client is ClaudeCliMcpConfigurator claudeConfigurator)
+                    {
+                        // Use thread-safe version with captured main-thread values
+                        claudeConfigurator.CheckStatusWithProjectDir(projectDir, useHttpTransport, attemptAutoRewrite: false);
+                    }
                 }).ContinueWith(t =>
                 {
                     bool faulted = false;

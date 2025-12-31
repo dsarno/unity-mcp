@@ -165,8 +165,9 @@ namespace MCPForUnity.Editor.Services
             }
         }
 
-        private bool ProcessCommandLineContainsInstanceToken(int pid, string instanceToken)
+        private bool TryProcessCommandLineContainsInstanceToken(int pid, string instanceToken, out bool containsToken)
         {
+            containsToken = false;
             if (pid <= 0 || string.IsNullOrEmpty(instanceToken))
             {
                 return false;
@@ -183,19 +184,14 @@ namespace MCPForUnity.Editor.Services
                     string ps = $"(Get-CimInstance Win32_Process -Filter \\\"ProcessId={pid}\\\").CommandLine";
                     bool ok = ExecPath.TryRun("powershell", $"-NoProfile -Command \"{ps}\"", Application.dataPath, out var stdout, out var stderr, 5000);
                     string combined = ((stdout ?? string.Empty) + "\n" + (stderr ?? string.Empty)).ToLowerInvariant();
-                    if (combined.Contains(tokenNeedle))
-                    {
-                        return true;
-                    }
-
-                    // If we can't read the command line on Windows (permissions / missing CIM),
-                    // fall back to port+pidfile validation rather than blocking Stop entirely.
-                    return !ok ? true : false;
+                    containsToken = combined.Contains(tokenNeedle);
+                    return ok;
                 }
 
                 if (TryGetUnixProcessArgs(pid, out var argsLowerNow))
                 {
-                    return argsLowerNow.Contains(NormalizeForMatch(tokenNeedle));
+                    containsToken = argsLowerNow.Contains(NormalizeForMatch(tokenNeedle));
+                    return true;
                 }
             }
             catch { }
@@ -519,38 +515,6 @@ namespace MCPForUnity.Editor.Services
             return false;
         }
 
-        private System.Diagnostics.ProcessStartInfo CreateLocalHttpServerProcessStartInfo(string fileName, string arguments)
-        {
-            if (string.IsNullOrWhiteSpace(fileName))
-            {
-                throw new ArgumentException("Executable cannot be empty", nameof(fileName));
-            }
-
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments ?? string.Empty,
-                WorkingDirectory = GetProjectRootPath(),
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-
-            // Unity's environment PATH can be missing common package manager locations;
-            // prepend platform-specific bins so uv/uvx resolves reliably.
-            string extraPathPrepend = GetPlatformSpecificPathPrepend();
-            if (!string.IsNullOrEmpty(extraPathPrepend))
-            {
-                string currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-                psi.EnvironmentVariables["PATH"] = string.IsNullOrEmpty(currentPath)
-                    ? extraPathPrepend
-                    : (extraPathPrepend + Path.PathSeparator + currentPath);
-            }
-
-            return psi;
-        }
-
         private void TryOpenLogInTerminal(string logPath)
         {
             try
@@ -810,9 +774,20 @@ namespace MCPForUnity.Editor.Services
                                 return false;
                             }
                             bool pidIsListener = listeners.Contains(pidFromFile);
-                            bool tokenMatches = ProcessCommandLineContainsInstanceToken(pidFromFile, instanceToken);
+                            bool tokenQueryOk = TryProcessCommandLineContainsInstanceToken(pidFromFile, instanceToken, out bool tokenMatches);
+                            bool allowKill;
+                            if (tokenQueryOk)
+                            {
+                                allowKill = tokenMatches;
+                            }
+                            else
+                            {
+                                // If token validation is unavailable (e.g. Windows CIM permission issues),
+                                // fall back to a stricter heuristic: only allow stop if the PID still looks like our server.
+                                allowKill = LooksLikeMcpServerProcess(pidFromFile);
+                            }
 
-                            if (pidIsListener && tokenMatches)
+                            if (pidIsListener && allowKill)
                             {
                                 if (TerminateProcess(pidFromFile))
                                 {
@@ -835,7 +810,7 @@ namespace MCPForUnity.Editor.Services
                             {
                                 McpLog.Warn(
                                     $"Refusing to stop port {port}: pidfile PID {pidFromFile} failed validation " +
-                                    $"(listener={pidIsListener}, tokenMatch={tokenMatches}).");
+                                    $"(listener={pidIsListener}, tokenMatch={tokenMatches}, tokenQueryOk={tokenQueryOk}).");
                             }
                             return false;
                         }

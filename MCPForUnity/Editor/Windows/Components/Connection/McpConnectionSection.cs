@@ -661,13 +661,28 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 string host = uri.Host;
                 int port = uri.Port;
 
+                // Normalize wildcard/bind-all hosts to loopback for readiness checks.
+                // When the server binds to 0.0.0.0 or ::, clients typically connect via localhost/127.0.0.1.
+                string normalizedHost;
+                if (string.IsNullOrWhiteSpace(host)
+                    || string.Equals(host, "0.0.0.0", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(host, "::", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(host, "*", StringComparison.OrdinalIgnoreCase))
+                {
+                    normalizedHost = "localhost";
+                }
+                else
+                {
+                    normalizedHost = host;
+                }
+
                 var deadline = DateTime.UtcNow + timeout;
                 while (DateTime.UtcNow < deadline)
                 {
                     try
                     {
                         using var client = new TcpClient();
-                        var connectTask = client.ConnectAsync(host, port);
+                        var connectTask = client.ConnectAsync(normalizedHost, port);
                         var completed = await Task.WhenAny(connectTask, Task.Delay(250));
                         if (completed == connectTask && client.Connected)
                         {
