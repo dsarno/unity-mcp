@@ -8,7 +8,6 @@ import os
 import time
 import uuid
 from typing import Any
-from pathlib import Path
 
 from starlette.endpoints import WebSocketEndpoint
 from starlette.websockets import WebSocket
@@ -33,42 +32,6 @@ logger = logging.getLogger("mcp-for-unity-server")
 
 class PluginDisconnectedError(RuntimeError):
     """Raised when a plugin WebSocket disconnects while commands are in flight."""
-
-
-def _extract_project_hash(unity_instance: str | None) -> str | None:
-    """Extract the hash suffix from a unity instance id (e.g., Project@hash or hash)."""
-    if not unity_instance:
-        return None
-    if "@" in unity_instance:
-        _, _, suffix = unity_instance.rpartition("@")
-        return suffix or None
-    return unity_instance
-
-
-def _read_unity_status_file(target_hash: str | None) -> dict | None:
-    """Best-effort read of the Unity status JSON written under ~/.unity-mcp/."""
-    try:
-        base_path = Path.home().joinpath(".unity-mcp")
-        status_files = sorted(
-            base_path.glob("unity-mcp-status-*.json"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        if not status_files:
-            return None
-        if target_hash:
-            for status_path in status_files:
-                if status_path.stem.endswith(target_hash):
-                    with status_path.open("r") as f:
-                        import json
-
-                        return json.load(f)
-        with status_files[0].open("r") as f:
-            import json
-
-            return json.load(f)
-    except Exception:
-        return None
 
 
 class PluginHub(WebSocketEndpoint):
@@ -171,12 +134,39 @@ class PluginHub(WebSocketEndpoint):
         websocket = await cls._get_connection(session_id)
         command_id = str(uuid.uuid4())
         future: asyncio.Future = asyncio.get_running_loop().create_future()
-        # Use a shorter timeout for fast commands to avoid long hangs and encourage retry.
-        try:
-            fast_timeout = float(os.environ.get("UNITY_MCP_FAST_COMMAND_TIMEOUT", "3"))
-        except Exception:
-            fast_timeout = 3.0
-        timeout_s = fast_timeout if command_type in cls._FAST_FAIL_COMMANDS else cls.COMMAND_TIMEOUT
+        # Compute a per-command timeout:
+        # - fast-path commands: short timeout (encourage retry)
+        # - long-running commands (e.g., run_tests): allow caller to request a longer timeout via params
+        unity_timeout_s = float(cls.COMMAND_TIMEOUT)
+        server_wait_s = float(cls.COMMAND_TIMEOUT)
+        if command_type in cls._FAST_FAIL_COMMANDS:
+            try:
+                fast_timeout = float(os.environ.get("UNITY_MCP_FAST_COMMAND_TIMEOUT", "3"))
+            except Exception:
+                fast_timeout = 3.0
+            unity_timeout_s = fast_timeout
+            server_wait_s = fast_timeout
+        else:
+            # Common tools pass a requested timeout in seconds (e.g., run_tests(timeout_seconds=900)).
+            requested = None
+            try:
+                if isinstance(params, dict):
+                    requested = params.get("timeout_seconds", None)
+                    if requested is None:
+                        requested = params.get("timeoutSeconds", None)
+            except Exception:
+                requested = None
+
+            if requested is not None:
+                try:
+                    requested_s = float(requested)
+                    # Clamp to a sane upper bound to avoid accidental infinite hangs.
+                    requested_s = max(1.0, min(requested_s, 60.0 * 60.0))
+                    unity_timeout_s = max(unity_timeout_s, requested_s)
+                    # Give the server a small cushion beyond the Unity-side timeout to account for transport overhead.
+                    server_wait_s = max(server_wait_s, requested_s + 5.0)
+                except Exception:
+                    pass
 
         lock = cls._lock
         if lock is None:
@@ -193,7 +183,7 @@ class PluginHub(WebSocketEndpoint):
                 id=command_id,
                 name=command_type,
                 params=params,
-                timeout=timeout_s,
+                timeout=unity_timeout_s,
             )
             try:
                 await websocket.send_json(msg.model_dump())
@@ -203,7 +193,7 @@ class PluginHub(WebSocketEndpoint):
                     future.set_exception(exc)
                 raise
             try:
-                result = await asyncio.wait_for(future, timeout=timeout_s)
+                result = await asyncio.wait_for(future, timeout=server_wait_s)
                 return result
             except PluginDisconnectedError as exc:
                 return MCPResponse(success=False, error=str(exc), hint="retry").model_dump()
@@ -211,7 +201,7 @@ class PluginHub(WebSocketEndpoint):
                 if command_type in cls._FAST_FAIL_COMMANDS:
                     return MCPResponse(
                         success=False,
-                        error=f"Unity did not respond to '{command_type}' within {timeout_s:.1f}s; please retry",
+                        error=f"Unity did not respond to '{command_type}' within {server_wait_s:.1f}s; please retry",
                         hint="retry",
                     ).model_dump()
                 raise
@@ -450,17 +440,6 @@ class PluginHub(WebSocketEndpoint):
         command_type: str,
         params: dict[str, Any],
     ) -> dict[str, Any]:
-        # Preflight: if Unity reports reloading via the status file, return a structured retry hint
-        # rather than sending a command that is likely to be dropped during reconnect.
-        target_hash = _extract_project_hash(unity_instance)
-        status = _read_unity_status_file(target_hash)
-        if status and (status.get("reloading") or status.get("reason") == "reloading"):
-            return MCPResponse(
-                success=False,
-                error="Unity is reloading; please retry",
-                hint="retry",
-            ).model_dump()
-
         session_id = await cls._resolve_session_id(unity_instance)
 
         # During domain reload / immediate reconnect windows, the plugin may be connected but not yet
