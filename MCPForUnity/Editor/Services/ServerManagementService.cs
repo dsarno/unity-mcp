@@ -490,14 +490,13 @@ namespace MCPForUnity.Editor.Services
                     }
                     catch { }
 
+                    // Launch the server in a new terminal window (keeps user-visible logs).
+                    var startInfo = CreateTerminalProcessStartInfo(launchCommand);
+                    System.Diagnostics.Process.Start(startInfo);
                     if (!string.IsNullOrEmpty(pidFilePath))
                     {
                         StoreLocalHttpServerHandshake(pidFilePath, instanceToken);
                     }
-
-                    // Launch the server in a new terminal window (keeps user-visible logs).
-                    var startInfo = CreateTerminalProcessStartInfo(launchCommand);
-                    System.Diagnostics.Process.Start(startInfo);
                     McpLog.Info($"Started local HTTP server in terminal: {launchCommand}");
                     return true;
                 }
@@ -591,6 +590,33 @@ namespace MCPForUnity.Editor.Services
             return StopLocalHttpServerInternal(quiet: false);
         }
 
+        public bool StopManagedLocalHttpServer()
+        {
+            if (!TryGetLocalHttpServerHandshake(out var pidFilePath, out _))
+            {
+                return false;
+            }
+
+            int port = 0;
+            if (!TryGetPortFromPidFilePath(pidFilePath, out port) || port <= 0)
+            {
+                string baseUrl = HttpEndpointUtility.GetBaseUrl();
+                if (IsLocalUrl(baseUrl)
+                    && Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+                    && uri.Port > 0)
+                {
+                    port = uri.Port;
+                }
+            }
+
+            if (port <= 0)
+            {
+                return false;
+            }
+
+            return StopLocalHttpServerInternal(quiet: true, portOverride: port, allowNonLocalUrl: true);
+        }
+
         public bool IsLocalHttpServerRunning()
         {
             try
@@ -653,10 +679,10 @@ namespace MCPForUnity.Editor.Services
             }
         }
 
-        private bool StopLocalHttpServerInternal(bool quiet)
+        private bool StopLocalHttpServerInternal(bool quiet, int? portOverride = null, bool allowNonLocalUrl = false)
         {
             string httpUrl = HttpEndpointUtility.GetBaseUrl();
-            if (!IsLocalUrl(httpUrl))
+            if (!allowNonLocalUrl && !IsLocalUrl(httpUrl))
             {
                 if (!quiet)
                 {
@@ -667,8 +693,16 @@ namespace MCPForUnity.Editor.Services
 
             try
             {
-                var uri = new Uri(httpUrl);
-                int port = uri.Port;
+                int port = 0;
+                if (portOverride.HasValue)
+                {
+                    port = portOverride.Value;
+                }
+                else
+                {
+                    var uri = new Uri(httpUrl);
+                    port = uri.Port;
+                }
 
                 if (port <= 0)
                 {
@@ -948,7 +982,11 @@ namespace MCPForUnity.Editor.Services
                 string psPath = "/bin/ps";
                 if (!File.Exists(psPath)) psPath = "ps";
 
-                ExecPath.TryRun(psPath, $"-p {pid} -ww -o args=", Application.dataPath, out var stdout, out var stderr, 5000);
+                bool ok = ExecPath.TryRun(psPath, $"-p {pid} -ww -o args=", Application.dataPath, out var stdout, out var stderr, 5000);
+                if (!ok && string.IsNullOrWhiteSpace(stdout))
+                {
+                    return false;
+                }
                 string combined = ((stdout ?? string.Empty) + "\n" + (stderr ?? string.Empty)).Trim();
                 if (string.IsNullOrEmpty(combined)) return false;
                 // Normalize for matching to tolerate ps wrapping/newlines.
@@ -957,6 +995,38 @@ namespace MCPForUnity.Editor.Services
             }
             catch
             {
+                return false;
+            }
+        }
+
+        private static bool TryGetPortFromPidFilePath(string pidFilePath, out int port)
+        {
+            port = 0;
+            if (string.IsNullOrEmpty(pidFilePath))
+            {
+                return false;
+            }
+
+            try
+            {
+                string fileName = Path.GetFileNameWithoutExtension(pidFilePath);
+                if (string.IsNullOrEmpty(fileName))
+                {
+                    return false;
+                }
+
+                const string prefix = "mcp_http_";
+                if (!fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                string portText = fileName.Substring(prefix.Length);
+                return int.TryParse(portText, out port) && port > 0;
+            }
+            catch
+            {
+                port = 0;
                 return false;
             }
         }

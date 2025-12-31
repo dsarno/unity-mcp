@@ -40,29 +40,26 @@ namespace MCPForUnity.Editor.Services
                 McpLog.Warn($"Shutdown cleanup: failed to stop transports: {ex.Message}");
             }
 
-            // 2) Stop local HTTP server if the user selected HTTP Local (best-effort).
+            // 2) Stop local HTTP server if it was Unity-managed (best-effort).
             try
             {
                 bool useHttp = EditorPrefs.GetBool(EditorPrefKeys.UseHttpTransport, true);
-                if (!useHttp)
-                {
-                    return;
-                }
-
-                // Prefer explicit scope if present; fall back to URL heuristics for backward compatibility.
                 string scope = string.Empty;
                 try { scope = EditorPrefs.GetString(EditorPrefKeys.HttpTransportScope, string.Empty); } catch { }
 
-                bool httpLocalSelected = string.Equals(scope, "local", StringComparison.OrdinalIgnoreCase)
-                                         || (string.IsNullOrEmpty(scope) && MCPServiceLocator.Server.IsLocalUrl());
+                bool httpLocalSelected = useHttp &&
+                                         (string.Equals(scope, "local", StringComparison.OrdinalIgnoreCase)
+                                          || (string.IsNullOrEmpty(scope) && MCPServiceLocator.Server.IsLocalUrl()));
 
-                if (!httpLocalSelected)
+                if (httpLocalSelected)
                 {
+                    // StopLocalHttpServer is already guarded to only terminate processes that look like mcp-for-unity.
+                    MCPServiceLocator.Server.StopLocalHttpServer();
                     return;
                 }
 
-                // StopLocalHttpServer is already guarded to only terminate processes that look like mcp-for-unity.
-                MCPServiceLocator.Server.StopLocalHttpServer();
+                // If the user switched away from HTTP Local, still attempt to stop a Unity-managed server.
+                MCPServiceLocator.Server.StopManagedLocalHttpServer();
             }
             catch (Exception ex)
             {
@@ -71,5 +68,4 @@ namespace MCPForUnity.Editor.Services
         }
     }
 }
-
 
