@@ -1066,7 +1066,8 @@ namespace MCPForUnity.Editor.Services
                     }
 
                     // Explicitly never kill Unity / Unity Hub processes
-                    if (s.Contains("unityhub") || s.Contains("unity hub") || s.Contains("unity"))
+                    // Note: explicit !mentionsMcp is defensive; we already return early for mentionsMcp above.
+                    if (s.Contains("unityhub") || s.Contains("unity hub") || (s.Contains("unity") && !mentionsMcp))
                     {
                         return false;
                     }
