@@ -152,6 +152,13 @@ namespace MCPForUnity.Editor.Tools
                 );
             }
 
+            // During compilation/domain reload, reflection APIs and console internals can be transient.
+            // Treat this as retryable so clients avoid hanging tool calls.
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                return new ErrorResponse("compiling_or_reloading", new { hint = "retry" });
+            }
+
             string action = @params["action"]?.ToString().ToLower() ?? "get";
 
             try

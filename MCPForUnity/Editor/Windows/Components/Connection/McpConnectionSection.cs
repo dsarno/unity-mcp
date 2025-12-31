@@ -695,29 +695,41 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                         using var client = new TcpClient();
                         var connectTask = client.ConnectAsync(normalizedHost, port);
                         var completed = await Task.WhenAny(connectTask, Task.Delay(250));
-                        if (completed == connectTask)
+                        if (completed != connectTask)
                         {
-                            try
+                            // Avoid leaving a long-running ConnectAsync in-flight (default OS connect timeout can be very long),
+                            // which can accumulate across retries and impact overall editor/network responsiveness.
+                            // Closing the client will cause ConnectAsync to complete quickly (typically with an exception),
+                            // which we then attempt to observe (bounded) by awaiting.
+                            try { client.Close(); } catch { }
+                        }
+
+                        try
+                        {
+                            // Even after Close(), some platforms may take a moment to complete the connect task.
+                            // Keep this bounded so the readiness loop can't hang here.
+                            var connectCompleted = await Task.WhenAny(connectTask, Task.Delay(250));
+                            if (connectCompleted == connectTask)
                             {
                                 await connectTask;
                             }
-                            catch
+                            else
                             {
-                                // Ignore connection exceptions and retry until timeout.
-                            }
-
-                            if (client.Connected)
-                            {
-                                return true;
+                                _ = connectTask.ContinueWith(
+                                    t => _ = t.Exception,
+                                    System.Threading.CancellationToken.None,
+                                    TaskContinuationOptions.OnlyOnFaulted,
+                                    TaskScheduler.Default);
                             }
                         }
-                        else
+                        catch
                         {
-                            connectTask.ContinueWith(
-                                t => _ = t.Exception,
-                                System.Threading.CancellationToken.None,
-                                TaskContinuationOptions.OnlyOnFaulted,
-                                TaskScheduler.Default);
+                            // Ignore connection exceptions and retry until timeout.
+                        }
+
+                        if (client.Connected)
+                        {
+                            return true;
                         }
                     }
                     catch
