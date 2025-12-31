@@ -695,9 +695,29 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                         using var client = new TcpClient();
                         var connectTask = client.ConnectAsync(normalizedHost, port);
                         var completed = await Task.WhenAny(connectTask, Task.Delay(250));
-                        if (completed == connectTask && client.Connected)
+                        if (completed == connectTask)
                         {
-                            return true;
+                            try
+                            {
+                                await connectTask;
+                            }
+                            catch
+                            {
+                                // Ignore connection exceptions and retry until timeout.
+                            }
+
+                            if (client.Connected)
+                            {
+                                return true;
+                            }
+                        }
+                        else
+                        {
+                            connectTask.ContinueWith(
+                                t => _ = t.Exception,
+                                System.Threading.CancellationToken.None,
+                                TaskContinuationOptions.OnlyOnFaulted,
+                                TaskScheduler.Default);
                         }
                     }
                     catch

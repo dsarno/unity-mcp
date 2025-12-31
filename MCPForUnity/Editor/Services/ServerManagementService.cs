@@ -18,9 +18,6 @@ namespace MCPForUnity.Editor.Services
     public class ServerManagementService : IServerManagementService
     {
         private static readonly HashSet<int> LoggedStopDiagnosticsPids = new HashSet<int>();
-        private static readonly object LocalHttpServerProcessLock = new object();
-        private static System.Diagnostics.Process LocalHttpServerProcess;
-        private static bool OpenedHttpServerLogViewerThisSession;
 
         private static string GetProjectRootPath()
         {
@@ -33,17 +30,6 @@ namespace MCPForUnity.Editor.Services
             {
                 return Application.dataPath;
             }
-        }
-
-        private static string GetLocalHttpServerLogDirectory()
-        {
-            // Prefer Library so it stays project-scoped and out of version control.
-            return Path.Combine(GetProjectRootPath(), "Library", "MCPForUnity", "Logs");
-        }
-
-        private static string GetLocalHttpServerLogPath()
-        {
-            return Path.Combine(GetLocalHttpServerLogDirectory(), "mcp_http_server.log");
         }
 
         private static string QuoteIfNeeded(string s)
@@ -490,14 +476,13 @@ namespace MCPForUnity.Editor.Services
                     }
                     catch { }
 
+                    // Launch the server in a new terminal window (keeps user-visible logs).
+                    var startInfo = CreateTerminalProcessStartInfo(launchCommand);
+                    System.Diagnostics.Process.Start(startInfo);
                     if (!string.IsNullOrEmpty(pidFilePath))
                     {
                         StoreLocalHttpServerHandshake(pidFilePath, instanceToken);
                     }
-
-                    // Launch the server in a new terminal window (keeps user-visible logs).
-                    var startInfo = CreateTerminalProcessStartInfo(launchCommand);
-                    System.Diagnostics.Process.Start(startInfo);
                     McpLog.Info($"Started local HTTP server in terminal: {launchCommand}");
                     return true;
                 }
@@ -515,80 +500,39 @@ namespace MCPForUnity.Editor.Services
             return false;
         }
 
-        private void TryOpenLogInTerminal(string logPath)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(logPath))
-                {
-                    return;
-                }
-
-                // Note:
-                // - The server may log transient HTTP 400 responses on /mcp during startup probing/retries.
-                // - On shutdown, uvicorn/FastMCP may log CancelledError stack traces when streaming requests are cancelled.
-                // These are expected and not necessarily indicative of a Unity-side problem.
-
-                // Best-effort: don't keep spawning new Terminal windows/tabs for the same log file every time the server is restarted.
-                // Without AppleScript, we can't reliably detect whether a Terminal window is already tailing this file, so we
-                // avoid re-opening within the same Unity Editor session.
-                if (OpenedHttpServerLogViewerThisSession)
-                {
-                    return;
-                }
-
-                string tailCommand = $"tail -n 200 -f \"{logPath.Replace("\"", "\\\"")}\"";
-
-#if UNITY_EDITOR_OSX
-                // Avoid AppleScript (which can trigger automation permission prompts).
-                // Create a .command script and open it with Terminal.
-                string scriptsDir = Path.Combine(GetProjectRootPath(), "Library", "MCPForUnity", "TerminalScripts");
-                Directory.CreateDirectory(scriptsDir);
-                string scriptPath = Path.Combine(scriptsDir, "tail-mcp-http-server.command");
-                File.WriteAllText(
-                    scriptPath,
-                    "#!/bin/bash\n" +
-                    "set -e\n" +
-                    "clear\n" +
-                    "echo \"Tailing MCP For Unity server log...\"\n" +
-                    $"{tailCommand}\n");
-
-                ExecPath.TryRun("/bin/chmod", $"+x \"{scriptPath}\"", Application.dataPath, out _, out _, 3000);
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "/usr/bin/open",
-                    Arguments = $"-a Terminal \"{scriptPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                });
-                OpenedHttpServerLogViewerThisSession = true;
-#elif UNITY_EDITOR_WIN
-                // Use PowerShell tail for better behavior.
-                string ps = $"powershell -NoProfile -Command \"Get-Content -Path '{logPath.Replace("'", "''")}' -Wait -Tail 200\"";
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "cmd.exe",
-                    Arguments = $"/c start \"MCP Server Logs\" {ps}",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                });
-                OpenedHttpServerLogViewerThisSession = true;
-#else
-                // Linux: reuse terminal launcher for a simple tail command.
-                var startInfo = CreateTerminalProcessStartInfo(tailCommand);
-                System.Diagnostics.Process.Start(startInfo);
-                OpenedHttpServerLogViewerThisSession = true;
-#endif
-            }
-            catch { }
-        }
-
         /// <summary>
         /// Stop the local HTTP server by finding the process listening on the configured port
         /// </summary>
         public bool StopLocalHttpServer()
         {
             return StopLocalHttpServerInternal(quiet: false);
+        }
+
+        public bool StopManagedLocalHttpServer()
+        {
+            if (!TryGetLocalHttpServerHandshake(out var pidFilePath, out _))
+            {
+                return false;
+            }
+
+            int port = 0;
+            if (!TryGetPortFromPidFilePath(pidFilePath, out port) || port <= 0)
+            {
+                string baseUrl = HttpEndpointUtility.GetBaseUrl();
+                if (IsLocalUrl(baseUrl)
+                    && Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+                    && uri.Port > 0)
+                {
+                    port = uri.Port;
+                }
+            }
+
+            if (port <= 0)
+            {
+                return false;
+            }
+
+            return StopLocalHttpServerInternal(quiet: true, portOverride: port, allowNonLocalUrl: true);
         }
 
         public bool IsLocalHttpServerRunning()
@@ -653,10 +597,10 @@ namespace MCPForUnity.Editor.Services
             }
         }
 
-        private bool StopLocalHttpServerInternal(bool quiet)
+        private bool StopLocalHttpServerInternal(bool quiet, int? portOverride = null, bool allowNonLocalUrl = false)
         {
             string httpUrl = HttpEndpointUtility.GetBaseUrl();
-            if (!IsLocalUrl(httpUrl))
+            if (!allowNonLocalUrl && !IsLocalUrl(httpUrl))
             {
                 if (!quiet)
                 {
@@ -667,8 +611,16 @@ namespace MCPForUnity.Editor.Services
 
             try
             {
-                var uri = new Uri(httpUrl);
-                int port = uri.Port;
+                int port = 0;
+                if (portOverride.HasValue)
+                {
+                    port = portOverride.Value;
+                }
+                else
+                {
+                    var uri = new Uri(httpUrl);
+                    port = uri.Port;
+                }
 
                 if (port <= 0)
                 {
@@ -690,19 +642,27 @@ namespace MCPForUnity.Editor.Services
                 // validate and terminate exactly that PID.
                 if (TryGetLocalHttpServerHandshake(out var pidFilePath, out var instanceToken))
                 {
-                    // If we have a handshake, we intentionally avoid the "kill by port heuristics" path.
-                    // This keeps semantics tight: only stop what Unity started.
+                    // Prefer deterministic stop when Unity started the server (pidfile+token).
+                    // If the pidfile isn't available yet (fast quit after start), we can optionally fall back
+                    // to port-based heuristics when a port override was supplied (managed-stop path).
                     if (!TryReadPidFromPidFile(pidFilePath, out var pidFromFile) || pidFromFile <= 0)
                     {
-                        if (!quiet)
+                        if (!portOverride.HasValue)
                         {
-                            McpLog.Warn(
-                                $"Cannot stop local HTTP server on port {port}: pidfile not available yet at '{pidFilePath}'. " +
-                                "If you just started the server, wait a moment and try again.");
+                            if (!quiet)
+                            {
+                                McpLog.Warn(
+                                    $"Cannot stop local HTTP server on port {port}: pidfile not available yet at '{pidFilePath}'. " +
+                                    "If you just started the server, wait a moment and try again.");
+                            }
+                            return false;
                         }
-                        return false;
-                    }
 
+                        // Managed-stop fallback: proceed with port-based heuristics below.
+                        // We intentionally do NOT clear handshake state here; it will be cleared if we successfully
+                        // stop a server process and/or the port is freed.
+                    }
+                    else
                     {
                         // Never kill Unity/Hub.
                         if (unityPid > 0 && pidFromFile == unityPid)
@@ -767,32 +727,6 @@ namespace MCPForUnity.Editor.Services
                             }
                             return false;
                         }
-                    }
-                }
-
-                // If Unity started a local server process in this editor session, try to terminate it first.
-                // (We still fall back to port-based termination for robustness.)
-                lock (LocalHttpServerProcessLock)
-                {
-                    try
-                    {
-                        if (LocalHttpServerProcess != null && !LocalHttpServerProcess.HasExited)
-                        {
-                            int pidToKill = LocalHttpServerProcess.Id;
-                            if (unityPid <= 0 || pidToKill != unityPid)
-                            {
-                                if (TerminateProcess(pidToKill))
-                                {
-                                    stoppedAny = true;
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-                    finally
-                    {
-                        try { LocalHttpServerProcess?.Dispose(); } catch { }
-                        LocalHttpServerProcess = null;
                     }
                 }
 
@@ -923,6 +857,10 @@ namespace MCPForUnity.Editor.Services
                     }
                 }
 
+                if (stoppedAny)
+                {
+                    ClearLocalServerPidTracking();
+                }
                 return stoppedAny;
             }
             catch (Exception ex)
@@ -948,7 +886,11 @@ namespace MCPForUnity.Editor.Services
                 string psPath = "/bin/ps";
                 if (!File.Exists(psPath)) psPath = "ps";
 
-                ExecPath.TryRun(psPath, $"-p {pid} -ww -o args=", Application.dataPath, out var stdout, out var stderr, 5000);
+                bool ok = ExecPath.TryRun(psPath, $"-p {pid} -ww -o args=", Application.dataPath, out var stdout, out var stderr, 5000);
+                if (!ok && string.IsNullOrWhiteSpace(stdout))
+                {
+                    return false;
+                }
                 string combined = ((stdout ?? string.Empty) + "\n" + (stderr ?? string.Empty)).Trim();
                 if (string.IsNullOrEmpty(combined)) return false;
                 // Normalize for matching to tolerate ps wrapping/newlines.
@@ -957,6 +899,38 @@ namespace MCPForUnity.Editor.Services
             }
             catch
             {
+                return false;
+            }
+        }
+
+        private static bool TryGetPortFromPidFilePath(string pidFilePath, out int port)
+        {
+            port = 0;
+            if (string.IsNullOrEmpty(pidFilePath))
+            {
+                return false;
+            }
+
+            try
+            {
+                string fileName = Path.GetFileNameWithoutExtension(pidFilePath);
+                if (string.IsNullOrEmpty(fileName))
+                {
+                    return false;
+                }
+
+                const string prefix = "mcp_http_";
+                if (!fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                string portText = fileName.Substring(prefix.Length);
+                return int.TryParse(portText, out port) && port > 0;
+            }
+            catch
+            {
+                port = 0;
                 return false;
             }
         }
