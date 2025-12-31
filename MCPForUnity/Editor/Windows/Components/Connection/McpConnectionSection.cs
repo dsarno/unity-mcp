@@ -713,7 +713,11 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                         }
                         else
                         {
-                            connectTask.ContinueWith(t => _ = t.Exception, TaskScheduler.Default);
+                            connectTask.ContinueWith(
+                                t => _ = t.Exception,
+                                System.Threading.CancellationToken.None,
+                                TaskContinuationOptions.OnlyOnFaulted,
+                                TaskScheduler.Default);
                         }
                     }
                     catch

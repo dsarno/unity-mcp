@@ -47,19 +47,25 @@ namespace MCPForUnity.Editor.Services
                 string scope = string.Empty;
                 try { scope = EditorPrefs.GetString(EditorPrefKeys.HttpTransportScope, string.Empty); } catch { }
 
-                bool httpLocalSelected = useHttp &&
-                                         (string.Equals(scope, "local", StringComparison.OrdinalIgnoreCase)
-                                          || (string.IsNullOrEmpty(scope) && MCPServiceLocator.Server.IsLocalUrl()));
+                bool stopped = false;
+                bool httpLocalSelected =
+                    useHttp &&
+                    (string.Equals(scope, "local", StringComparison.OrdinalIgnoreCase)
+                     || (string.IsNullOrEmpty(scope) && MCPServiceLocator.Server.IsLocalUrl()));
 
                 if (httpLocalSelected)
                 {
                     // StopLocalHttpServer is already guarded to only terminate processes that look like mcp-for-unity.
-                    MCPServiceLocator.Server.StopLocalHttpServer();
-                    return;
+                    // If it refuses to stop (e.g. URL was edited away from local), fall back to the Unity-managed stop.
+                    stopped = MCPServiceLocator.Server.StopLocalHttpServer();
                 }
 
-                // If the user switched away from HTTP Local, still attempt to stop a Unity-managed server.
-                MCPServiceLocator.Server.StopManagedLocalHttpServer();
+                // Always attempt to stop a Unity-managed server if one exists.
+                // This covers cases where the user switched transports (e.g. to stdio) or StopLocalHttpServer refused.
+                if (!stopped)
+                {
+                    MCPServiceLocator.Server.StopManagedLocalHttpServer();
+                }
             }
             catch (Exception ex)
             {
