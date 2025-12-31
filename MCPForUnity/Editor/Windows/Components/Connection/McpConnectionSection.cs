@@ -172,7 +172,18 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                     try
                     {
                         var stopTask = MCPServiceLocator.TransportManager.StopAsync(stopMode);
-                        stopTask.ContinueWith(_ => { }, TaskScheduler.Default);
+                        stopTask.ContinueWith(t =>
+                        {
+                            try
+                            {
+                                if (t.IsFaulted)
+                                {
+                                    var msg = t.Exception?.GetBaseException()?.Message ?? "Unknown error";
+                                    McpLog.Warn($"Async stop of {stopMode} transport failed: {msg}");
+                                }
+                            }
+                            catch { }
+                        }, TaskScheduler.Default);
                     }
                     catch (Exception ex)
                     {

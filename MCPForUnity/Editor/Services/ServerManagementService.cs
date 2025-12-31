@@ -583,53 +583,6 @@ namespace MCPForUnity.Editor.Services
             catch { }
         }
 
-        private void TryCaptureAndStoreLocalServerPid()
-        {
-            try
-            {
-                string httpUrl = HttpEndpointUtility.GetBaseUrl();
-                if (!IsLocalUrl(httpUrl))
-                {
-                    return;
-                }
-
-                if (!Uri.TryCreate(httpUrl, UriKind.Absolute, out var uri))
-                {
-                    return;
-                }
-
-                int port = uri.Port;
-                if (port <= 0) return;
-
-                // Poll briefly for the listener to appear.
-                int unityPid = GetCurrentProcessIdSafe();
-                var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-                while (DateTime.UtcNow < deadline)
-                {
-                    var pids = GetListeningProcessIdsForPort(port);
-                    foreach (var pid in pids)
-                    {
-                        if (pid <= 0) continue;
-                        if (unityPid > 0 && pid == unityPid) continue;
-
-                        // At this point StartLocalHttpServer already ensured the port was free before launching.
-                        // So whichever PID is now listening on the port is very likely the server we started.
-                        // We store a short fingerprint of the process args to reduce PID-reuse risk across domain reloads.
-                        string argsHash = string.Empty;
-                        if (TryGetUnixProcessArgs(pid, out var argsLower))
-                        {
-                            argsHash = ComputeShortHash(argsLower);
-                        }
-                        StoreLocalServerPidTracking(pid, port, argsHash);
-                        return;
-                    }
-
-                    System.Threading.Thread.Sleep(150);
-                }
-            }
-            catch { }
-        }
-
         /// <summary>
         /// Stop the local HTTP server by finding the process listening on the configured port
         /// </summary>
@@ -877,8 +830,14 @@ namespace MCPForUnity.Editor.Services
                         // fall back to a looser check to avoid leaving orphaned servers after domain reload.
                         if (TryGetUnixProcessArgs(storedPid, out var storedArgsLowerNow))
                         {
-                            // Never kill Unity/Hub.
-                            if (storedArgsLowerNow.Contains("unityhub") || storedArgsLowerNow.Contains("unity hub") || storedArgsLowerNow.Contains("unity"))
+                        // Never kill Unity/Hub.
+                        // Note: "mcp-for-unity" includes "unity", so detect MCP indicators first.
+                        bool storedMentionsMcp = storedArgsLowerNow.Contains("mcp-for-unity")
+                                                 || storedArgsLowerNow.Contains("mcp_for_unity")
+                                                 || storedArgsLowerNow.Contains("mcpforunity");
+                        if (storedArgsLowerNow.Contains("unityhub")
+                            || storedArgsLowerNow.Contains("unity hub")
+                            || (storedArgsLowerNow.Contains("unity") && !storedMentionsMcp))
                             {
                                 if (!quiet)
                                 {
@@ -1095,8 +1054,19 @@ namespace MCPForUnity.Editor.Services
                 if (!string.IsNullOrEmpty(s))
                 {
 
+                    bool mentionsMcp = sCompact.Contains("mcp-for-unity")
+                                       || sCompact.Contains("mcp_for_unity")
+                                       || sCompact.Contains("mcpforunity");
+
+                    // If it explicitly mentions the server package/entrypoint, that is sufficient.
+                    // Note: Check before Unity exclusion since "mcp-for-unity" contains "unity".
+                    if (mentionsMcp)
+                    {
+                        return true;
+                    }
+
                     // Explicitly never kill Unity / Unity Hub processes
-                    if (s.Contains("unity") || s.Contains("unityhub") || s.Contains("unity hub"))
+                    if (s.Contains("unityhub") || s.Contains("unity hub") || s.Contains("unity"))
                     {
                         return false;
                     }
@@ -1106,17 +1076,7 @@ namespace MCPForUnity.Editor.Services
                     bool mentionsUv = s.Contains("uv ") || s.Contains("/uv");
                     bool mentionsPython = s.Contains("python");
                     bool mentionsUvicorn = s.Contains("uvicorn");
-                    bool mentionsMcp = sCompact.Contains("mcp-for-unity")
-                                       || sCompact.Contains("mcp_for_unity")
-                                       || sCompact.Contains("mcpforunity");
                     bool mentionsTransport = sCompact.Contains("--transporthttp") || (sCompact.Contains("--transport") && sCompact.Contains("http"));
-
-                    // If it explicitly mentions the server package/entrypoint, that is sufficient
-                    // (we already only evaluate this for PIDs that are listening on our configured port).
-                    if (mentionsMcp)
-                    {
-                        return true;
-                    }
 
                     // Accept if it looks like uv/uvx/python launching our server package/entrypoint
                     if ((mentionsUvx || mentionsUv || mentionsPython || mentionsUvicorn) && mentionsTransport)
