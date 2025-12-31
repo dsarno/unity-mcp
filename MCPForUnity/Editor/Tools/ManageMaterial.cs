@@ -460,6 +460,8 @@ namespace MCPForUnity.Editor.Tools
         {
             string materialPath = NormalizePath(@params["materialPath"]?.ToString());
             string shaderName = @params["shader"]?.ToString() ?? "Standard";
+            JToken colorToken = @params["color"];
+            string colorProperty = @params["property"]?.ToString();
             
             JObject properties = null;
             JToken propsToken = @params["properties"];
@@ -495,6 +497,34 @@ namespace MCPForUnity.Editor.Tools
             }
 
             Material material = new Material(shader);
+
+            // Apply color param during creation (keeps Python tool signature and C# implementation consistent).
+            // If "properties" already contains a color property, let properties win.
+            if (colorToken != null && (properties == null || (!properties.ContainsKey("_BaseColor") && !properties.ContainsKey("_Color"))))
+            {
+                Color color;
+                try
+                {
+                    color = MaterialOps.ParseColor(colorToken, ManageGameObject.InputSerializer);
+                }
+                catch (Exception e)
+                {
+                    return new { status = "error", message = $"Invalid color format: {e.Message}" };
+                }
+
+                if (!string.IsNullOrEmpty(colorProperty) && material.HasProperty(colorProperty))
+                {
+                    material.SetColor(colorProperty, color);
+                }
+                else if (material.HasProperty("_BaseColor"))
+                {
+                    material.SetColor("_BaseColor", color);
+                }
+                else if (material.HasProperty("_Color"))
+                {
+                    material.SetColor("_Color", color);
+                }
+            }
             
             // Check for existing asset to avoid silent overwrite
             if (AssetDatabase.LoadAssetAtPath<Material>(materialPath) != null)
