@@ -391,6 +391,22 @@ Examples:
         help="HTTP server port (overrides URL port). "
              "Overrides UNITY_MCP_HTTP_PORT environment variable."
     )
+    parser.add_argument(
+        "--unity-instance-token",
+        type=str,
+        default=None,
+        metavar="TOKEN",
+        help="Optional per-launch token set by Unity for deterministic lifecycle management. "
+             "Used by Unity to validate it is stopping the correct process."
+    )
+    parser.add_argument(
+        "--pidfile",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Optional path where the server will write its PID on startup. "
+             "Used by Unity to stop the exact process it launched when running in a terminal."
+    )
 
     args = parser.parse_args()
 
@@ -417,6 +433,20 @@ Examples:
 
     os.environ["UNITY_MCP_HTTP_HOST"] = http_host
     os.environ["UNITY_MCP_HTTP_PORT"] = str(http_port)
+
+    # Optional lifecycle handshake for Unity-managed terminal launches
+    if args.unity_instance_token:
+        os.environ["UNITY_MCP_INSTANCE_TOKEN"] = args.unity_instance_token
+    if args.pidfile:
+        try:
+            pid_dir = os.path.dirname(args.pidfile)
+            if pid_dir:
+                os.makedirs(pid_dir, exist_ok=True)
+            with open(args.pidfile, "w", encoding="ascii") as f:
+                f.write(str(os.getpid()))
+        except Exception as exc:
+            logger.warning(
+                "Failed to write pidfile '%s': %s", args.pidfile, exc)
 
     if args.http_url != "http://localhost:8080":
         logger.info(f"HTTP URL set to: {http_url}")
