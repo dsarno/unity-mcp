@@ -553,6 +553,12 @@ namespace MCPForUnity.Editor.Tools
                     {
                         material.SetColor("_Color", color);
                     }
+                    else
+                    {
+                        Debug.LogWarning(
+                            $"Could not find suitable color property to apply color during material creation at {materialPath}"
+                        );
+                    }
                 }
 
                 AssetDatabase.CreateAsset(material, materialPath);

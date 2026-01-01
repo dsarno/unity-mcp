@@ -23,6 +23,10 @@ def test_auto_selects_single_instance_via_pluginhub(monkeypatch):
         async def get_sessions(cls):
             raise AssertionError("get_sessions should be stubbed in test")
 
+        @classmethod
+        async def _resolve_session_id(cls, instance_id: str):
+            return "session-1"
+
     plugin_hub.PluginHub = PluginHub
     monkeypatch.setitem(sys.modules, "transport.plugin_hub", plugin_hub)
     unity_transport = types.ModuleType("transport.unity_transport")
@@ -106,3 +110,116 @@ def test_auto_selects_single_instance_via_stdio(monkeypatch):
     asyncio.run(middleware._inject_unity_instance(middleware_context))
 
     assert ctx.get_state("unity_instance") == "UnityMCPTests@cc8756d4"
+
+
+def test_auto_select_skips_on_multiple_sessions(monkeypatch):
+    plugin_hub = types.ModuleType("transport.plugin_hub")
+
+    class PluginHub:
+        @classmethod
+        def is_configured(cls) -> bool:
+            return True
+
+        @classmethod
+        async def get_sessions(cls):
+            raise AssertionError("get_sessions should be stubbed in test")
+
+    plugin_hub.PluginHub = PluginHub
+    monkeypatch.setitem(sys.modules, "transport.plugin_hub", plugin_hub)
+    unity_transport = types.ModuleType("transport.unity_transport")
+    unity_transport._current_transport = lambda: "http"
+    monkeypatch.setitem(sys.modules, "transport.unity_transport", unity_transport)
+    monkeypatch.delitem(sys.modules, "transport.unity_instance_middleware", raising=False)
+
+    from transport.unity_instance_middleware import UnityInstanceMiddleware
+
+    middleware = UnityInstanceMiddleware()
+    ctx = DummyContext()
+    ctx.client_id = "client-1"
+
+    async def fake_get_sessions():
+        return SimpleNamespace(
+            sessions={
+                "session-1": SimpleNamespace(project="Ramble", hash="deadbeef"),
+                "session-2": SimpleNamespace(project="Other", hash="beadfeed"),
+            }
+        )
+
+    monkeypatch.setattr(plugin_hub.PluginHub, "get_sessions", fake_get_sessions)
+
+    selected = asyncio.run(middleware._maybe_autoselect_instance(ctx))
+
+    assert selected is None
+    assert middleware.get_active_instance(ctx) is None
+
+
+def test_auto_select_skips_on_no_stdio_instances(monkeypatch):
+    plugin_hub = types.ModuleType("transport.plugin_hub")
+
+    class PluginHub:
+        @classmethod
+        def is_configured(cls) -> bool:
+            return False
+
+    plugin_hub.PluginHub = PluginHub
+    monkeypatch.setitem(sys.modules, "transport.plugin_hub", plugin_hub)
+    unity_transport = types.ModuleType("transport.unity_transport")
+    unity_transport._current_transport = lambda: "stdio"
+    monkeypatch.setitem(sys.modules, "transport.unity_transport", unity_transport)
+    monkeypatch.delitem(sys.modules, "transport.unity_instance_middleware", raising=False)
+
+    from transport.unity_instance_middleware import UnityInstanceMiddleware
+
+    middleware = UnityInstanceMiddleware()
+    ctx = DummyContext()
+    ctx.client_id = "client-1"
+
+    class PoolStub:
+        def discover_all_instances(self, force_refresh=False):
+            assert force_refresh is True
+            return []
+
+    unity_connection = types.ModuleType("transport.legacy.unity_connection")
+    unity_connection.get_unity_connection_pool = lambda: PoolStub()
+    monkeypatch.setitem(sys.modules, "transport.legacy.unity_connection", unity_connection)
+
+    selected = asyncio.run(middleware._maybe_autoselect_instance(ctx))
+
+    assert selected is None
+    assert middleware.get_active_instance(ctx) is None
+
+
+def test_auto_select_handles_pluginhub_errors(monkeypatch):
+    plugin_hub = types.ModuleType("transport.plugin_hub")
+
+    class PluginHub:
+        @classmethod
+        def is_configured(cls) -> bool:
+            return True
+
+        @classmethod
+        async def get_sessions(cls):
+            raise AssertionError("get_sessions should be stubbed in test")
+
+    plugin_hub.PluginHub = PluginHub
+    monkeypatch.setitem(sys.modules, "transport.plugin_hub", plugin_hub)
+    unity_transport = types.ModuleType("transport.unity_transport")
+    unity_transport._current_transport = lambda: "http"
+    monkeypatch.setitem(sys.modules, "transport.unity_transport", unity_transport)
+    monkeypatch.delitem(sys.modules, "transport.unity_instance_middleware", raising=False)
+
+    from transport.unity_instance_middleware import UnityInstanceMiddleware
+
+    middleware = UnityInstanceMiddleware()
+    ctx = DummyContext()
+    ctx.client_id = "client-1"
+
+    async def fake_get_sessions():
+        raise ConnectionError("no connection")
+
+    monkeypatch.setattr(plugin_hub.PluginHub, "get_sessions", fake_get_sessions)
+
+    selected = asyncio.run(middleware._maybe_autoselect_instance(ctx))
+
+    assert selected is None
+    assert middleware.get_active_instance(ctx) is None

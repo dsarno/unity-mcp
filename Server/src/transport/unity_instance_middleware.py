@@ -107,7 +107,7 @@ class UnityInstanceMiddleware(Middleware):
                             chosen,
                         )
                         return chosen
-                except (ConnectionError, ValueError, KeyError, TimeoutError, AttributeError) as exc:
+                except (ConnectionError, ValueError, KeyError, TimeoutError, AttributeError, RuntimeError) as exc:
                     logger.debug(
                         "PluginHub auto-select probe failed (%s); falling back to stdio",
                         type(exc).__name__,
@@ -138,7 +138,7 @@ class UnityInstanceMiddleware(Middleware):
                             chosen,
                         )
                         return chosen
-                except (ConnectionError, ValueError, KeyError, TimeoutError, AttributeError) as exc:
+                except (ConnectionError, ValueError, KeyError, TimeoutError, AttributeError, RuntimeError) as exc:
                     logger.debug(
                         "Stdio auto-select probe failed (%s)",
                         type(exc).__name__,
