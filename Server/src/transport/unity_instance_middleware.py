@@ -107,9 +107,18 @@ class UnityInstanceMiddleware(Middleware):
                             chosen,
                         )
                         return chosen
-                except Exception:
+                except (ConnectionError, ValueError, KeyError, TimeoutError, AttributeError) as exc:
                     logger.debug(
-                        "PluginHub auto-select probe failed; falling back to stdio",
+                        "PluginHub auto-select probe failed (%s); falling back to stdio",
+                        type(exc).__name__,
+                        exc_info=True,
+                    )
+                except Exception as exc:
+                    if isinstance(exc, (SystemExit, KeyboardInterrupt)):
+                        raise
+                    logger.debug(
+                        "PluginHub auto-select probe failed with unexpected error (%s); falling back to stdio",
+                        type(exc).__name__,
                         exc_info=True,
                     )
 
@@ -129,11 +138,26 @@ class UnityInstanceMiddleware(Middleware):
                             chosen,
                         )
                         return chosen
-                except Exception:
-                    logger.debug("Stdio auto-select probe failed", exc_info=True)
-        except Exception:
+                except (ConnectionError, ValueError, KeyError, TimeoutError, AttributeError) as exc:
+                    logger.debug(
+                        "Stdio auto-select probe failed (%s)",
+                        type(exc).__name__,
+                        exc_info=True,
+                    )
+                except Exception as exc:
+                    if isinstance(exc, (SystemExit, KeyboardInterrupt)):
+                        raise
+                    logger.debug(
+                        "Stdio auto-select probe failed with unexpected error (%s)",
+                        type(exc).__name__,
+                        exc_info=True,
+                    )
+        except Exception as exc:
+            if isinstance(exc, (SystemExit, KeyboardInterrupt)):
+                raise
             logger.debug(
-                "Auto-select path encountered an unexpected error",
+                "Auto-select path encountered an unexpected error (%s)",
+                type(exc).__name__,
                 exc_info=True,
             )
 
