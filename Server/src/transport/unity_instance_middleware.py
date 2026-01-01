@@ -86,6 +86,9 @@ class UnityInstanceMiddleware(Middleware):
     async def _maybe_autoselect_instance(self, ctx) -> str | None:
         """Auto-select sole Unity instance when no active instance is set."""
         try:
+            from transport.unity_transport import _current_transport
+
+            transport = _current_transport()
             if PluginHub.is_configured():
                 try:
                     sessions_data = await PluginHub.get_sessions()
@@ -110,23 +113,24 @@ class UnityInstanceMiddleware(Middleware):
                         exc_info=True,
                     )
 
-            try:
-                from transport.legacy.unity_connection import get_unity_connection_pool
+            if transport != "http":
+                try:
+                    from transport.legacy.unity_connection import get_unity_connection_pool
 
-                pool = get_unity_connection_pool()
-                instances = pool.discover_all_instances(force_refresh=True)
-                ids = [getattr(inst, "id", None) for inst in instances]
-                ids = [inst_id for inst_id in ids if inst_id]
-                if len(ids) == 1:
-                    chosen = ids[0]
-                    self.set_active_instance(ctx, chosen)
-                    logger.info(
-                        "Auto-selected sole Unity instance via stdio discovery: %s",
-                        chosen,
-                    )
-                    return chosen
-            except Exception:
-                logger.debug("Stdio auto-select probe failed", exc_info=True)
+                    pool = get_unity_connection_pool()
+                    instances = pool.discover_all_instances(force_refresh=True)
+                    ids = [getattr(inst, "id", None) for inst in instances]
+                    ids = [inst_id for inst_id in ids if inst_id]
+                    if len(ids) == 1:
+                        chosen = ids[0]
+                        self.set_active_instance(ctx, chosen)
+                        logger.info(
+                            "Auto-selected sole Unity instance via stdio discovery: %s",
+                            chosen,
+                        )
+                        return chosen
+                except Exception:
+                    logger.debug("Stdio auto-select probe failed", exc_info=True)
         except Exception:
             logger.debug(
                 "Auto-select path encountered an unexpected error",
