@@ -510,7 +510,8 @@ namespace MCPForUnity.Editor.Tools
 
                 // Apply color param during creation (keeps Python tool signature and C# implementation consistent).
                 // If "properties" already contains a color property, let properties win.
-                if (colorToken != null && (properties == null || (!properties.ContainsKey("_BaseColor") && !properties.ContainsKey("_Color"))))
+                if (colorToken != null && (properties == null || (!properties.ContainsKey("_BaseColor") && !properties.ContainsKey("_Color")
+                    && (string.IsNullOrEmpty(colorProperty) || !properties.ContainsKey(colorProperty)))))
                 {
                     Color color;
                     try
