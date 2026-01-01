@@ -496,53 +496,66 @@ namespace MCPForUnity.Editor.Tools
                 return new { status = "error", message = $"Could not find shader: {shaderName}" };
             }
 
-            Material material = new Material(shader);
-
-            // Apply color param during creation (keeps Python tool signature and C# implementation consistent).
-            // If "properties" already contains a color property, let properties win.
-            if (colorToken != null && (properties == null || (!properties.ContainsKey("_BaseColor") && !properties.ContainsKey("_Color"))))
-            {
-                Color color;
-                try
-                {
-                    color = MaterialOps.ParseColor(colorToken, ManageGameObject.InputSerializer);
-                }
-                catch (Exception e)
-                {
-                    return new { status = "error", message = $"Invalid color format: {e.Message}" };
-                }
-
-                if (!string.IsNullOrEmpty(colorProperty) && material.HasProperty(colorProperty))
-                {
-                    material.SetColor(colorProperty, color);
-                }
-                else if (material.HasProperty("_BaseColor"))
-                {
-                    material.SetColor("_BaseColor", color);
-                }
-                else if (material.HasProperty("_Color"))
-                {
-                    material.SetColor("_Color", color);
-                }
-            }
-            
             // Check for existing asset to avoid silent overwrite
             if (AssetDatabase.LoadAssetAtPath<Material>(materialPath) != null)
             {
                 return new { status = "error", message = $"Material already exists at {materialPath}" };
             }
-            
-            AssetDatabase.CreateAsset(material, materialPath);
-            
-            if (properties != null)
-            {
-                MaterialOps.ApplyProperties(material, properties, ManageGameObject.InputSerializer);
-            }
-            
-            EditorUtility.SetDirty(material);
-            AssetDatabase.SaveAssets();
 
-            return new { status = "success", message = $"Created material at {materialPath} with shader {shaderName}" };
+            Material material = null;
+            var shouldDestroyMaterial = true;
+            try
+            {
+                material = new Material(shader);
+
+                // Apply color param during creation (keeps Python tool signature and C# implementation consistent).
+                // If "properties" already contains a color property, let properties win.
+                if (colorToken != null && (properties == null || (!properties.ContainsKey("_BaseColor") && !properties.ContainsKey("_Color"))))
+                {
+                    Color color;
+                    try
+                    {
+                        color = MaterialOps.ParseColor(colorToken, ManageGameObject.InputSerializer);
+                    }
+                    catch (Exception e)
+                    {
+                        return new { status = "error", message = $"Invalid color format: {e.Message}" };
+                    }
+
+                    if (!string.IsNullOrEmpty(colorProperty) && material.HasProperty(colorProperty))
+                    {
+                        material.SetColor(colorProperty, color);
+                    }
+                    else if (material.HasProperty("_BaseColor"))
+                    {
+                        material.SetColor("_BaseColor", color);
+                    }
+                    else if (material.HasProperty("_Color"))
+                    {
+                        material.SetColor("_Color", color);
+                    }
+                }
+
+                AssetDatabase.CreateAsset(material, materialPath);
+                shouldDestroyMaterial = false; // material is now owned by the AssetDatabase
+
+                if (properties != null)
+                {
+                    MaterialOps.ApplyProperties(material, properties, ManageGameObject.InputSerializer);
+                }
+
+                EditorUtility.SetDirty(material);
+                AssetDatabase.SaveAssets();
+
+                return new { status = "success", message = $"Created material at {materialPath} with shader {shaderName}" };
+            }
+            finally
+            {
+                if (shouldDestroyMaterial && material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
         }
     }
 }
