@@ -552,7 +552,7 @@ namespace MCPForUnity.Editor.Tools
                             return new
                             {
                                 status = "error",
-                                message = "Could not find suitable color property (_BaseColor or _Color) or specified property does not exist."
+                                message = $"Specified color property '{colorProperty}' does not exist on this material."
                             };
                         }
                     }
@@ -563,6 +563,14 @@ namespace MCPForUnity.Editor.Tools
                     else if (material.HasProperty("_Color"))
                     {
                         material.SetColor("_Color", color);
+                    }
+                    else
+                    {
+                        return new
+                        {
+                            status = "error",
+                            message = "Could not find suitable color property (_BaseColor or _Color) on this material's shader."
+                        };
                     }
                 }
 

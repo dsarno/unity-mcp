@@ -84,8 +84,15 @@ class UnityInstanceMiddleware(Middleware):
             self._active_by_key.pop(key, None)
 
     async def _maybe_autoselect_instance(self, ctx) -> str | None:
-        """Auto-select sole Unity instance when no active instance is set."""
+        """
+        Auto-select the sole Unity instance when no active instance is set.
+
+        Note: This method both *discovers* and *persists* the selection via
+        `set_active_instance` as a side-effect, since callers expect the selection
+        to stick for subsequent tool/resource calls in the same session.
+        """
         try:
+            # Import here to avoid circular dependencies / optional transport modules.
             from transport.unity_transport import _current_transport
 
             transport = _current_transport()
@@ -124,6 +131,7 @@ class UnityInstanceMiddleware(Middleware):
 
             if transport != "http":
                 try:
+                    # Import here to avoid circular imports in legacy transport paths.
                     from transport.legacy.unity_connection import get_unity_connection_pool
 
                     pool = get_unity_connection_pool()
