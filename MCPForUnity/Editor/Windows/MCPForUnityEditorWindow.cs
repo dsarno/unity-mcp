@@ -175,6 +175,8 @@ namespace MCPForUnity.Editor.Windows
                 connectionSection = new McpConnectionSection(connectionRoot);
                 connectionSection.OnManualConfigUpdateRequested += () =>
                     clientConfigSection?.UpdateManualConfiguration();
+                connectionSection.OnTransportChanged += () =>
+                    clientConfigSection?.RefreshSelectedClient(forceImmediate: true);
             }
 
             // Load and initialize Client Configuration section

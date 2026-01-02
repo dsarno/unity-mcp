@@ -51,6 +51,7 @@ namespace MCPForUnity.Editor.Windows
             { EditorPrefKeys.ClaudeCliPathOverride, EditorPrefType.String },
             { EditorPrefKeys.UvxPathOverride, EditorPrefType.String },
             { EditorPrefKeys.HttpBaseUrl, EditorPrefType.String },
+            { EditorPrefKeys.HttpTransportScope, EditorPrefType.String },
             { EditorPrefKeys.SessionId, EditorPrefType.String },
             { EditorPrefKeys.WebSocketUrlOverride, EditorPrefType.String },
             { EditorPrefKeys.GitUrlOverride, EditorPrefType.String },

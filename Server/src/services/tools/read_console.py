@@ -45,8 +45,18 @@ async def read_console(
     if isinstance(action, str):
         action = action.lower()
 
-    # Coerce count defensively (string/float -> int)
-    count = coerce_int(count)
+    # Coerce count defensively (string/float -> int).
+    # Important: leaving count unset previously meant "return all console entries", which can be extremely slow
+    # (and can exceed the plugin command timeout when Unity has a large console).
+    # To keep the tool responsive by default, we cap the default to a reasonable number of most-recent entries.
+    # If a client truly wants everything, it can pass count="all" (or count="*") explicitly.
+    if isinstance(count, str) and count.strip().lower() in ("all", "*"):
+        count = None
+    else:
+        count = coerce_int(count)
+
+    if action == "get" and count is None:
+        count = 200
 
     # Prepare parameters for the C# handler
     params_dict = {
