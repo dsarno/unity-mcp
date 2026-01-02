@@ -93,6 +93,8 @@ namespace MCPForUnity.Editor.Services
 
                 _leafResults.Clear();
                 _runCompletionSource = new TaskCompletionSource<TestRunResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+                // Mark running immediately so readiness snapshots reflect the busy state even before callbacks fire.
+                TestRunStatus.MarkStarted(mode);
 
                 var filter = new Filter
                 {
@@ -115,6 +117,8 @@ namespace MCPForUnity.Editor.Services
             }
             catch
             {
+                // Ensure the status is cleared if we failed to start the run.
+                TestRunStatus.MarkFinished();
                 if (adjustedPlayModeOptions)
                 {
                     RestoreEnterPlayModeOptions(originalEnterPlayModeOptionsEnabled, originalEnterPlayModeOptions);
@@ -175,6 +179,7 @@ namespace MCPForUnity.Editor.Services
             var payload = TestRunResult.Create(result, _leafResults);
             _runCompletionSource.TrySetResult(payload);
             _runCompletionSource = null;
+            TestRunStatus.MarkFinished();
         }
 
         public void TestStarted(ITestAdaptor test)
