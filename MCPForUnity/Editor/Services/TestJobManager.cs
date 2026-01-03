@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using MCPForUnity.Editor.Helpers;
-using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
 using UnityEditor;
 using UnityEditorInternal;
@@ -52,6 +51,7 @@ namespace MCPForUnity.Editor.Services
         private const int FailureCap = 25;
         private const long StuckThresholdMs = 60_000;
         private const int MaxJobsToKeep = 10;
+        private const long MinPersistIntervalMs = 1000; // Throttle persistence to reduce overhead
 
         // SessionState survives domain reloads within the same Unity Editor session.
         private const string SessionKeyJobs = "MCPForUnity.TestJobsV1";
@@ -60,6 +60,7 @@ namespace MCPForUnity.Editor.Services
         private static readonly object LockObj = new();
         private static readonly Dictionary<string, TestJob> Jobs = new();
         private static string _currentJobId;
+        private static long _lastPersistUnixMs;
 
         static TestJobManager()
         {
@@ -186,8 +187,16 @@ namespace MCPForUnity.Editor.Services
             }
         }
 
-        private static void PersistToSessionState()
+        private static void PersistToSessionState(bool force = false)
         {
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            
+            // Throttle non-critical updates to reduce overhead during large test runs
+            if (!force && (now - _lastPersistUnixMs) < MinPersistIntervalMs)
+            {
+                return;
+            }
+            
             try
             {
                 PersistedState snapshot;
@@ -224,6 +233,7 @@ namespace MCPForUnity.Editor.Services
 
                 SessionState.SetString(SessionKeyCurrentJobId, snapshot.current_job_id ?? string.Empty);
                 SessionState.SetString(SessionKeyJobs, JsonConvert.SerializeObject(snapshot));
+                _lastPersistUnixMs = now;
             }
             catch (Exception ex)
             {
@@ -269,7 +279,7 @@ namespace MCPForUnity.Editor.Services
                 Jobs[jobId] = job;
                 _currentJobId = jobId;
             }
-            PersistToSessionState();
+            PersistToSessionState(force: true);
 
             // Kick the run (must be called on main thread; our command handlers already run there).
             Task<TestRunResult> task = MCPServiceLocator.Tests.RunTestsAsync(mode, filterOptions);
@@ -312,7 +322,7 @@ namespace MCPForUnity.Editor.Services
                 job.CurrentTestFullName = null;
                 _currentJobId = null;
             }
-            PersistToSessionState();
+            PersistToSessionState(force: true);
         }
 
         public static void OnRunStarted(int? totalTests)
@@ -335,7 +345,7 @@ namespace MCPForUnity.Editor.Services
                 job.FailuresSoFar ??= new List<TestJobFailure>();
                 job.FailuresSoFar.Clear();
             }
-            PersistToSessionState();
+            PersistToSessionState(force: true);
         }
 
         public static void OnTestStarted(string testFullName)
@@ -404,7 +414,7 @@ namespace MCPForUnity.Editor.Services
                 job.LastUpdateUnixMs = now;
                 job.CurrentTestFullName = null;
             }
-            PersistToSessionState();
+            PersistToSessionState(force: true);
         }
 
         public static TestJob GetJob(string jobId)
@@ -566,7 +576,7 @@ namespace MCPForUnity.Editor.Services
                     _currentJobId = null;
                 }
             }
-            PersistToSessionState();
+            PersistToSessionState(force: true);
         }
     }
 }

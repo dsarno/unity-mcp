@@ -11,14 +11,12 @@ namespace MCPForUnityTests.Editor.Tools
 {
     /// <summary>
     /// Tests for domain reload resilience - ensuring MCP requests succeed even during Unity domain reloads.
-    /// </summary>
-    /// <summary>
-    /// These tests intentionally trigger script compilation. They're marked [Explicit] because:
-    /// 1. They leave compilation running which can stall subsequent tests' internal waits
-    /// 2. Internal Unity coroutine waits stall when backgrounded (unlike MCP socket-based polling)
-    /// 3. The MCP workflow itself works fine in background - this is a test infrastructure limitation
     /// 
-    /// Run these tests explicitly when needed, ideally with Unity foregrounded or first in the run.
+    /// These tests are marked [Explicit] because they trigger script compilation which can stall
+    /// subsequent tests' internal coroutine waits when Unity is backgrounded. The MCP workflow
+    /// itself is unaffected - socket messages provide external stimulus that keeps Unity responsive.
+    /// 
+    /// Run these explicitly when needed, ideally with Unity foregrounded or first in the run.
     /// </summary>
     [Category("domain_reload")]
     [Explicit("Triggers compilation that can stall subsequent tests. MCP workflow unaffected - see class docs.")]
