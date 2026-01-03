@@ -11,6 +11,7 @@ from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
 import transport.unity_transport as unity_transport
 from transport.legacy.unity_connection import async_send_command_with_retry
+from services.state.external_changes_scanner import external_changes_scanner
 
 
 @mcp_for_unity_tool(
@@ -32,6 +33,7 @@ async def refresh_unity(
         "wait_for_ready": bool(wait_for_ready),
     }
 
+    recovered_from_disconnect = False
     response = await unity_transport.send_with_unity_instance(
         async_send_command_with_retry,
         unity_instance,
@@ -39,8 +41,16 @@ async def refresh_unity(
         params,
     )
 
+    # Option A: treat disconnects / retry hints as recoverable when wait_for_ready is true.
+    # Unity can legitimately disconnect during refresh/compile/domain reload, so callers should not
+    # interpret that as a hard failure (#503-style loops).
     if isinstance(response, dict) and not response.get("success", True):
-        return MCPResponse(**response)
+        hint = response.get("hint")
+        err = (response.get("error") or response.get("message") or "")
+        is_retryable = (hint == "retry") or ("disconnected" in str(err).lower())
+        if (not wait_for_ready) or (not is_retryable):
+            return MCPResponse(**response)
+        recovered_from_disconnect = True
 
     # Optional server-side wait loop (defensive): if Unity tool doesn't wait or returns quickly,
     # poll the canonical editor_state v2 resource until ready or timeout.
@@ -57,6 +67,23 @@ async def refresh_unity(
             if isinstance(advice, dict) and advice.get("ready_for_tools") is True:
                 break
             await asyncio.sleep(0.25)
+
+    # After readiness is restored, clear any external-dirty flag for this instance so future tools can proceed cleanly.
+    try:
+        from services.resources.editor_state_v2 import _infer_single_instance_id
+
+        inst = unity_instance or await _infer_single_instance_id(ctx)
+        if inst:
+            external_changes_scanner.clear_dirty(inst)
+    except Exception:
+        pass
+
+    if recovered_from_disconnect:
+        return MCPResponse(
+            success=True,
+            message="Refresh recovered after Unity disconnect/retry; editor is ready.",
+            data={"recovered_from_disconnect": True},
+        )
 
     return MCPResponse(**response) if isinstance(response, dict) else response
 

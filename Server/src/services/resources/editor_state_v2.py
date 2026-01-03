@@ -9,6 +9,7 @@ from services.registry import mcp_for_unity_resource
 from services.tools import get_unity_instance_from_context
 import transport.unity_transport as unity_transport
 from transport.legacy.unity_connection import async_send_command_with_retry
+from services.state.external_changes_scanner import external_changes_scanner
 
 
 def _now_unix_ms() -> int:
@@ -230,6 +231,38 @@ async def get_editor_state_v2(ctx: Context) -> MCPResponse:
             inferred = await _infer_single_instance_id(ctx)
             if inferred:
                 unity_section["instance_id"] = inferred
+
+    # External change detection (server-side): compute per instance based on project root path.
+    # This helps detect stale assets when external tools edit the filesystem.
+    try:
+        instance_id = unity_section.get("instance_id")
+        if isinstance(instance_id, str) and instance_id.strip():
+            from services.resources.project_info import get_project_info
+
+            # Cache the project root for this instance (best-effort).
+            proj_resp = await get_project_info(ctx)
+            proj = proj_resp.model_dump() if hasattr(proj_resp, "model_dump") else proj_resp
+            proj_data = proj.get("data") if isinstance(proj, dict) else None
+            project_root = proj_data.get("projectRoot") if isinstance(proj_data, dict) else None
+            if isinstance(project_root, str) and project_root.strip():
+                external_changes_scanner.set_project_root(instance_id, project_root)
+
+            ext = external_changes_scanner.update_and_get(instance_id)
+
+            assets = state_v2.get("assets")
+            if not isinstance(assets, dict):
+                assets = {}
+                state_v2["assets"] = assets
+            # IMPORTANT: Unity's cached snapshot may include placeholder defaults; the server scanner is authoritative
+            # for external changes (filesystem edits outside Unity). Always overwrite these fields from the scanner.
+            assets["external_changes_dirty"] = bool(ext.get("external_changes_dirty", False))
+            assets["external_changes_last_seen_unix_ms"] = ext.get("external_changes_last_seen_unix_ms")
+            # Extra bookkeeping fields (server-only) are safe to add under assets.
+            assets["external_changes_dirty_since_unix_ms"] = ext.get("dirty_since_unix_ms")
+            assets["external_changes_last_cleared_unix_ms"] = ext.get("last_cleared_unix_ms")
+    except Exception:
+        # Best-effort; do not fail readiness resource if filesystem scan can't run.
+        pass
 
     state_v2 = _enrich_advice_and_staleness(state_v2)
     return MCPResponse(success=True, message="Retrieved editor state (v2).", data=state_v2)
