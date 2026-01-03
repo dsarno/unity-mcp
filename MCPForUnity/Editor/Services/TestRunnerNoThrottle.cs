@@ -36,12 +36,16 @@ namespace MCPForUnity.Editor.Services
         private const string SessionKey_PrevInteractionMode = "TestRunnerNoThrottle_PrevInteractionMode";
         private const string SessionKey_SettingsCaptured = "TestRunnerNoThrottle_SettingsCaptured";
 
+        // Keep reference to avoid GC and set HideFlags to avoid serialization issues
+        private static TestRunnerApi _api;
+
         static TestRunnerNoThrottle()
         {
             try
             {
-                var api = ScriptableObject.CreateInstance<TestRunnerApi>();
-                api.RegisterCallbacks(new TestCallbacks());
+                _api = ScriptableObject.CreateInstance<TestRunnerApi>();
+                _api.hideFlags = HideFlags.HideAndDontSave;
+                _api.RegisterCallbacks(new TestCallbacks());
 
                 // Check if recovering from domain reload during an active test run
                 if (IsTestRunActive())

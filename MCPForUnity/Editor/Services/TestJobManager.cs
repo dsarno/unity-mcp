@@ -243,14 +243,6 @@ namespace MCPForUnity.Editor.Services
 
         public static string StartJob(TestMode mode, TestFilterOptions filterOptions = null)
         {
-            lock (LockObj)
-            {
-                if (!string.IsNullOrEmpty(_currentJobId))
-                {
-                    throw new InvalidOperationException("A Unity test run is already in progress.");
-                }
-            }
-
             string jobId = Guid.NewGuid().ToString("N");
             long started = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             string modeStr = mode.ToString();
@@ -274,8 +266,13 @@ namespace MCPForUnity.Editor.Services
                 Result = null
             };
 
+            // Single lock scope for check-and-set to avoid TOCTOU race
             lock (LockObj)
             {
+                if (!string.IsNullOrEmpty(_currentJobId))
+                {
+                    throw new InvalidOperationException("A Unity test run is already in progress.");
+                }
                 Jobs[jobId] = job;
                 _currentJobId = jobId;
             }
