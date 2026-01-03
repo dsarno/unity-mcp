@@ -50,7 +50,9 @@ async def manage_asset(
 
     # Best-effort guard: if Unity is compiling/reloading or known external changes are pending,
     # wait/refresh to avoid stale reads and flaky timeouts.
-    await preflight(ctx, wait_for_no_compile=True, refresh_if_dirty=True)
+    gate = await preflight(ctx, wait_for_no_compile=True, refresh_if_dirty=True)
+    if gate is not None:
+        return gate.model_dump()
 
     def _parse_properties_string(raw: str) -> tuple[dict[str, Any] | None, str | None]:
         try:

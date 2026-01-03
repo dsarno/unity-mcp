@@ -41,7 +41,9 @@ async def manage_scene(
     # Get active instance from session state
     # Removed session_state import
     unity_instance = get_unity_instance_from_context(ctx)
-    await preflight(ctx, wait_for_no_compile=True, refresh_if_dirty=True)
+    gate = await preflight(ctx, wait_for_no_compile=True, refresh_if_dirty=True)
+    if gate is not None:
+        return gate.model_dump()
     try:
         coerced_build_index = coerce_int(build_index, default=None)
         coerced_super_size = coerce_int(screenshot_super_size, default=None)

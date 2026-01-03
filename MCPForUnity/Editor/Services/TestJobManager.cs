@@ -313,7 +313,9 @@ namespace MCPForUnity.Editor.Services
 
                 job.LastUpdateUnixMs = now;
                 job.FinishedUnixMs = now;
-                job.Status = TestJobStatus.Succeeded;
+                job.Status = resultPayload != null && resultPayload.Failed > 0
+                    ? TestJobStatus.Failed
+                    : TestJobStatus.Succeeded;
                 job.Error = null;
                 job.Result = resultPayload;
                 job.CurrentTestFullName = null;

@@ -93,7 +93,9 @@ async def manage_gameobject(
     # Removed session_state import
     unity_instance = get_unity_instance_from_context(ctx)
 
-    await preflight(ctx, wait_for_no_compile=True, refresh_if_dirty=True)
+    gate = await preflight(ctx, wait_for_no_compile=True, refresh_if_dirty=True)
+    if gate is not None:
+        return gate.model_dump()
 
     if action is None:
         return {
