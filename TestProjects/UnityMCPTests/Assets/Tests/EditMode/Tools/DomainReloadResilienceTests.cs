@@ -11,9 +11,15 @@ namespace MCPForUnityTests.Editor.Tools
 {
     /// <summary>
     /// Tests for domain reload resilience - ensuring MCP requests succeed even during Unity domain reloads.
+    /// 
+    /// These tests are marked [Explicit] because they trigger script compilation which can stall
+    /// subsequent tests' internal coroutine waits when Unity is backgrounded. The MCP workflow
+    /// itself is unaffected - socket messages provide external stimulus that keeps Unity responsive.
+    /// 
+    /// Run these explicitly when needed, ideally with Unity foregrounded or first in the run.
     /// </summary>
     [Category("domain_reload")]
-    [Explicit("Intentionally triggers script compilation/domain reload; run explicitly to avoid slowing/flaking cold-start EditMode runs.")]
+    [Explicit("Triggers compilation that can stall subsequent tests. MCP workflow unaffected - see class docs.")]
     public class DomainReloadResilienceTests
     {
         private const string TempDir = "Assets/Temp/DomainReloadTests";
@@ -25,14 +31,14 @@ namespace MCPForUnityTests.Editor.Tools
             if (!AssetDatabase.IsValidFolder(TempDir))
             {
                 Directory.CreateDirectory(TempDir);
-                AssetDatabase.Refresh();
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             }
         }
 
         [TearDown]
         public void TearDown()
         {
-            // Clean up temp directory
+            // Clean up temp directory - this deletes any scripts we created
             if (AssetDatabase.IsValidFolder(TempDir))
             {
                 AssetDatabase.DeleteAsset(TempDir);
@@ -48,6 +54,10 @@ namespace MCPForUnityTests.Editor.Tools
                     AssetDatabase.DeleteAsset("Assets/Temp");
                 }
             }
+
+            // CRITICAL: Force a synchronous refresh and wait for any pending compilation to finish.
+            // This prevents leaving compilation running that could stall subsequent tests.
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         }
 
         /// <summary>
@@ -72,7 +82,7 @@ public class StressTestScript : MonoBehaviour
             
             // Write script file
             File.WriteAllText(scriptPath, scriptContent);
-            AssetDatabase.Refresh();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             
             Debug.Log("[DomainReloadTest] Script created, domain reload triggered");
             
@@ -163,7 +173,7 @@ public class TestScript1 : MonoBehaviour
 }";
             
             File.WriteAllText(scriptPath, scriptContent);
-            AssetDatabase.Refresh();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             
             Debug.Log("[DomainReloadTest] Script created");
             
@@ -211,7 +221,7 @@ public class RapidScript{i} : MonoBehaviour
 }}";
                 
                 File.WriteAllText(scriptPath, scriptContent);
-                AssetDatabase.Refresh();
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                 
                 Debug.Log($"[DomainReloadTest] Created script {i+1}/{scriptCount}");
                 

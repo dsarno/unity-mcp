@@ -8,6 +8,7 @@ from services.tools import get_unity_instance_from_context
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 from services.tools.utils import coerce_bool, parse_json_payload, coerce_int
+from services.tools.preflight import preflight
 
 
 @mcp_for_unity_tool(
@@ -91,6 +92,10 @@ async def manage_gameobject(
     # Get active instance from session state
     # Removed session_state import
     unity_instance = get_unity_instance_from_context(ctx)
+
+    gate = await preflight(ctx, wait_for_no_compile=True, refresh_if_dirty=True)
+    if gate is not None:
+        return gate.model_dump()
 
     if action is None:
         return {

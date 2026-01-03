@@ -10,6 +10,7 @@ from services.tools import get_unity_instance_from_context
 from services.tools.utils import coerce_int
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
+from services.tools.preflight import preflight
 
 
 class RunTestsSummary(BaseModel):
@@ -42,7 +43,7 @@ class RunTestsResponse(MCPResponse):
 
 
 @mcp_for_unity_tool(
-    description="Runs Unity tests for the specified mode"
+    description="Runs Unity tests synchronously (blocks until complete). Prefer run_tests_async for non-blocking execution with progress polling."
 )
 async def run_tests(
     ctx: Context,
@@ -54,8 +55,12 @@ async def run_tests(
     assembly_names: Annotated[list[str] | str, "Assembly names to filter tests by"] | None = None,
     include_failed_tests: Annotated[bool, "Include details for failed/skipped tests only (default: false)"] = False,
     include_details: Annotated[bool, "Include details for all tests (default: false)"] = False,
-) -> RunTestsResponse:
+) -> RunTestsResponse | MCPResponse:
     unity_instance = get_unity_instance_from_context(ctx)
+
+    gate = await preflight(ctx, requires_no_tests=True, wait_for_no_compile=True, refresh_if_dirty=True)
+    if isinstance(gate, MCPResponse):
+        return gate
 
     # Coerce string or list to list of strings
     def _coerce_string_list(value) -> list[str] | None:
@@ -97,5 +102,19 @@ async def run_tests(
         params["includeDetails"] = True
 
     response = await send_with_unity_instance(async_send_command_with_retry, unity_instance, "run_tests", params)
-    await ctx.info(f'Response {response}')
+
+    # If Unity indicates a run is already active, return a structured "busy" response rather than
+    # letting clients interpret this as a generic failure (avoids #503 retry loops).
+    if isinstance(response, dict) and not response.get("success", True):
+        err = (response.get("error") or response.get("message") or "").strip()
+        if "test run is already in progress" in err.lower():
+            return MCPResponse(
+                success=False,
+                error="tests_running",
+                message=err,
+                hint="retry",
+                data={"reason": "tests_running", "retry_after_ms": 5000},
+            )
+        return MCPResponse(**response)
+
     return RunTestsResponse(**response) if isinstance(response, dict) else response

@@ -6,6 +6,7 @@ from services.tools import get_unity_instance_from_context
 from services.tools.utils import coerce_int, coerce_bool
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
+from services.tools.preflight import preflight
 
 
 @mcp_for_unity_tool(
@@ -40,6 +41,9 @@ async def manage_scene(
     # Get active instance from session state
     # Removed session_state import
     unity_instance = get_unity_instance_from_context(ctx)
+    gate = await preflight(ctx, wait_for_no_compile=True, refresh_if_dirty=True)
+    if gate is not None:
+        return gate.model_dump()
     try:
         coerced_build_index = coerce_int(build_index, default=None)
         coerced_super_size = coerce_int(screenshot_super_size, default=None)

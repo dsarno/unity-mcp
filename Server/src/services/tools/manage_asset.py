@@ -12,6 +12,7 @@ from services.tools import get_unity_instance_from_context
 from services.tools.utils import parse_json_payload, coerce_int
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
+from services.tools.preflight import preflight
 
 
 @mcp_for_unity_tool(
@@ -46,6 +47,12 @@ async def manage_asset(
                            "Page number for pagination (1-based)."] | None = None,
 ) -> dict[str, Any]:
     unity_instance = get_unity_instance_from_context(ctx)
+
+    # Best-effort guard: if Unity is compiling/reloading or known external changes are pending,
+    # wait/refresh to avoid stale reads and flaky timeouts.
+    gate = await preflight(ctx, wait_for_no_compile=True, refresh_if_dirty=True)
+    if gate is not None:
+        return gate.model_dump()
 
     def _parse_properties_string(raw: str) -> tuple[dict[str, Any] | None, str | None]:
         try:

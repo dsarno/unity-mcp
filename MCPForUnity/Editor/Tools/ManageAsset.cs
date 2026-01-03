@@ -180,7 +180,7 @@ namespace MCPForUnity.Editor.Tools
             if (!Directory.Exists(Path.Combine(Directory.GetCurrentDirectory(), directory)))
             {
                 Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), directory));
-                AssetDatabase.Refresh(); // Make sure Unity knows about the new folder
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport); // Make sure Unity knows about the new folder
             }
 
             if (AssetExists(fullPath))
@@ -869,7 +869,7 @@ namespace MCPForUnity.Editor.Tools
             if (!Directory.Exists(fullDirPath))
             {
                 Directory.CreateDirectory(fullDirPath);
-                AssetDatabase.Refresh(); // Let Unity know about the new folder
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport); // Let Unity know about the new folder
             }
         }
 

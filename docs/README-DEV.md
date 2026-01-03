@@ -336,3 +336,14 @@ We provide a CI job to run a Natural Language Editing suite against the Unity te
 ### Windows uv path issues
 
 - On Windows, when testing GUI clients, prefer the WinGet Links `uv.exe`; if multiple `uv.exe` exist, use "Choose `uv` Install Location" to pin the Links shim.
+
+### Domain Reload Tests Stall When Unity is Backgrounded
+
+Tests that trigger script compilation mid-run (e.g., `DomainReloadResilienceTests`) may stall when Unity is not the active window. This is an OS-level limitation—macOS throttles background application main threads, preventing compilation from completing.
+
+**Workarounds:**
+- Run domain reload tests with Unity foregrounded
+- Run them first in the test suite (before backgrounding Unity)
+- Use the `[Explicit]` attribute to exclude them from default runs
+
+**Note:** The MCP workflow itself is unaffected—socket messages provide external stimulus that keeps Unity responsive even when backgrounded. This limitation only affects Unity's internal test coroutine waits.
