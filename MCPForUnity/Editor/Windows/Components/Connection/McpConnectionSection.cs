@@ -627,10 +627,20 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             {
                 // Wait until the HTTP server is actually accepting connections to reduce transient "unable to connect then recovers"
                 // behavior (session start attempts can race the server startup).
-                bool serverReady = await WaitForHttpServerAcceptingConnectionsAsync(TimeSpan.FromSeconds(10));
+                // Dev mode uses --no-cache --refresh which causes uvx to rebuild the package, taking significantly longer.
+                bool devModeEnabled = false;
+                try { devModeEnabled = EditorPrefs.GetBool(EditorPrefKeys.DevModeForceServerRefresh, false); } catch { }
+                var startupTimeout = devModeEnabled ? TimeSpan.FromSeconds(45) : TimeSpan.FromSeconds(10);
+                
+                if (devModeEnabled)
+                {
+                    McpLog.Info("Dev mode enabled: server startup may take longer while uvx rebuilds the package...");
+                }
+                
+                bool serverReady = await WaitForHttpServerAcceptingConnectionsAsync(startupTimeout);
                 if (!serverReady)
                 {
-                    McpLog.Warn("HTTP server did not become reachable within the expected startup window; will still attempt to start the session.");
+                    McpLog.Warn($"HTTP server did not become reachable within {startupTimeout.TotalSeconds}s; will still attempt to start the session.");
                 }
 
                 for (int attempt = 0; attempt < maxAttempts; attempt++)
