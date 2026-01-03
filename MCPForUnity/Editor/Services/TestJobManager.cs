@@ -565,9 +565,12 @@ namespace MCPForUnity.Editor.Services
                 }
                 else
                 {
-                    existing.Status = TestJobStatus.Succeeded;
+                    var result = task.Result;
+                    existing.Status = result != null && result.Failed > 0
+                        ? TestJobStatus.Failed
+                        : TestJobStatus.Succeeded;
                     existing.Error = null;
-                    existing.Result = task.Result;
+                    existing.Result = result;
                 }
 
                 if (_currentJobId == jobId)
