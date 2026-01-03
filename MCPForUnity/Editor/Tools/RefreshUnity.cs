@@ -65,7 +65,7 @@ namespace MCPForUnity.Editor.Tools
                     }
                     else
                     {
-                        AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+                        AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
                         refreshTriggered = true;
                     }
                 }
@@ -79,8 +79,9 @@ namespace MCPForUnity.Editor.Tools
                 if (string.Equals(scope, "all", StringComparison.OrdinalIgnoreCase) && !refreshTriggered)
                 {
                     // If the caller asked for "all" and we skipped refresh above (e.g., scripts-only path),
-                    // do a lightweight refresh now.
-                    AssetDatabase.Refresh();
+                    // do a lightweight refresh now. Use ForceSynchronousImport to ensure the refresh
+                    // completes before returning, preventing stalls when Unity is backgrounded.
+                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     refreshTriggered = true;
                 }
             }

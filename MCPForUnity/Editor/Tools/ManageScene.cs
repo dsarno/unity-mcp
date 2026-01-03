@@ -219,7 +219,7 @@ namespace MCPForUnity.Editor.Tools
 
                 if (saved)
                 {
-                    AssetDatabase.Refresh(); // Ensure Unity sees the new scene file
+                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport); // Ensure Unity sees the new scene file
                     return new SuccessResponse(
                         $"Scene '{Path.GetFileName(relativePath)}' created successfully at '{relativePath}'.",
                         new { path = relativePath }
@@ -362,7 +362,7 @@ namespace MCPForUnity.Editor.Tools
 
                 if (saved)
                 {
-                    AssetDatabase.Refresh();
+                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     return new SuccessResponse(
                         $"Scene '{currentScene.name}' saved successfully to '{finalPath}'.",
                         new { path = finalPath, name = currentScene.name }
@@ -408,7 +408,7 @@ namespace MCPForUnity.Editor.Tools
                     result = ScreenshotUtility.CaptureFromCameraToAssetsFolder(cam, fileName, resolvedSuperSize, ensureUniqueFileName: true);
                 }
 
-                AssetDatabase.Refresh();
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
                 string message = $"Screenshot captured to '{result.AssetsRelativePath}' (full: {result.FullPath}).";
 

@@ -590,7 +590,7 @@ namespace MCPForUnity.Editor.Tools
                     )
                     {
                         System.IO.Directory.CreateDirectory(directoryPath);
-                        AssetDatabase.Refresh(); // Refresh asset database to recognize the new folder
+                        AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport); // Refresh asset database to recognize the new folder
                         Debug.Log(
                             $"[ManageGameObject.Create] Created directory for prefab: {directoryPath}"
                         );

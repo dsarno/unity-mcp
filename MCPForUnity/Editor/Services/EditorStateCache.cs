@@ -2,6 +2,7 @@ using System;
 using MCPForUnity.Editor.Helpers;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
+using UnityEditorInternal;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 
@@ -109,6 +110,8 @@ namespace MCPForUnity.Editor.Services
 
             bool testsRunning = TestRunStatus.IsRunning;
             var testsMode = TestRunStatus.Mode?.ToString();
+            string currentJobId = TestJobManager.CurrentJobId;
+            bool isFocused = InternalEditorUtility.isApplicationActive;
 
             var activityPhase = "idle";
             if (testsRunning)
@@ -148,7 +151,7 @@ namespace MCPForUnity.Editor.Services
                 },
                 editor = new
                 {
-                    is_focused = (bool?)null,
+                    is_focused = isFocused,
                     play_mode = new
                     {
                         is_playing = EditorApplication.isPlaying,
@@ -193,6 +196,7 @@ namespace MCPForUnity.Editor.Services
                 {
                     is_running = testsRunning,
                     mode = testsMode,
+                    current_job_id = string.IsNullOrEmpty(currentJobId) ? null : currentJobId,
                     started_unix_ms = TestRunStatus.StartedUnixMs,
                     started_by = "unknown",
                     last_run = TestRunStatus.FinishedUnixMs.HasValue

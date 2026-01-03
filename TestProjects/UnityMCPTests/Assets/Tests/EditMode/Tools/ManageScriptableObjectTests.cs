@@ -14,9 +14,10 @@ namespace MCPForUnityTests.Editor.Tools
     public class ManageScriptableObjectTests
     {
         private const string TempRoot = "Assets/Temp/ManageScriptableObjectTests";
-        private const string NestedFolder = TempRoot + "/Nested/Deeper";
         private const double UnityReadyTimeoutSeconds = 180.0;
 
+        private string _runRoot;
+        private string _nestedFolder;
         private string _createdAssetPath;
         private string _createdGuid;
         private string _matAPath;
@@ -27,12 +28,12 @@ namespace MCPForUnityTests.Editor.Tools
         {
             yield return WaitForUnityReady(UnityReadyTimeoutSeconds);
             EnsureFolder("Assets/Temp");
-            // Start from a clean slate every time (prevents intermittent setup failures).
-            if (AssetDatabase.IsValidFolder(TempRoot))
-            {
-                AssetDatabase.DeleteAsset(TempRoot);
-            }
+            // Avoid deleting/recreating the entire TempRoot each test (can trigger heavy reimport churn).
+            // Instead, isolate each test in its own unique subfolder under TempRoot.
             EnsureFolder(TempRoot);
+            _runRoot = $"{TempRoot}/Run_{Guid.NewGuid():N}";
+            EnsureFolder(_runRoot);
+            _nestedFolder = _runRoot + "/Nested/Deeper";
 
             _createdAssetPath = null;
             _createdGuid = null;
@@ -69,9 +70,9 @@ namespace MCPForUnityTests.Editor.Tools
                 AssetDatabase.DeleteAsset(_matBPath);
             }
 
-            if (AssetDatabase.IsValidFolder(TempRoot))
+            if (!string.IsNullOrEmpty(_runRoot) && AssetDatabase.IsValidFolder(_runRoot))
             {
-                AssetDatabase.DeleteAsset(TempRoot);
+                AssetDatabase.DeleteAsset(_runRoot);
             }
 
             // Clean up parent Temp folder if empty
@@ -89,21 +90,15 @@ namespace MCPForUnityTests.Editor.Tools
         }
 
         [Test]
-        public void Create_CreatesNestedFolders_PlacesAssetCorrectly_AndAppliesPatches()
+        public void Create_CreatesNestedFolders_PlacesAssetCorrectly()
         {
             var create = new JObject
             {
                 ["action"] = "create",
                 ["typeName"] = typeof(ManageScriptableObjectTestDefinition).FullName,
-                ["folderPath"] = NestedFolder,
-                ["assetName"] = "My_Test_Def",
+                ["folderPath"] = _nestedFolder,
+                ["assetName"] = "My_Test_Def_Placement",
                 ["overwrite"] = true,
-                ["patches"] = new JArray
-                {
-                    new JObject { ["propertyPath"] = "displayName", ["op"] = "set", ["value"] = "Hello" },
-                    new JObject { ["propertyPath"] = "baseNumber", ["op"] = "set", ["value"] = 42 },
-                    new JObject { ["propertyPath"] = "nested.note", ["op"] = "set", ["value"] = "note!" }
-                }
             };
 
             var raw = ManageScriptableObject.HandleCommand(create);
@@ -116,9 +111,45 @@ namespace MCPForUnityTests.Editor.Tools
             _createdGuid = data!["guid"]?.ToString();
             _createdAssetPath = data["path"]?.ToString();
 
-            Assert.IsTrue(AssetDatabase.IsValidFolder(NestedFolder), "Nested folder should be created.");
-            Assert.IsTrue(_createdAssetPath!.StartsWith(NestedFolder, StringComparison.Ordinal), $"Asset should be created under {NestedFolder}: {_createdAssetPath}");
+            Assert.IsTrue(AssetDatabase.IsValidFolder(_nestedFolder), "Nested folder should be created.");
+            Assert.IsTrue(_createdAssetPath!.StartsWith(_nestedFolder, StringComparison.Ordinal), $"Asset should be created under {_nestedFolder}: {_createdAssetPath}");
             Assert.IsTrue(_createdAssetPath.EndsWith(".asset", StringComparison.OrdinalIgnoreCase), "Asset should have .asset extension.");
+            Assert.IsFalse(string.IsNullOrWhiteSpace(_createdGuid), "Expected guid in response.");
+
+            var asset = AssetDatabase.LoadAssetAtPath<ManageScriptableObjectTestDefinition>(_createdAssetPath);
+            Assert.IsNotNull(asset, "Created asset should load as TestDefinition.");
+        }
+
+        [Test]
+        public void Create_AppliesPatches_ToCreatedAsset()
+        {
+            var create = new JObject
+            {
+                ["action"] = "create",
+                ["typeName"] = typeof(ManageScriptableObjectTestDefinition).FullName,
+                // Patching correctness does not depend on nested folder creation; keep this lightweight.
+                ["folderPath"] = _runRoot,
+                ["assetName"] = "My_Test_Def_Patches",
+                ["overwrite"] = true,
+                ["patches"] = new JArray
+                {
+                    new JObject { ["propertyPath"] = "displayName", ["op"] = "set", ["value"] = "Hello" },
+                    new JObject { ["propertyPath"] = "baseNumber", ["op"] = "set", ["value"] = 42 },
+                    new JObject { ["propertyPath"] = "nested.note", ["op"] = "set", ["value"] = "note!" }
+                }
+            };
+
+            var raw = ManageScriptableObject.HandleCommand(create);
+            var result = raw as JObject ?? JObject.FromObject(raw);
+            Assert.IsTrue(result.Value<bool>("success"), result.ToString());
+
+            var data = result["data"] as JObject;
+            Assert.IsNotNull(data, "Expected data payload");
+
+            _createdGuid = data!["guid"]?.ToString();
+            _createdAssetPath = data["path"]?.ToString();
+
+            Assert.IsTrue(_createdAssetPath!.StartsWith(_runRoot, StringComparison.Ordinal), $"Asset should be created under {_runRoot}: {_createdAssetPath}");
             Assert.IsFalse(string.IsNullOrWhiteSpace(_createdGuid), "Expected guid in response.");
 
             var asset = AssetDatabase.LoadAssetAtPath<ManageScriptableObjectTestDefinition>(_createdAssetPath);
@@ -136,7 +167,7 @@ namespace MCPForUnityTests.Editor.Tools
             {
                 ["action"] = "create",
                 ["typeName"] = typeof(ManageScriptableObjectTestDefinition).FullName,
-                ["folderPath"] = TempRoot,
+                ["folderPath"] = _runRoot,
                 ["assetName"] = "Modify_Target",
                 ["overwrite"] = true
             };
