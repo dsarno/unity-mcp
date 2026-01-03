@@ -13,7 +13,7 @@ import transport.unity_transport as unity_transport
 from transport.legacy.unity_connection import async_send_command_with_retry
 
 
-@mcp_for_unity_tool(description="Starts a Unity test run asynchronously and returns a job_id immediately.")
+@mcp_for_unity_tool(description="Starts a Unity test run asynchronously and returns a job_id immediately. Preferred over run_tests for long-running suites. Poll with get_test_job for progress.")
 async def run_tests_async(
     ctx: Context,
     mode: Annotated[Literal["EditMode", "PlayMode"], "Unity test mode to run"] = "EditMode",

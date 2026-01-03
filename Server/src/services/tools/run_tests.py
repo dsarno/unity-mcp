@@ -43,7 +43,7 @@ class RunTestsResponse(MCPResponse):
 
 
 @mcp_for_unity_tool(
-    description="Runs Unity tests for the specified mode"
+    description="Runs Unity tests synchronously (blocks until complete). Prefer run_tests_async for non-blocking execution with progress polling."
 )
 async def run_tests(
     ctx: Context,

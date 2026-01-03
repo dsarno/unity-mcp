@@ -51,9 +51,9 @@ MCP for Unity acts as a bridge, allowing AI assistants (like Claude, Cursor) to 
 * `manage_scriptable_object`: Creates and modifies ScriptableObject assets using Unity SerializedObject property paths.
 * `manage_shader`: Performs shader CRUD operations (create, read, modify, delete).
 * `read_console`: Gets messages from or clears the console.
-* `run_tests`: Runs tests synchronously in the Unity Editor.
-* `run_tests_async`: Starts tests asynchronously and returns a job_id for polling.
+* `run_tests_async`: Starts tests asynchronously and returns a job_id for polling (preferred).
 * `get_test_job`: Polls an async test job for progress and results.
+* `run_tests`: Runs tests synchronously (blocks until complete; prefer `run_tests_async` for long suites).
 * `execute_custom_tool`: Execute a project-scoped custom tool registered by Unity.
 * `execute_menu_item`: Executes Unity Editor menu items (e.g., "File/Save Project").
 * `set_active_instance`: Routes subsequent tool calls to a specific Unity instance (when multiple are running). Requires the exact `Name@hash` from `unity_instances`.
