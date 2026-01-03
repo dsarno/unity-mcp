@@ -38,6 +38,20 @@ jobs:
             Library-${{ matrix.projectPath }}-
             Library-
 
+      # Run domain reload tests first (they're [Explicit] so need explicit category)
+      - name: Run domain reload tests
+        uses: game-ci/unity-test-runner@v4
+        id: domain-tests
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: ${{ matrix.projectPath }}
+          unityVersion: ${{ matrix.unityVersion }}
+          testMode: ${{ matrix.testMode }}
+          customParameters: -testCategory domain_reload
+
       - name: Run tests
         uses: game-ci/unity-test-runner@v4
         id: tests
@@ -54,42 +68,4 @@ jobs:
         if: always()
         with:
           name: Test results for ${{ matrix.testMode }}
-          path: ${{ steps.tests.outputs.artifactsPath }}
-
-  # Domain reload tests run separately (they're [Explicit] and trigger compilation)
-  testDomainReload:
-    if: github.repository_owner == 'CoplayDev'
-    name: Domain Reload Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          lfs: true
-
-      - uses: actions/cache@v4
-        with:
-          path: TestProjects/UnityMCPTests/Library
-          key: Library-TestProjects/UnityMCPTests-2021.3.45f2
-          restore-keys: |
-            Library-TestProjects/UnityMCPTests-
-            Library-
-
-      - name: Run domain reload tests
-        uses: game-ci/unity-test-runner@v4
-        id: tests
-        env:
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-        with:
-          projectPath: TestProjects/UnityMCPTests
-          unityVersion: 2021.3.45f2
-          testMode: editmode
-          customParameters: -testCategory domain_reload
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: Test results for domain_reload
           path: ${{ steps.tests.outputs.artifactsPath }}
