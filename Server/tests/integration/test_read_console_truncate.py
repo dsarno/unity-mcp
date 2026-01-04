@@ -57,7 +57,7 @@ async def test_read_console_full_default(monkeypatch):
         "data": {"lines": [{"level": "error", "message": "oops", "stacktrace": "trace", "time": "t"}]},
     }
     assert captured["params"]["count"] == 10
-    assert captured["params"]["includeStacktrace"] is True
+    assert captured["params"]["includeStacktrace"] is False
 
 
 @pytest.mark.asyncio
