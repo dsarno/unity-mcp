@@ -34,6 +34,10 @@ class PluginDisconnectedError(RuntimeError):
     """Raised when a plugin WebSocket disconnects while commands are in flight."""
 
 
+class NoUnitySessionError(RuntimeError):
+    """Raised when no Unity plugins are available."""
+
+
 class PluginHub(WebSocketEndpoint):
     """Manages persistent WebSocket connections to Unity plugins."""
 
@@ -371,7 +375,8 @@ class PluginHub(WebSocketEndpoint):
                 "Invalid UNITY_MCP_SESSION_RESOLVE_MAX_WAIT_S=%r, using default 2.0: %s",
                 raw_val, e)
             max_wait_s = 2.0
-        max_wait_s = max(0.0, max_wait_s)
+        # Clamp to [0, 30] to prevent misconfiguration from causing excessive waits
+        max_wait_s = max(0.0, min(max_wait_s, 30.0))
         retry_ms = float(getattr(config, "reload_retry_ms", 250))
         sleep_seconds = max(0.05, min(0.25, retry_ms / 1000.0))
 
@@ -443,7 +448,7 @@ class PluginHub(WebSocketEndpoint):
             )
             # At this point we've given the plugin ample time to reconnect; surface
             # a clear error so the client can prompt the user to open Unity.
-            raise RuntimeError("No Unity plugins are currently connected")
+            raise NoUnitySessionError("No Unity plugins are currently connected")
 
         return session_id
 
@@ -456,20 +461,18 @@ class PluginHub(WebSocketEndpoint):
     ) -> dict[str, Any]:
         try:
             session_id = await cls._resolve_session_id(unity_instance)
-        except RuntimeError as exc:
-            if "No Unity plugins are currently connected" in str(exc):
-                logger.debug(
-                    "Unity session unavailable; returning retry: command=%s instance=%s",
-                    command_type,
-                    unity_instance or "default",
-                )
-                return MCPResponse(
-                    success=False,
-                    error="Unity session not available; please retry",
-                    hint="retry",
-                    data={"reason": "no_unity_session", "retry_after_ms": 250},
-                ).model_dump()
-            raise
+        except NoUnitySessionError:
+            logger.debug(
+                "Unity session unavailable; returning retry: command=%s instance=%s",
+                command_type,
+                unity_instance or "default",
+            )
+            return MCPResponse(
+                success=False,
+                error="Unity session not available; please retry",
+                hint="retry",
+                data={"reason": "no_unity_session", "retry_after_ms": 250},
+            ).model_dump()
 
         # During domain reload / immediate reconnect windows, the plugin may be connected but not yet
         # ready to process execute commands on the Unity main thread (which can be further delayed when

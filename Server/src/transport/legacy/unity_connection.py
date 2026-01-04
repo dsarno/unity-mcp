@@ -765,7 +765,8 @@ def send_command_with_retry(
             "Invalid UNITY_MCP_RELOAD_MAX_WAIT_S=%r, using default 2.0: %s",
             raw_val, e)
         max_wait_s = 2.0
-    max_wait_s = max(0.0, max_wait_s)
+    # Clamp to [0, 30] to prevent misconfiguration from causing excessive waits
+    max_wait_s = max(0.0, min(max_wait_s, 30.0))
 
     response = conn.send_command(command_type, params)
     retries = 0
