@@ -89,4 +89,3 @@ async def refresh_unity(
         )
 
     return MCPResponse(**response) if isinstance(response, dict) else response
-
