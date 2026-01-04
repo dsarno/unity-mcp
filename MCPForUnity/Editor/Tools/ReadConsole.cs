@@ -230,6 +230,17 @@ namespace MCPForUnity.Editor.Tools
             }
         }
 
+        /// <summary>
+        /// Retrieves console log entries with optional filtering and paging.
+        /// </summary>
+        /// <param name="types">Log types to include (e.g., "error", "warning", "log").</param>
+        /// <param name="count">Maximum entries to return in non-paging mode. Ignored when paging is active.</param>
+        /// <param name="pageSize">Number of entries per page. Defaults to 50 when omitted.</param>
+        /// <param name="cursor">Starting index for paging (0-based). Defaults to 0.</param>
+        /// <param name="filterText">Optional text filter (case-insensitive substring match).</param>
+        /// <param name="format">Output format: "plain", "detailed", or "json".</param>
+        /// <param name="includeStacktrace">Whether to include stack traces in the output.</param>
+        /// <returns>A success response with entries, or an error response.</returns>
         private static object GetConsoleEntries(
             List<string> types,
             int? count,
@@ -244,7 +255,8 @@ namespace MCPForUnity.Editor.Tools
             int retrievedCount = 0;
             int totalMatches = 0;
             bool usePaging = pageSize.HasValue || cursor.HasValue;
-            int resolvedPageSize = Mathf.Clamp(pageSize ?? count ?? 50, 1, 500);
+            // pageSize defaults to 50 when omitted; count is the overall non-paging limit only
+            int resolvedPageSize = Mathf.Clamp(pageSize ?? 50, 1, 500);
             int resolvedCursor = Mathf.Max(0, cursor ?? 0);
             int pageEndExclusive = resolvedCursor + resolvedPageSize;
 
