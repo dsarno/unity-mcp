@@ -383,14 +383,7 @@ namespace MCPForUnity.Editor.Tools
             catch (Exception e)
             {
                 Debug.LogError($"[ReadConsole] Error while retrieving log entries: {e}");
-                // Ensure EndGettingEntries is called even if there's an error during iteration
-                try
-                {
-                    _endGettingEntriesMethod.Invoke(null, null);
-                }
-                catch
-                { /* Ignore nested exception */
-                }
+                // EndGettingEntries will be called in the finally block
                 return new ErrorResponse($"Error retrieving log entries: {e.Message}");
             }
             finally
@@ -415,7 +408,7 @@ namespace MCPForUnity.Editor.Tools
                 {
                     cursor = resolvedCursor,
                     pageSize = resolvedPageSize,
-                    next_cursor = nextCursor,
+                    nextCursor = nextCursor,
                     truncated = truncated,
                     total = totalMatches,
                     items = formattedEntries,

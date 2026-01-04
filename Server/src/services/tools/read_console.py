@@ -11,6 +11,13 @@ from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 
 
+def _strip_stacktrace_from_list(items: list) -> None:
+    """Remove stacktrace fields from a list of log entries."""
+    for item in items:
+        if isinstance(item, dict) and "stacktrace" in item:
+            item.pop("stacktrace", None)
+
+
 @mcp_for_unity_tool(
     description="Gets messages from or clears the Unity Editor console. Defaults to 10 most recent entries. Use page_size/cursor for paging. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5')."
 )
@@ -89,20 +96,13 @@ async def read_console(
         # Strip stacktrace fields from returned lines if present
         try:
             data = resp.get("data")
-            # Handle standard format: {"data": {"lines": [...]}}
-            if isinstance(data, dict) and "lines" in data and isinstance(data["lines"], list):
-                for line in data["lines"]:
-                    if isinstance(line, dict) and "stacktrace" in line:
-                        line.pop("stacktrace", None)
-            elif isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
-                for line in data["items"]:
-                    if isinstance(line, dict) and "stacktrace" in line:
-                        line.pop("stacktrace", None)
-            # Handle legacy/direct list format if any
+            if isinstance(data, dict):
+                for key in ("lines", "items"):
+                    if key in data and isinstance(data[key], list):
+                        _strip_stacktrace_from_list(data[key])
+                        break
             elif isinstance(data, list):
-                for line in data:
-                    if isinstance(line, dict) and "stacktrace" in line:
-                        line.pop("stacktrace", None)
+                _strip_stacktrace_from_list(data)
         except Exception:
             pass
     return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}

@@ -128,7 +128,7 @@ async def test_read_console_paging(monkeypatch):
 
     async def fake_send(cmd, params, **kwargs):
         captured["params"] = params
-        # Simulate Unity returning paging info
+        # Simulate Unity returning paging info matching C# structure
         page_size = params.get("pageSize", 10)
         cursor = params.get("cursor", 0)
         # Simulate 25 total messages
@@ -142,9 +142,12 @@ async def test_read_console_paging(monkeypatch):
         return {
             "success": True,
             "data": {
-                "lines": messages,
-                "cursor": end if end < len(all_messages) else None,
-                "hasMore": end < len(all_messages)
+                "items": messages,
+                "cursor": cursor,
+                "pageSize": page_size,
+                "nextCursor": str(end) if end < len(all_messages) else None,
+                "truncated": end < len(all_messages),
+                "total": len(all_messages),
             },
         }
 
@@ -161,17 +164,22 @@ async def test_read_console_paging(monkeypatch):
     assert resp["success"] is True
     assert captured["params"]["pageSize"] == 5
     assert captured["params"]["cursor"] == 0
-    assert len(resp["data"]["lines"]) == 5
-    assert resp["data"]["hasMore"] is True
+    assert len(resp["data"]["items"]) == 5
+    assert resp["data"]["truncated"] is True
+    assert resp["data"]["nextCursor"] == "5"
+    assert resp["data"]["total"] == 25
     
     # Second page - get next 5 entries
     resp = await read_console(ctx=DummyContext(), action="get", page_size=5, cursor=5)
     assert resp["success"] is True
     assert captured["params"]["cursor"] == 5
-    assert len(resp["data"]["lines"]) == 5
+    assert len(resp["data"]["items"]) == 5
+    assert resp["data"]["truncated"] is True
+    assert resp["data"]["nextCursor"] == "10"
     
     # Last page - get remaining entries
     resp = await read_console(ctx=DummyContext(), action="get", page_size=5, cursor=20)
     assert resp["success"] is True
-    assert len(resp["data"]["lines"]) == 5
-    assert resp["data"]["hasMore"] is False
+    assert len(resp["data"]["items"]) == 5
+    assert resp["data"]["truncated"] is False
+    assert resp["data"]["nextCursor"] is None
