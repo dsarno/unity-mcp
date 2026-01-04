@@ -25,6 +25,8 @@ async def read_console(
     filter_text: Annotated[str, "Text filter for messages"] | None = None,
     since_timestamp: Annotated[str,
                                "Get messages after this timestamp (ISO 8601)"] | None = None,
+    page_size: Annotated[int | str, "Page size for paginated console reads."] | None = None,
+    cursor: Annotated[int | str, "Opaque cursor for paging (offset)."] | None = None,
     format: Annotated[Literal['plain', 'detailed',
                               'json'], "Output format"] | None = None,
     include_stacktrace: Annotated[bool | str,
@@ -35,11 +37,13 @@ async def read_console(
     unity_instance = get_unity_instance_from_context(ctx)
     # Set defaults if values are None
     action = action if action is not None else 'get'
-    types = types if types is not None else ['error', 'warning', 'log']
-    format = format if format is not None else 'detailed'
+    types = types if types is not None else ['error', 'warning']
+    format = format if format is not None else 'plain'
     # Coerce booleans defensively (strings like 'true'/'false')
 
-    include_stacktrace = coerce_bool(include_stacktrace, default=True)
+    include_stacktrace = coerce_bool(include_stacktrace, default=False)
+    coerced_page_size = coerce_int(page_size, default=None)
+    coerced_cursor = coerce_int(cursor, default=None)
 
     # Normalize action if it's a string
     if isinstance(action, str):
@@ -56,7 +60,7 @@ async def read_console(
         count = coerce_int(count)
 
     if action == "get" and count is None:
-        count = 200
+        count = 50
 
     # Prepare parameters for the C# handler
     params_dict = {
@@ -65,6 +69,8 @@ async def read_console(
         "count": count,
         "filterText": filter_text,
         "sinceTimestamp": since_timestamp,
+        "pageSize": coerced_page_size,
+        "cursor": coerced_cursor,
         "format": format.lower() if isinstance(format, str) else format,
         "includeStacktrace": include_stacktrace
     }
@@ -86,6 +92,10 @@ async def read_console(
             # Handle standard format: {"data": {"lines": [...]}}
             if isinstance(data, dict) and "lines" in data and isinstance(data["lines"], list):
                 for line in data["lines"]:
+                    if isinstance(line, dict) and "stacktrace" in line:
+                        line.pop("stacktrace", None)
+            elif isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
+                for line in data["items"]:
                     if isinstance(line, dict) and "stacktrace" in line:
                         line.pop("stacktrace", None)
             # Handle legacy/direct list format if any

@@ -165,13 +165,17 @@ namespace MCPForUnity.Editor.Tools
                     // Extract parameters for 'get'
                     var types =
                         (@params["types"] as JArray)?.Select(t => t.ToString().ToLower()).ToList()
-                        ?? new List<string> { "error", "warning", "log" };
+                        ?? new List<string> { "error", "warning" };
                     int? count = @params["count"]?.ToObject<int?>();
+                    int? pageSize =
+                        @params["pageSize"]?.ToObject<int?>()
+                        ?? @params["page_size"]?.ToObject<int?>();
+                    int? cursor = @params["cursor"]?.ToObject<int?>();
                     string filterText = @params["filterText"]?.ToString();
                     string sinceTimestampStr = @params["sinceTimestamp"]?.ToString(); // TODO: Implement timestamp filtering
-                    string format = (@params["format"]?.ToString() ?? "detailed").ToLower();
+                    string format = (@params["format"]?.ToString() ?? "plain").ToLower();
                     bool includeStacktrace =
-                        @params["includeStacktrace"]?.ToObject<bool?>() ?? true;
+                        @params["includeStacktrace"]?.ToObject<bool?>() ?? false;
 
                     if (types.Contains("all"))
                     {
@@ -186,7 +190,15 @@ namespace MCPForUnity.Editor.Tools
                         // Need a way to get timestamp per log entry.
                     }
 
-                    return GetConsoleEntries(types, count, filterText, format, includeStacktrace);
+                    return GetConsoleEntries(
+                        types,
+                        count,
+                        pageSize,
+                        cursor,
+                        filterText,
+                        format,
+                        includeStacktrace
+                    );
                 }
                 else
                 {
@@ -221,6 +233,8 @@ namespace MCPForUnity.Editor.Tools
         private static object GetConsoleEntries(
             List<string> types,
             int? count,
+            int? pageSize,
+            int? cursor,
             string filterText,
             string format,
             bool includeStacktrace
@@ -228,6 +242,11 @@ namespace MCPForUnity.Editor.Tools
         {
             List<object> formattedEntries = new List<object>();
             int retrievedCount = 0;
+            int totalMatches = 0;
+            bool usePaging = pageSize.HasValue || cursor.HasValue;
+            int resolvedPageSize = Mathf.Clamp(pageSize ?? count ?? 50, 1, 500);
+            int resolvedCursor = Mathf.Max(0, cursor ?? 0);
+            int pageEndExclusive = resolvedCursor + resolvedPageSize;
 
             try
             {
@@ -338,13 +357,26 @@ namespace MCPForUnity.Editor.Tools
                             break;
                     }
 
-                    formattedEntries.Add(formattedEntry);
-                    retrievedCount++;
+                    totalMatches++;
 
-                    // Apply count limit (after filtering)
-                    if (count.HasValue && retrievedCount >= count.Value)
+                    if (usePaging)
                     {
-                        break;
+                        if (totalMatches > resolvedCursor && totalMatches <= pageEndExclusive)
+                        {
+                            formattedEntries.Add(formattedEntry);
+                            retrievedCount++;
+                        }
+                    }
+                    else
+                    {
+                        formattedEntries.Add(formattedEntry);
+                        retrievedCount++;
+
+                        // Apply count limit (after filtering)
+                        if (count.HasValue && retrievedCount >= count.Value)
+                        {
+                            break;
+                        }
                     }
                 }
             }
@@ -373,6 +405,26 @@ namespace MCPForUnity.Editor.Tools
                     Debug.LogError($"[ReadConsole] Failed to call EndGettingEntries: {e}");
                     // Don't return error here as we might have valid data, but log it.
                 }
+            }
+
+            if (usePaging)
+            {
+                bool truncated = totalMatches > pageEndExclusive;
+                string nextCursor = truncated ? pageEndExclusive.ToString() : null;
+                var payload = new
+                {
+                    cursor = resolvedCursor,
+                    pageSize = resolvedPageSize,
+                    next_cursor = nextCursor,
+                    truncated = truncated,
+                    total = totalMatches,
+                    items = formattedEntries,
+                };
+
+                return new SuccessResponse(
+                    $"Retrieved {formattedEntries.Count} log entries.",
+                    payload
+                );
             }
 
             // Return the filtered and formatted list (might be empty)
