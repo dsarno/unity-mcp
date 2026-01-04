@@ -47,10 +47,13 @@ async def refresh_unity(
     if isinstance(response, dict) and not response.get("success", True):
         hint = response.get("hint")
         err = (response.get("error") or response.get("message") or "")
+        data = response.get("data") if isinstance(response.get("data"), dict) else {}
+        reason = data.get("reason") if isinstance(data, dict) else None
         is_retryable = (hint == "retry") or ("disconnected" in str(err).lower())
         if (not wait_for_ready) or (not is_retryable):
             return MCPResponse(**response)
-        recovered_from_disconnect = True
+        if reason not in {"reloading", "no_unity_session"}:
+            recovered_from_disconnect = True
 
     # Optional server-side wait loop (defensive): if Unity tool doesn't wait or returns quickly,
     # poll the canonical editor_state v2 resource until ready or timeout.
@@ -86,5 +89,4 @@ async def refresh_unity(
         )
 
     return MCPResponse(**response) if isinstance(response, dict) else response
-
 
