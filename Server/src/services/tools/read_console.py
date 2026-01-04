@@ -12,7 +12,7 @@ from transport.legacy.unity_connection import async_send_command_with_retry
 
 
 @mcp_for_unity_tool(
-    description="Gets messages from or clears the Unity Editor console. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5')."
+    description="Gets messages from or clears the Unity Editor console. Defaults to 10 most recent entries. Use page_size/cursor for paging. Note: For maximum client compatibility, pass count as a quoted string (e.g., '5')."
 )
 async def read_console(
     ctx: Context,
@@ -60,7 +60,7 @@ async def read_console(
         count = coerce_int(count)
 
     if action == "get" and count is None:
-        count = 50
+        count = 10
 
     # Prepare parameters for the C# handler
     params_dict = {
