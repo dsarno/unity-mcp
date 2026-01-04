@@ -54,7 +54,7 @@ async def test_read_console_full_default(monkeypatch):
     resp = await read_console(ctx=DummyContext(), action="get", count=10)
     assert resp == {
         "success": True,
-        "data": {"lines": [{"level": "error", "message": "oops", "stacktrace": "trace", "time": "t"}]},
+        "data": {"lines": [{"level": "error", "message": "oops", "time": "t"}]},
     }
     assert captured["params"]["count"] == 10
     assert captured["params"]["includeStacktrace"] is False
