@@ -166,59 +166,39 @@ namespace MCPForUnity.Editor.Tools
             {
                 switch (action)
                 {
+                    // --- Primary lifecycle actions (kept in manage_gameobject) ---
                     case "create":
                         return CreateGameObject(@params);
                     case "modify":
                         return ModifyGameObject(@params, targetToken, searchMethod);
                     case "delete":
                         return DeleteGameObject(targetToken, searchMethod);
+                    case "duplicate":
+                        return DuplicateGameObject(@params, targetToken, searchMethod);
+                    case "move_relative":
+                        return MoveRelativeToObject(@params, targetToken, searchMethod);
+
+                    // --- DEPRECATED: Search operations - use find_gameobjects tool instead ---
                     case "find":
+                        Debug.Log("[DEPRECATED] manage_gameobject action='find' is deprecated. Use the 'find_gameobjects' tool instead for better performance.");
                         return FindGameObjects(@params, targetToken, searchMethod);
+
+                    // --- DEPRECATED: Component read operations - use unity://scene/gameobject/{id}/components resource instead ---
                     case "get_components":
-                        string getCompTarget = targetToken?.ToString(); // Expect name, path, or ID string
+                        Debug.Log("[DEPRECATED] manage_gameobject action='get_components' is deprecated. Use the 'unity://scene/gameobject/{id}/components' resource instead.");
+                        string getCompTarget = targetToken?.ToString();
                         if (getCompTarget == null)
                             return new ErrorResponse(
                                 "'target' parameter required for get_components."
                             );
-                        // Paging + safety: return metadata by default; deep fields are opt-in.
-                        int CoerceInt(JToken t, int @default)
-                        {
-                            if (t == null || t.Type == JTokenType.Null) return @default;
-                            try
-                            {
-                                if (t.Type == JTokenType.Integer) return t.Value<int>();
-                                var s = t.ToString().Trim();
-                                if (s.Length == 0) return @default;
-                                if (int.TryParse(s, out var i)) return i;
-                                if (double.TryParse(s, out var d)) return (int)d;
-                            }
-                            catch { }
-                            return @default;
-                        }
-                        bool CoerceBool(JToken t, bool @default)
-                        {
-                            if (t == null || t.Type == JTokenType.Null) return @default;
-                            try
-                            {
-                                if (t.Type == JTokenType.Boolean) return t.Value<bool>();
-                                var s = t.ToString().Trim();
-                                if (s.Length == 0) return @default;
-                                if (bool.TryParse(s, out var b)) return b;
-                                if (s == "1") return true;
-                                if (s == "0") return false;
-                            }
-                            catch { }
-                            return @default;
-                        }
-
-                        int pageSize = CoerceInt(@params["pageSize"] ?? @params["page_size"], 25);
-                        int cursor = CoerceInt(@params["cursor"], 0);
-                        int maxComponents = CoerceInt(@params["maxComponents"] ?? @params["max_components"], 50);
-                        bool includeProperties = CoerceBool(@params["includeProperties"] ?? @params["include_properties"], false);
-
-                        // Pass the includeNonPublicSerialized flag through, but only used if includeProperties is true.
+                        int pageSize = Helpers.ParamCoercion.CoerceInt(@params["pageSize"] ?? @params["page_size"], 25);
+                        int cursor = Helpers.ParamCoercion.CoerceInt(@params["cursor"], 0);
+                        int maxComponents = Helpers.ParamCoercion.CoerceInt(@params["maxComponents"] ?? @params["max_components"], 50);
+                        bool includeProperties = Helpers.ParamCoercion.CoerceBool(@params["includeProperties"] ?? @params["include_properties"], false);
                         return GetComponentsFromTarget(getCompTarget, searchMethod, includeNonPublicSerialized, pageSize, cursor, maxComponents, includeProperties);
+
                     case "get_component":
+                        Debug.Log("[DEPRECATED] manage_gameobject action='get_component' is deprecated. Use the 'unity://scene/gameobject/{id}/component/{name}' resource instead.");
                         string getSingleCompTarget = targetToken?.ToString();
                         if (getSingleCompTarget == null)
                             return new ErrorResponse(
@@ -230,16 +210,17 @@ namespace MCPForUnity.Editor.Tools
                                 "'componentName' parameter required for get_component."
                             );
                         return GetSingleComponentFromTarget(getSingleCompTarget, searchMethod, componentName, includeNonPublicSerialized);
+
+                    // --- DEPRECATED: Component mutation operations - use manage_components tool instead ---
                     case "add_component":
+                        Debug.Log("[DEPRECATED] manage_gameobject action='add_component' is deprecated. Use the 'manage_components' tool with action='add' instead.");
                         return AddComponentToTarget(@params, targetToken, searchMethod);
                     case "remove_component":
+                        Debug.Log("[DEPRECATED] manage_gameobject action='remove_component' is deprecated. Use the 'manage_components' tool with action='remove' instead.");
                         return RemoveComponentFromTarget(@params, targetToken, searchMethod);
                     case "set_component_property":
+                        Debug.Log("[DEPRECATED] manage_gameobject action='set_component_property' is deprecated. Use the 'manage_components' tool with action='set_property' instead.");
                         return SetComponentPropertyOnTarget(@params, targetToken, searchMethod);
-                    case "duplicate":
-                        return DuplicateGameObject(@params, targetToken, searchMethod);
-                    case "move_relative":
-                        return MoveRelativeToObject(@params, targetToken, searchMethod);
 
                     default:
                         return new ErrorResponse($"Unknown action: '{action}'.");
