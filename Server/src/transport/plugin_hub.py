@@ -365,7 +365,11 @@ class PluginHub(WebSocketEndpoint):
         try:
             max_wait_s = float(
                 os.environ.get("UNITY_MCP_SESSION_RESOLVE_MAX_WAIT_S", "2.0"))
-        except Exception:
+        except ValueError as e:
+            raw_val = os.environ.get("UNITY_MCP_SESSION_RESOLVE_MAX_WAIT_S", "2.0")
+            logger.warning(
+                "Invalid UNITY_MCP_SESSION_RESOLVE_MAX_WAIT_S=%r, using default 2.0: %s",
+                raw_val, e)
             max_wait_s = 2.0
         max_wait_s = max(0.0, max_wait_s)
         retry_ms = float(getattr(config, "reload_retry_ms", 250))
@@ -475,7 +479,11 @@ class PluginHub(WebSocketEndpoint):
         if command_type in cls._FAST_FAIL_COMMANDS and command_type != "ping":
             try:
                 max_wait_s = float(os.environ.get("UNITY_MCP_SESSION_READY_WAIT_SECONDS", "6"))
-            except Exception:
+            except ValueError as e:
+                raw_val = os.environ.get("UNITY_MCP_SESSION_READY_WAIT_SECONDS", "6")
+                logger.warning(
+                    "Invalid UNITY_MCP_SESSION_READY_WAIT_SECONDS=%r, using default 6.0: %s",
+                    raw_val, e)
                 max_wait_s = 6.0
             max_wait_s = max(0.0, min(max_wait_s, 30.0))
             if max_wait_s > 0:

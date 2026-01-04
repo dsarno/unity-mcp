@@ -687,12 +687,17 @@ def get_unity_connection(instance_identifier: str | None = None) -> UnityConnect
 # -----------------------------
 
 def _extract_response_reason(resp: object) -> str | None:
+    """Extract a normalized (lowercase) reason string from a response.
+
+    Returns lowercase reason values to enable case-insensitive comparisons
+    by callers (e.g. _is_reloading_response, refresh_unity).
+    """
     if isinstance(resp, MCPResponse):
         data = getattr(resp, "data", None)
         if isinstance(data, dict):
             reason = data.get("reason")
             if isinstance(reason, str):
-                return reason
+                return reason.lower()
         message_text = f"{resp.message or ''} {resp.error or ''}".lower()
         if "reload" in message_text:
             return "reloading"
@@ -705,7 +710,7 @@ def _extract_response_reason(resp: object) -> str | None:
         if isinstance(data, dict):
             reason = data.get("reason")
             if isinstance(reason, str):
-                return reason
+                return reason.lower()
         message_text = (resp.get("message") or resp.get("error") or "").lower()
         if "reload" in message_text:
             return "reloading"
@@ -754,7 +759,11 @@ def send_command_with_retry(
     try:
         max_wait_s = float(os.environ.get(
             "UNITY_MCP_RELOAD_MAX_WAIT_S", "2.0"))
-    except Exception:
+    except ValueError as e:
+        raw_val = os.environ.get("UNITY_MCP_RELOAD_MAX_WAIT_S", "2.0")
+        logger.warning(
+            "Invalid UNITY_MCP_RELOAD_MAX_WAIT_S=%r, using default 2.0: %s",
+            raw_val, e)
         max_wait_s = 2.0
     max_wait_s = max(0.0, max_wait_s)
 

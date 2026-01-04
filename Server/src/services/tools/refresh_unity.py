@@ -10,7 +10,7 @@ from models import MCPResponse
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
 import transport.unity_transport as unity_transport
-from transport.legacy.unity_connection import async_send_command_with_retry
+from transport.legacy.unity_connection import async_send_command_with_retry, _extract_response_reason
 from services.state.external_changes_scanner import external_changes_scanner
 
 
@@ -47,8 +47,7 @@ async def refresh_unity(
     if isinstance(response, dict) and not response.get("success", True):
         hint = response.get("hint")
         err = (response.get("error") or response.get("message") or "")
-        data = response.get("data") if isinstance(response.get("data"), dict) else {}
-        reason = data.get("reason") if isinstance(data, dict) else None
+        reason = _extract_response_reason(response)
         is_retryable = (hint == "retry") or ("disconnected" in str(err).lower())
         if (not wait_for_ready) or (not is_retryable):
             return MCPResponse(**response)
