@@ -36,7 +36,7 @@ async def test_read_console_full_default(monkeypatch):
 
     captured = {}
 
-    async def fake_send(cmd, params, **kwargs):
+    async def fake_send(_cmd, params, **_kwargs):
         captured["params"] = params
         return {
             "success": True,
@@ -67,7 +67,7 @@ async def test_read_console_truncated(monkeypatch):
 
     captured = {}
 
-    async def fake_send(cmd, params, **kwargs):
+    async def fake_send(_cmd, params, **_kwargs):
         captured["params"] = params
         return {
             "success": True,
@@ -96,7 +96,7 @@ async def test_read_console_default_count(monkeypatch):
 
     captured = {}
 
-    async def fake_send(cmd, params, **kwargs):
+    async def fake_send(_cmd, params, **_kwargs):
         captured["params"] = params
         return {
             "success": True,
@@ -126,7 +126,7 @@ async def test_read_console_paging(monkeypatch):
 
     captured = {}
 
-    async def fake_send(cmd, params, **kwargs):
+    async def fake_send(_cmd, params, **_kwargs):
         captured["params"] = params
         # Simulate Unity returning paging info matching C# structure
         page_size = params.get("pageSize", 10)

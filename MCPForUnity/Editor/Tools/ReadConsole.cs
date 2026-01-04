@@ -366,6 +366,12 @@ namespace MCPForUnity.Editor.Tools
                             formattedEntries.Add(formattedEntry);
                             retrievedCount++;
                         }
+                        // Early exit: we've filled the page and only need to check if more exist
+                        else if (totalMatches > pageEndExclusive)
+                        {
+                            // We've passed the page; totalMatches now indicates truncation
+                            break;
+                        }
                     }
                     else
                     {
