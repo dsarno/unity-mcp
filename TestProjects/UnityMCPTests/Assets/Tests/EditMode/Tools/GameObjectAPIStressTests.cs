@@ -53,6 +53,7 @@ namespace MCPForUnityTests.Editor.Tools
 
         private static JObject ToJObject(object result)
         {
+            if (result == null) return new JObject();
             return result as JObject ?? JObject.FromObject(result);
         }
 
@@ -420,7 +421,7 @@ namespace MCPForUnityTests.Editor.Tools
             go.layer = 8;
             go.isStatic = true;
             
-            // Add components
+            // Add components - AudioSource is OK here since we're only reading component types, not serializing properties
             go.AddComponent<Rigidbody>();
             go.AddComponent<BoxCollider>();
             go.AddComponent<AudioSource>();

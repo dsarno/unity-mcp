@@ -3,7 +3,7 @@
 You are running inside CI for the `unity-mcp` repo. Use only the tools allowed by the workflow. Work autonomously; do not prompt the user. Do NOT spawn subagents.
 
 **Print this once, verbatim, early in the run:**
-AllowedTools: Write,mcp__UnityMCP__manage_editor,mcp__UnityMCP__list_resources,mcp__UnityMCP__read_resource,mcp__UnityMCP__apply_text_edits,mcp__UnityMCP__script_apply_edits,mcp__UnityMCP__validate_script,mcp__UnityMCP__find_in_file,mcp__UnityMCP__read_console,mcp__UnityMCP__get_sha
+AllowedTools: Write,mcp__UnityMCP__apply_text_edits,mcp__UnityMCP__script_apply_edits,mcp__UnityMCP__validate_script,mcp__UnityMCP__find_in_file,mcp__UnityMCP__read_console,mcp__UnityMCP__get_sha
 
 ---
 

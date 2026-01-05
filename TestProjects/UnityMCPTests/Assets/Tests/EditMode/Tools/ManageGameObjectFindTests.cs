@@ -335,13 +335,16 @@ namespace MCPForUnityTests.Editor.Tools
         {
             var target1 = CreateTestObject("Layered1");
             var target2 = CreateTestObject("Layered2");
-            target1.layer = LayerMask.NameToLayer("Water");
-            target2.layer = LayerMask.NameToLayer("Water");
+            
+            // Use built-in "UI" layer (5) that exists in all Unity projects
+            int uiLayer = LayerMask.NameToLayer("UI");
+            target1.layer = uiLayer;
+            target2.layer = uiLayer;
 
             var p = new JObject
             {
                 ["action"] = "find",
-                ["target"] = "Water",
+                ["target"] = "UI",
                 ["searchMethod"] = "by_layer",
                 ["findAll"] = true
             };

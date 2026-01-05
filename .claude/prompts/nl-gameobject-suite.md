@@ -3,7 +3,7 @@
 You are running inside CI for the `unity-mcp` repo. Use only the tools allowed by the workflow. Work autonomously; do not prompt the user. Do NOT spawn subagents.
 
 **Print this once, verbatim, early in the run:**
-AllowedTools: Write,mcp__UnityMCP__manage_editor,mcp__UnityMCP__manage_gameobject,mcp__UnityMCP__find_gameobjects,mcp__UnityMCP__manage_components,mcp__UnityMCP__manage_scene,mcp__UnityMCP__list_resources,mcp__UnityMCP__read_resource,mcp__UnityMCP__read_console
+AllowedTools: Write,mcp__UnityMCP__manage_editor,mcp__UnityMCP__manage_gameobject,mcp__UnityMCP__find_gameobjects,mcp__UnityMCP__manage_components,mcp__UnityMCP__manage_scene,mcp__UnityMCP__read_console
 
 ---
 
@@ -68,8 +68,8 @@ AllowedTools: Write,mcp__UnityMCP__manage_editor,mcp__UnityMCP__manage_gameobjec
 **Goal**: Test the new manage_components tool (add component, set property)
 **Actions**:
 - Create a test GameObject: `mcp__UnityMCP__manage_gameobject(action="create", name="GO_Test_Object")`
-- Add a component: `mcp__UnityMCP__manage_components(action="add", target="GO_Test_Object", component_name="Rigidbody")`
-- Set a property: `mcp__UnityMCP__manage_components(action="set_property", target="GO_Test_Object", component_name="Rigidbody", component_properties={"mass": 5.0})`
+- Add a component: `mcp__UnityMCP__manage_components(action="add", target="GO_Test_Object", component_type="Rigidbody")`
+- Set a property: `mcp__UnityMCP__manage_components(action="set_property", target="GO_Test_Object", component_type="Rigidbody", properties={"mass": 5.0})`
 - Verify the component was added and property was set
 - **Pass criteria**: Component added, property set successfully
 - **Note**: Keep GO_Test_Object for GO-5 through GO-8
@@ -102,7 +102,7 @@ AllowedTools: Write,mcp__UnityMCP__manage_editor,mcp__UnityMCP__manage_gameobjec
 ### GO-8. Remove Component
 **Goal**: Test manage_components remove action
 **Actions**:
-- Remove the Rigidbody from GO_Test_Object: `mcp__UnityMCP__manage_components(action="remove", target="GO_Test_Object", component_name="Rigidbody")`
+- Remove the Rigidbody from GO_Test_Object: `mcp__UnityMCP__manage_components(action="remove", target="GO_Test_Object", component_type="Rigidbody")`
 - Verify the component was removed by attempting to read it again
 - **Pass criteria**: Component successfully removed
 

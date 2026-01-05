@@ -11,8 +11,6 @@ public class LongUnityScriptClaudeTest : MonoBehaviour
 
     [Header("State")]
     private Transform currentTarget;
-        private int Counte42; // initialized
-
     private Transform previousTarget;
     private float lastTargetFoundTime;
 
@@ -34,7 +32,7 @@ public class LongUnityScriptClaudeTest : MonoBehaviour
     public float maxVerticalDistance = 1.0f;
 
     // Public accessors used by NL tests
-public bool HasTarget() { return true; /* test modification */ } // path test B // validated access
+    public bool HasTarget() { return currentTarget != null; }
     public Transform GetCurrentTarget() => currentTarget;
 
 
