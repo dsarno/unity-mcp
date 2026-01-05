@@ -269,16 +269,17 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             bool debugMode = EditorPrefs.GetBool(EditorPrefKeys.DebugLogs, false);
             bool stdioSelected = transportDropdown != null && (TransportProtocol)transportDropdown.value == TransportProtocol.Stdio;
 
-            // Keep the consolidated Start/Stop Server button label in sync even when the session is not running
+            // Keep the Start/Stop Server button label in sync even when the session is not running
             // (e.g., orphaned server after a domain reload).
             UpdateStartHttpButtonState();
 
-            // If local-server controls are active, hide the manual session toggle controls and
-            // rely on the Start/Stop Server button. We still keep the session status text visible
-            // next to the dot for clarity.
+            // For HTTP Local: show session toggle button only when server is running (so user can manually start/end session).
+            // For Stdio/HTTP Remote: always show the session toggle button.
+            // This separates server lifecycle from session lifecycle for multi-instance scenarios.
             if (connectionToggleButton != null)
             {
-                connectionToggleButton.style.display = showLocalServerControls ? DisplayStyle.None : DisplayStyle.Flex;
+                bool showSessionToggle = !showLocalServerControls || lastLocalServerRunning;
+                connectionToggleButton.style.display = showSessionToggle ? DisplayStyle.Flex : DisplayStyle.None;
             }
 
             // Hide "Test" buttons unless Debug Mode is enabled.
@@ -297,7 +298,9 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
 
             if (isRunning)
             {
-                connectionStatusLabel.text = "Session Active";
+                // Show instance name (project folder name) for better identification in multi-instance scenarios.
+                string instanceName = System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(Application.dataPath));
+                connectionStatusLabel.text = $"Session Active ({instanceName})";
                 statusIndicator.RemoveFromClassList("disconnected");
                 statusIndicator.AddToClassList("connected");
                 connectionToggleButton.text = "End Session";
@@ -444,16 +447,16 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 localServerRunning = lastLocalServerRunning;
             }
 
-            // Single consolidated button: Start Server (launch local server + start session) or
-            // Stop Server (end session + attempt to stop local server).
-            bool shouldShowStop = sessionRunning || localServerRunning;
+            // Server button only controls server lifecycle (Start/Stop Server).
+            // Session lifecycle is handled by the separate connectionToggleButton.
+            bool shouldShowStop = localServerRunning;
             startHttpServerButton.text = shouldShowStop ? "Stop Server" : "Start Server";
             // Note: Server logs may contain transient HTTP 400s on /mcp during startup probing and
             // CancelledError stack traces on shutdown when streaming requests are cancelled; this is expected.
-            startHttpServerButton.EnableInClassList("server-running", shouldShowStop);
+            startHttpServerButton.EnableInClassList("server-running", localServerRunning);
             startHttpServerButton.SetEnabled(
-                (canStartLocalServer && !httpServerToggleInProgress && !autoStartInProgress) ||
-                (shouldShowStop && !httpServerToggleInProgress));
+                (shouldShowStop && !httpServerToggleInProgress) ||
+                (canStartLocalServer && !httpServerToggleInProgress && !autoStartInProgress));
             startHttpServerButton.tooltip = httpLocalSelected
                 ? (canStartLocalServer ? string.Empty : "HTTP Local requires a localhost URL (localhost/127.0.0.1/0.0.0.0/::1).")
                 : string.Empty;
@@ -481,34 +484,30 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
 
             try
             {
-                // If a session is active, treat this as "Stop Server" (end session first, then try to stop server).
-                if (bridgeService.IsRunning)
+                // Check if a local server is running.
+                bool serverRunning = IsHttpLocalSelected() && MCPServiceLocator.Server.IsLocalHttpServerRunning();
+
+                if (serverRunning)
                 {
-                    await bridgeService.StopAsync();
+                    // Stop Server: end session first (if active), then stop the server.
+                    if (bridgeService.IsRunning)
+                    {
+                        await bridgeService.StopAsync();
+                    }
                     bool stopped = MCPServiceLocator.Server.StopLocalHttpServer();
                     if (!stopped)
                     {
                         McpLog.Warn("Failed to stop HTTP server or no server was running");
                     }
-                    return;
                 }
-
-                // If the session isn't running but the local server is, allow stopping the server directly.
-                if (IsHttpLocalSelected() && MCPServiceLocator.Server.IsLocalHttpServerRunning())
+                else
                 {
-                    bool stopped = MCPServiceLocator.Server.StopLocalHttpServer();
-                    if (!stopped)
+                    // Start Server: launch the local HTTP server (don't auto-start session).
+                    bool serverStarted = MCPServiceLocator.Server.StartLocalHttpServer();
+                    if (!serverStarted)
                     {
-                        McpLog.Warn("Failed to stop HTTP server or no server was running");
+                        McpLog.Warn("Failed to start local HTTP server");
                     }
-                    return;
-                }
-
-                // Otherwise, "Start Server" and then auto-start the session.
-                bool started = MCPServiceLocator.Server.StartLocalHttpServer();
-                if (started)
-                {
-                    await TryAutoStartSessionAfterHttpServerAsync();
                 }
             }
             catch (Exception ex)
