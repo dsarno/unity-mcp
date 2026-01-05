@@ -286,21 +286,25 @@ namespace MCPForUnityTests.Editor.Tools
             // Current behavior: returns success=true even for invalid tag
             // Ignore expected warning logs about invalid tag
             UnityEngine.TestTools.LogAssert.ignoreFailingMessages = true;
-            
-            var p = new JObject
+            try
             {
-                ["action"] = "find",
-                ["target"] = "NonExistentTag12345",
-                ["searchMethod"] = "by_tag"
-            };
+                var p = new JObject
+                {
+                    ["action"] = "find",
+                    ["target"] = "NonExistentTag12345",
+                    ["searchMethod"] = "by_tag"
+                };
 
-            var result = ManageGameObject.HandleCommand(p);
-            var resultObj = result as JObject ?? JObject.FromObject(result);
-
-            UnityEngine.TestTools.LogAssert.ignoreFailingMessages = false;
-            
-            // Current behavior returns success even when nothing found
-            Assert.IsTrue(resultObj.Value<bool>("success"), "Current behavior returns success for not found");
+                var result = ManageGameObject.HandleCommand(p);
+                var resultObj = result as JObject ?? JObject.FromObject(result);
+                
+                // Current behavior returns success even when nothing found
+                Assert.IsTrue(resultObj.Value<bool>("success"), "Current behavior returns success for not found");
+            }
+            finally
+            {
+                UnityEngine.TestTools.LogAssert.ignoreFailingMessages = false;
+            }
         }
 
         #endregion
