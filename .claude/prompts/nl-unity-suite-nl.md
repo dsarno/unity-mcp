@@ -50,7 +50,7 @@ CI provides:
 ## Transcript Minimization Rules
 - Do not restate tool JSON; summarize in ≤ 2 short lines.
 - Never paste full file contents. For matches, include only the matched line and ±1 line.
-- Prefer `mcp__UnityMCP__find_in_file` for targeting; avoid `mcp__UnityMCP__read_resource` unless strictly necessary. If needed, limit to `head_bytes ≤ 256` or `tail_lines ≤ 10`.
+- Prefer `mcp__UnityMCP__find_in_file` for targeting to minimize transcript size.
 - Per‑test `system-out` ≤ 400 chars: brief status only (no SHA).
 - Console evidence: fetch the last 10 lines with `include_stacktrace:false` and include ≤ 3 lines in the fragment.
 - Avoid quoting multi‑line diffs; reference markers instead.

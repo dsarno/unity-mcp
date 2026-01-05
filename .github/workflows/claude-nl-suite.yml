@@ -770,12 +770,12 @@ jobs:
           append_system_prompt: |
             You are running the GO pass (GameObject API tests) only.
             Output requirements:
-            - Emit exactly 6 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5.
+            - Emit exactly 11 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10.
             - Write each fragment to reports/${ID}_results.xml (e.g., GO-0_results.xml).
-            - Prefer a single MultiEdit(reports/**) call that writes all six files in one batch.
+            - Prefer a single MultiEdit(reports/**) call that writes all eleven files in one batch.
             - Do not emit any NL-* or T-* fragments.
             Stop condition:
-            - After GO-5_results.xml is written, stop.
+            - After GO-10_results.xml is written, stop.
           timeout_minutes: "20"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
@@ -786,7 +786,7 @@ jobs:
         run: |
           set -euo pipefail
           missing=()
-          for id in GO-0 GO-1 GO-2 GO-3 GO-4 GO-5; do
+          for id in GO-0 GO-1 GO-2 GO-3 GO-4 GO-5 GO-6 GO-7 GO-8 GO-9 GO-10; do
             if [[ ! -s "reports/${id}_results.xml" && ! -s "reports/_staging/${id}_results.xml" ]]; then
               missing+=("$id")
             fi
@@ -811,12 +811,12 @@ jobs:
           append_system_prompt: |
             You are running the GO pass only.
             Output requirements:
-            - Emit exactly 6 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5.
+            - Emit exactly 11 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10.
             - Write each fragment to reports/${ID}_results.xml (e.g., GO-0_results.xml).
-            - Prefer a single MultiEdit(reports/**) call that writes all six files in one batch.
+            - Prefer a single MultiEdit(reports/**) call that writes all eleven files in one batch.
             - Do not emit any NL-* or T-* fragments.
             Stop condition:
-            - After GO-5_results.xml is written, stop.
+            - After GO-10_results.xml is written, stop.
           timeout_minutes: "20"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
@@ -866,11 +866,16 @@ jobs:
             ("T-I",  r"\b(T-?I|Failure\s*Surface)\b"),
             ("T-J",  r"\b(T-?J|Idempotenc(y|e))\b"),
             ("GO-0", r"\b(GO-?0|Hierarchy.*ComponentTypes)\b"),
-            ("GO-1", r"\b(GO-?1|Find\s*GameObjects)\b"),
+            ("GO-1", r"\b(GO-?1|Find\s*GameObjects\s*Tool)\b"),
             ("GO-2", r"\b(GO-?2|GameObject\s*Resource)\b"),
             ("GO-3", r"\b(GO-?3|Components\s*Resource)\b"),
             ("GO-4", r"\b(GO-?4|Manage\s*Components)\b"),
-            ("GO-5", r"\b(GO-?5|Deprecation)\b"),
+            ("GO-5", r"\b(GO-?5|Find.*by.*Name)\b"),
+            ("GO-6", r"\b(GO-?6|Find.*by.*Tag)\b"),
+            ("GO-7", r"\b(GO-?7|Single\s*Component)\b"),
+            ("GO-8", r"\b(GO-?8|Remove\s*Component)\b"),
+            ("GO-9", r"\b(GO-?9|Pagination)\b"),
+            ("GO-10", r"\b(GO-?10|Deprecation)\b"),
           ]
 
           def canon_name(name: str) -> str:
@@ -938,7 +943,7 @@ jobs:
           import re
           import shutil
 
-          DESIRED = ["NL-0","NL-1","NL-2","NL-3","NL-4","T-A","T-B","T-C","T-D","T-E","T-F","T-G","T-H","T-I","T-J","GO-0","GO-1","GO-2","GO-3","GO-4","GO-5"]
+          DESIRED = ["NL-0","NL-1","NL-2","NL-3","NL-4","T-A","T-B","T-C","T-D","T-E","T-F","T-G","T-H","T-I","T-J","GO-0","GO-1","GO-2","GO-3","GO-4","GO-5","GO-6","GO-7","GO-8","GO-9","GO-10"]
           seen = set()
           bad = set()
           def id_from_filename(p: Path):
@@ -1164,7 +1169,7 @@ jobs:
                   id_status[tid] = ok
                   name_map[tid] = (tc.get('name') or tid)
 
-          desired = ['NL-0','NL-1','NL-2','NL-3','NL-4','T-A','T-B','T-C','T-D','T-E','T-F','T-G','T-H','T-I','T-J','GO-0','GO-1','GO-2','GO-3','GO-4','GO-5']
+          desired = ['NL-0','NL-1','NL-2','NL-3','NL-4','T-A','T-B','T-C','T-D','T-E','T-F','T-G','T-H','T-I','T-J','GO-0','GO-1','GO-2','GO-3','GO-4','GO-5','GO-6','GO-7','GO-8','GO-9','GO-10']
           default_titles = {
               'NL-0': 'Baseline State Capture',
               'NL-1': 'Core Method Operations',
@@ -1186,7 +1191,12 @@ jobs:
               'GO-2': 'GameObject Resource Read',
               'GO-3': 'Components Resource Read',
               'GO-4': 'Manage Components Tool',
-              'GO-5': 'Deprecation Warnings',
+              'GO-5': 'Find GameObjects by Name',
+              'GO-6': 'Find GameObjects by Tag',
+              'GO-7': 'Single Component Resource Read',
+              'GO-8': 'Remove Component',
+              'GO-9': 'Find with Pagination',
+              'GO-10': 'Deprecation Warnings',
           }
 
           def display_name(test_id: str) -> str:
@@ -1279,7 +1289,7 @@ jobs:
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
-          desired = ['NL-0','NL-1','NL-2','NL-3','NL-4','T-A','T-B','T-C','T-D','T-E','T-F','T-G','T-H','T-I','T-J','GO-0','GO-1','GO-2','GO-3','GO-4','GO-5']
+          desired = ['NL-0','NL-1','NL-2','NL-3','NL-4','T-A','T-B','T-C','T-D','T-E','T-F','T-G','T-H','T-I','T-J','GO-0','GO-1','GO-2','GO-3','GO-4','GO-5','GO-6','GO-7','GO-8','GO-9','GO-10']
 
           junit_path = Path(os.environ.get('JUNIT_OUT', 'reports/junit-nl-suite.xml'))
           if not junit_path.exists():

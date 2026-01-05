@@ -123,11 +123,11 @@ namespace MCPForUnityTests.Editor.Tools
         [Test]
         public void FindGameObjects_LargeBatch_PaginatesCorrectly()
         {
-            // Create many objects with the same tag for reliable search
+            // Create many objects with a unique marker component for reliable search
             for (int i = 0; i < LARGE_BATCH; i++)
             {
                 var go = CreateTestObject($"Searchable_{i:D3}");
-                // Use default "Untagged" tag which we can search for
+                go.AddComponent<GameObjectAPIStressTestMarker>();
             }
 
             // Find by searching for a specific object first
@@ -144,12 +144,12 @@ namespace MCPForUnityTests.Editor.Tools
             Assert.IsNotNull(firstIds);
             Assert.AreEqual(1, firstIds.Count, "Should find exactly one object with exact name match");
             
-            Debug.Log($"[FindGameObjects] Found object by exact name. Testing pagination with Transform component.");
+            Debug.Log($"[FindGameObjects] Found object by exact name. Testing pagination with a unique marker component.");
             
-            // Now test pagination by searching for all objects with Transform component
+            // Now test pagination by searching for only the objects created by this test
             var result = ToJObject(FindGameObjects.HandleCommand(new JObject
             {
-                ["searchTerm"] = "Transform",
+                ["searchTerm"] = typeof(GameObjectAPIStressTestMarker).FullName,
                 ["searchMethod"] = "by_component",
                 ["pageSize"] = 25
             }));
@@ -163,7 +163,7 @@ namespace MCPForUnityTests.Editor.Tools
             Assert.AreEqual(25, instanceIds.Count, "First page should have 25 items");
             
             int totalCount = data["totalCount"]?.Value<int>() ?? 0;
-            Assert.GreaterOrEqual(totalCount, LARGE_BATCH, $"Should find at least {LARGE_BATCH} objects");
+            Assert.AreEqual(LARGE_BATCH, totalCount, $"Should find exactly {LARGE_BATCH} objects created by this test");
             
             bool hasMore = data["hasMore"]?.Value<bool>() ?? false;
             Assert.IsTrue(hasMore, "Should have more pages");
@@ -174,10 +174,11 @@ namespace MCPForUnityTests.Editor.Tools
         [Test]
         public void FindGameObjects_PaginateThroughAll()
         {
-            // Create objects - all will have Transform component
+            // Create objects - all will have a unique marker component
             for (int i = 0; i < MEDIUM_BATCH; i++)
             {
-                CreateTestObject($"Paginate_{i:D3}");
+                var go = CreateTestObject($"Paginate_{i:D3}");
+                go.AddComponent<GameObjectAPIStressTestMarker>();
             }
 
             // Track IDs we've created for verification
@@ -195,12 +196,12 @@ namespace MCPForUnityTests.Editor.Tools
             int foundFromCreated = 0;
             int pageCount = 0;
 
-            // Search by Transform component and check our created objects
+            // Search by the unique marker component and check our created objects
             while (true)
             {
                 var result = ToJObject(FindGameObjects.HandleCommand(new JObject
                 {
-                    ["searchTerm"] = "Transform",
+                    ["searchTerm"] = typeof(GameObjectAPIStressTestMarker).FullName,
                     ["searchMethod"] = "by_component",
                     ["pageSize"] = pageSize,
                     ["cursor"] = cursor
@@ -246,7 +247,6 @@ namespace MCPForUnityTests.Editor.Tools
             {
                 "BoxCollider",
                 "Rigidbody",
-                "AudioSource",
                 "Light",
                 "Camera"
             };
@@ -564,5 +564,10 @@ namespace MCPForUnityTests.Editor.Tools
 
         #endregion
     }
+
+    /// <summary>
+    /// Marker component used for isolating component-based searches to objects created by this test fixture.
+    /// </summary>
+    public sealed class GameObjectAPIStressTestMarker : MonoBehaviour { }
 }
 

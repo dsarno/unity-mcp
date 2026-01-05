@@ -129,7 +129,7 @@ AllowedTools: Write,mcp__UnityMCP__manage_editor,mcp__UnityMCP__manage_gameobjec
 
 ### New Tools
 - `find_gameobjects(search_term, search_method, page_size?, cursor?, search_inactive?)` - Returns instance IDs only
-- `manage_components(action, target, component_name?, search_method?, components_to_add?, component_properties?)` - Add/remove/set_property/get_all/get_single
+- `manage_components(action, target, component_type?, properties?)` - Add/remove/set_property/get_all/get_single
 
 ### New Resources  
 - `unity://scene/gameobject/{instanceID}` - Single GameObject data

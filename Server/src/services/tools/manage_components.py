@@ -2,7 +2,7 @@
 Tool for managing components on GameObjects in Unity.
 Supports add, remove, and set_property operations.
 """
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from fastmcp import Context
 from services.registry import mcp_for_unity_tool
@@ -11,6 +11,33 @@ from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 from services.tools.utils import parse_json_payload
 from services.tools.preflight import preflight
+
+
+def _normalize_properties(value: Any) -> tuple[dict[str, Any] | None, str | None]:
+    """
+    Robustly normalize properties parameter to a dict.
+    Returns (parsed_dict, error_message). If error_message is set, parsed_dict is None.
+    """
+    if value is None:
+        return None, None
+    
+    # Already a dict - return as-is
+    if isinstance(value, dict):
+        return value, None
+    
+    # Try parsing as string
+    if isinstance(value, str):
+        # Check for obviously invalid values from serialization bugs
+        if value in ("[object Object]", "undefined", "null", ""):
+            return None, f"properties received invalid value: '{value}'. Expected a JSON object like {{\"propertyName\": value}}"
+        
+        parsed = parse_json_payload(value)
+        if isinstance(parsed, dict):
+            return parsed, None
+        
+        return None, f"properties must be a JSON object (dict), got string that parsed to {type(parsed).__name__}"
+    
+    return None, f"properties must be a dict or JSON string, got {type(value).__name__}"
 
 
 @mcp_for_unity_tool(
@@ -39,8 +66,8 @@ async def manage_components(
     value: Annotated[Any, "Value to set (for set_property action)"] | None = None,
     # For add/set_property - multiple properties
     properties: Annotated[
-        Union[dict[str, Any], str],
-        "Dictionary of property names to values. Can be JSON string or dict."
+        dict[str, Any],
+        "Dictionary of property names to values. Example: {\"mass\": 5.0, \"useGravity\": false}"
     ] | None = None,
 ) -> dict[str, Any]:
     """
@@ -81,10 +108,14 @@ async def manage_components(
             "message": "Missing required parameter 'component_type'. Specify the component type name."
         }
 
-    # Coerce properties from JSON string if needed
-    properties = parse_json_payload(properties)
-    if properties is not None and not isinstance(properties, dict):
-        return {"success": False, "message": "'properties' must be a JSON object (dict)."}
+    # --- Normalize properties with detailed error handling ---
+    properties, props_error = _normalize_properties(properties)
+    if props_error:
+        return {"success": False, "message": props_error}
+    
+    # --- Validate value parameter for serialization issues ---
+    if value is not None and isinstance(value, str) and value in ("[object Object]", "undefined"):
+        return {"success": False, "message": f"value received invalid input: '{value}'. Expected an actual value."}
 
     try:
         params = {
