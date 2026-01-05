@@ -147,9 +147,17 @@ namespace MCPForUnity.Editor.Helpers
 
         private static IEnumerable<int> SearchByPath(string path, bool includeInactive)
         {
-            // Unity's GameObject.Find uses path format
+            // NOTE: Unity's GameObject.Find(path) only finds ACTIVE GameObjects.
+            // The includeInactive parameter has no effect here due to Unity API limitations.
+            // Consider using by_name search with includeInactive if you need to find inactive objects.
+            if (includeInactive)
+            {
+                Debug.LogWarning("[GameObjectLookup] SearchByPath with includeInactive=true: " +
+                    "GameObject.Find() cannot find inactive objects. Use by_name search instead.");
+            }
+            
             var found = GameObject.Find(path);
-            if (found != null && (includeInactive || found.activeInHierarchy))
+            if (found != null)
             {
                 yield return found.GetInstanceID();
             }

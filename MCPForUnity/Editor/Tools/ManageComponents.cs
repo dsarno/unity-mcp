@@ -338,6 +338,10 @@ namespace MCPForUnity.Editor.Tools
             }
         }
 
+        /// <summary>
+        /// Attempts to set a property or field on a component.
+        /// Note: Property/field lookup is case-insensitive for better usability with external callers.
+        /// </summary>
         private static string TrySetProperty(Component component, string propertyName, JToken value)
         {
             if (component == null || string.IsNullOrEmpty(propertyName))
