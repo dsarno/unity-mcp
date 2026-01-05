@@ -17,6 +17,13 @@ from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 
 
+def _normalize_response(response: dict | Any) -> MCPResponse:
+    """Normalize Unity transport response to MCPResponse."""
+    if isinstance(response, dict):
+        return MCPResponse(**response)
+    return response
+
+
 # =============================================================================
 # Static Helper Resource (shows in UI)
 # =============================================================================
@@ -96,6 +103,8 @@ class GameObjectData(BaseModel):
     path: str = ""
 
 
+# TODO: Use these typed response classes for better type safety once
+# we update the endpoints to validate response structure more strictly.
 class GameObjectResponse(MCPResponse):
     """Response containing GameObject data."""
     data: GameObjectData | None = None
@@ -122,11 +131,7 @@ async def get_gameobject(ctx: Context, instance_id: str) -> MCPResponse:
         {"instanceID": id_int}
     )
     
-    if isinstance(response, dict):
-        if not response.get("success", True):
-            return MCPResponse(**response)
-        return MCPResponse(**response)
-    return response
+    return _normalize_response(response)
 
 
 class ComponentsData(BaseModel):
@@ -179,11 +184,7 @@ async def get_gameobject_components(
         }
     )
     
-    if isinstance(response, dict):
-        if not response.get("success", True):
-            return MCPResponse(**response)
-        return MCPResponse(**response)
-    return response
+    return _normalize_response(response)
 
 
 class SingleComponentData(BaseModel):
@@ -226,9 +227,5 @@ async def get_gameobject_component(
         }
     )
     
-    if isinstance(response, dict):
-        if not response.get("success", True):
-            return MCPResponse(**response)
-        return MCPResponse(**response)
-    return response
+    return _normalize_response(response)
 

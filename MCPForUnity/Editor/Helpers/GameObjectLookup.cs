@@ -274,7 +274,7 @@ namespace MCPForUnity.Editor.Helpers
         /// <summary>
         /// Finds a component type by name, searching loaded assemblies.
         /// </summary>
-        private static Type FindComponentType(string typeName)
+        public static Type FindComponentType(string typeName)
         {
             // Try direct type lookup first
             var type = Type.GetType(typeName);

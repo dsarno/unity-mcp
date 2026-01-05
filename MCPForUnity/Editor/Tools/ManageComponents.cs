@@ -309,41 +309,14 @@ namespace MCPForUnity.Editor.Tools
             return GameObjectLookup.FindByTarget(targetToken, searchMethod ?? "by_name", true);
         }
 
+        /// <summary>
+        /// Finds a component type by name. Delegates to GameObjectLookup.FindComponentType.
+        /// </summary>
         private static Type FindComponentType(string typeName)
         {
             if (string.IsNullOrEmpty(typeName))
                 return null;
-
-            // Try direct type lookup
-            var type = Type.GetType(typeName);
-            if (type != null && typeof(Component).IsAssignableFrom(type))
-                return type;
-
-            // Search in UnityEngine
-            type = typeof(Component).Assembly.GetType($"UnityEngine.{typeName}");
-            if (type != null && typeof(Component).IsAssignableFrom(type))
-                return type;
-
-            // Search all loaded assemblies
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                try
-                {
-                    type = assembly.GetType(typeName);
-                    if (type != null && typeof(Component).IsAssignableFrom(type))
-                        return type;
-
-                    type = assembly.GetType($"UnityEngine.{typeName}");
-                    if (type != null && typeof(Component).IsAssignableFrom(type))
-                        return type;
-                }
-                catch
-                {
-                    // Skip assemblies that can't be searched
-                }
-            }
-
-            return null;
+            return GameObjectLookup.FindComponentType(typeName);
         }
 
         private static void SetPropertiesOnComponent(Component component, JObject properties)
@@ -351,9 +324,17 @@ namespace MCPForUnity.Editor.Tools
             if (component == null || properties == null)
                 return;
 
+            var errors = new List<string>();
             foreach (var prop in properties.Properties())
             {
-                TrySetProperty(component, prop.Name, prop.Value);
+                var error = TrySetProperty(component, prop.Name, prop.Value);
+                if (error != null)
+                    errors.Add(error);
+            }
+            
+            if (errors.Count > 0)
+            {
+                Debug.LogWarning($"[ManageComponents] Some properties failed to set on {component.GetType().Name}: {string.Join(", ", errors)}");
             }
         }
 
