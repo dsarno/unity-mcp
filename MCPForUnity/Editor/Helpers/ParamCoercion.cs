@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Newtonsoft.Json.Linq;
 
 namespace MCPForUnity.Editor.Helpers
@@ -100,7 +101,7 @@ namespace MCPForUnity.Editor.Helpers
                 if (s.Length == 0)
                     return defaultValue;
 
-                if (float.TryParse(s, out var f))
+                if (float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var f))
                     return f;
             }
             catch

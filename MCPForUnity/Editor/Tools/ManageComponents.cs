@@ -146,16 +146,16 @@ namespace MCPForUnity.Editor.Tools
                 return new ErrorResponse($"Component type '{componentType}' not found.");
             }
 
+            // Prevent removal of Transform (check early before GetComponent)
+            if (type == typeof(Transform))
+            {
+                return new ErrorResponse("Cannot remove the Transform component.");
+            }
+
             Component component = targetGo.GetComponent(type);
             if (component == null)
             {
                 return new ErrorResponse($"Component '{componentType}' not found on '{targetGo.name}'.");
-            }
-
-            // Prevent removal of Transform
-            if (type == typeof(Transform))
-            {
-                return new ErrorResponse("Cannot remove the Transform component.");
             }
 
             try

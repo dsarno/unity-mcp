@@ -99,6 +99,8 @@ namespace MCPForUnity.Editor.Helpers
         /// <summary>
         /// Parses a JToken (array or object) into a Quaternion.
         /// Supports both euler angles [x, y, z] and quaternion components [x, y, z, w].
+        /// Note: Raw quaternion components are NOT normalized. Callers should normalize if needed
+        /// for operations like interpolation where non-unit quaternions cause issues.
         /// </summary>
         /// <param name="token">The JSON token to parse</param>
         /// <param name="asEulerAngles">If true, treats 3-element arrays as euler angles</param>

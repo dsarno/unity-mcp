@@ -26,7 +26,7 @@ from transport.legacy.unity_connection import async_send_command_with_retry
     name="gameobject_api",
     description="Documentation for GameObject resources. Use find_gameobjects tool to get instance IDs, then access resources below."
 )
-async def get_gameobject_api_docs(ctx: Context) -> MCPResponse:
+async def get_gameobject_api_docs(_ctx: Context) -> MCPResponse:
     """
     Returns documentation for the GameObject resource API.
     
