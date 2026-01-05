@@ -17,6 +17,58 @@ from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 
 
+# =============================================================================
+# Static Helper Resource (shows in UI)
+# =============================================================================
+
+@mcp_for_unity_resource(
+    uri="unity://scene/gameobject-api",
+    name="gameobject_api",
+    description="Documentation for GameObject resources. Use find_gameobjects tool to get instance IDs, then access resources below."
+)
+async def get_gameobject_api_docs(ctx: Context) -> MCPResponse:
+    """
+    Returns documentation for the GameObject resource API.
+    
+    This is a helper resource that explains how to use the parameterized
+    GameObject resources which require an instance ID.
+    """
+    docs = {
+        "overview": "GameObject resources provide read-only access to Unity scene objects.",
+        "workflow": [
+            "1. Use find_gameobjects tool to search for GameObjects and get instance IDs",
+            "2. Use the instance ID to access detailed data via resources below"
+        ],
+        "resources": {
+            "unity://scene/gameobject/{instance_id}": {
+                "description": "Get basic GameObject data (name, tag, layer, transform, component type list)",
+                "example": "unity://scene/gameobject/-81840",
+                "returns": ["instanceID", "name", "tag", "layer", "transform", "componentTypes", "path", "parent", "children"]
+            },
+            "unity://scene/gameobject/{instance_id}/components": {
+                "description": "Get all components with full property serialization (paginated)",
+                "example": "unity://scene/gameobject/-81840/components",
+                "parameters": {
+                    "page_size": "Number of components per page (default: 25)",
+                    "cursor": "Pagination offset (default: 0)",
+                    "include_properties": "Include full property data (default: true)"
+                }
+            },
+            "unity://scene/gameobject/{instance_id}/component/{component_name}": {
+                "description": "Get a single component by type name with full properties",
+                "example": "unity://scene/gameobject/-81840/component/Camera",
+                "note": "Use the component type name (e.g., 'Camera', 'Rigidbody', 'Transform')"
+            }
+        },
+        "related_tools": {
+            "find_gameobjects": "Search for GameObjects by name, tag, layer, component, or path",
+            "manage_components": "Add, remove, or modify components on GameObjects",
+            "manage_gameobject": "Create, modify, or delete GameObjects"
+        }
+    }
+    return MCPResponse(success=True, data=docs)
+
+
 class TransformData(BaseModel):
     """Transform component data."""
     position: dict[str, float] = {"x": 0.0, "y": 0.0, "z": 0.0}
