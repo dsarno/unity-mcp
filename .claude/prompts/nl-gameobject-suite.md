@@ -3,13 +3,13 @@
 You are running inside CI for the `unity-mcp` repo. Use only the tools allowed by the workflow. Work autonomously; do not prompt the user. Do NOT spawn subagents.
 
 **Print this once, verbatim, early in the run:**
-AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__manage_gameobject,mcp__unity__find_gameobjects,mcp__unity__manage_components,mcp__unity__manage_scene,mcp__unity__list_resources,mcp__unity__read_resource,mcp__unity__read_console
+AllowedTools: Write,mcp__UnityMCP__manage_editor,mcp__UnityMCP__manage_gameobject,mcp__UnityMCP__find_gameobjects,mcp__UnityMCP__manage_components,mcp__UnityMCP__manage_scene,mcp__UnityMCP__list_resources,mcp__UnityMCP__read_resource,mcp__UnityMCP__read_console
 
 ---
 
 ## Mission
 1) Test the new Tool/Resource separation for GameObject management
-2) Execute GO tests GO-0..GO-5 in order
+2) Execute GO tests GO-0..GO-10 in order
 3) Verify deprecation warnings appear for legacy actions
 4) **Report**: write one `<testcase>` XML fragment per test to `reports/<TESTID>_results.xml`
 
@@ -25,7 +25,7 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__manage_gameobject,mcp_
 </testcase>
 
 - If test fails, include: `<failure message="reason"/>`
-- TESTID must be one of: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5
+- TESTID must be one of: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10
 
 ---
 
@@ -34,7 +34,7 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__manage_gameobject,mcp_
 ### GO-0. Hierarchy with ComponentTypes
 **Goal**: Verify get_hierarchy now includes componentTypes list
 **Actions**:
-- Call `mcp__unity__manage_scene(action="get_hierarchy", page_size=10)`
+- Call `mcp__UnityMCP__manage_scene(action="get_hierarchy", page_size=10)`
 - Verify response includes `componentTypes` array for each item in `data.items`
 - Check that Main Camera (or similar) has component types like `["Transform", "Camera", "AudioListener"]`
 - **Pass criteria**: componentTypes present and non-empty for at least one item
@@ -42,7 +42,7 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__manage_gameobject,mcp_
 ### GO-1. Find GameObjects Tool
 **Goal**: Test the new find_gameobjects tool
 **Actions**:
-- Call `mcp__unity__find_gameobjects(search_term="Camera", search_method="by_component")`
+- Call `mcp__UnityMCP__find_gameobjects(search_term="Camera", search_method="by_component")`
 - Verify response contains `instanceIDs` array in `data`
 - Verify response contains pagination info (`pageSize`, `cursor`, `totalCount`)
 - **Pass criteria**: Returns at least one instance ID
@@ -51,7 +51,7 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__manage_gameobject,mcp_
 **Goal**: Test reading a single GameObject via resource
 **Actions**:
 - Use the instance ID from GO-1
-- Call `mcp__unity__read_resource(uri="unity://scene/gameobject/{instanceID}")` replacing {instanceID} with the actual ID
+- Call `mcp__UnityMCP__read_resource(uri="unity://scene/gameobject/{instanceID}")` replacing {instanceID} with the actual ID
 - Verify response includes: instanceID, name, tag, layer, transform, path
 - **Pass criteria**: All expected fields present
 
@@ -59,26 +59,67 @@ AllowedTools: Write,mcp__unity__manage_editor,mcp__unity__manage_gameobject,mcp_
 **Goal**: Test reading components via resource
 **Actions**:
 - Use the instance ID from GO-1
-- Call `mcp__unity__read_resource(uri="unity://scene/gameobject/{instanceID}/components")` replacing {instanceID} with the actual ID
+- Call `mcp__UnityMCP__read_resource(uri="unity://scene/gameobject/{instanceID}/components")` replacing {instanceID} with the actual ID
 - Verify response includes paginated component list in `data.items`
 - Verify at least one component has typeName and instanceID
 - **Pass criteria**: Components list returned with proper pagination
 
-### GO-4. Manage Components Tool
-**Goal**: Test the new manage_components tool
+### GO-4. Manage Components Tool - Add and Set Property
+**Goal**: Test the new manage_components tool (add component, set property)
 **Actions**:
-- Create a test GameObject: `mcp__unity__manage_gameobject(action="create", name="GO_Test_Object")`
-- Add a component: `mcp__unity__manage_components(action="add", target="GO_Test_Object", component_name="Rigidbody")`
-- Set a property: `mcp__unity__manage_components(action="set_property", target="GO_Test_Object", component_name="Rigidbody", component_properties={"mass": 5.0})`
+- Create a test GameObject: `mcp__UnityMCP__manage_gameobject(action="create", name="GO_Test_Object")`
+- Add a component: `mcp__UnityMCP__manage_components(action="add", target="GO_Test_Object", component_name="Rigidbody")`
+- Set a property: `mcp__UnityMCP__manage_components(action="set_property", target="GO_Test_Object", component_name="Rigidbody", component_properties={"mass": 5.0})`
 - Verify the component was added and property was set
-- Clean up: `mcp__unity__manage_gameobject(action="delete", target="GO_Test_Object")`
-- **Pass criteria**: Component added, property set, cleanup successful
+- **Pass criteria**: Component added, property set successfully
+- **Note**: Keep GO_Test_Object for GO-5 through GO-8
 
-### GO-5. Deprecation Warnings
+### GO-5. Find GameObjects by Name
+**Goal**: Test find_gameobjects with by_name search method
+**Actions**:
+- Call `mcp__UnityMCP__find_gameobjects(search_term="GO_Test_Object", search_method="by_name")`
+- Verify response contains the GameObject created in GO-4
+- Verify pagination info is present
+- **Pass criteria**: Returns at least one instance ID matching GO_Test_Object
+
+### GO-6. Find GameObjects by Tag
+**Goal**: Test find_gameobjects with by_tag search method
+**Actions**:
+- Set a tag on GO_Test_Object: `mcp__UnityMCP__manage_gameobject(action="modify", target="GO_Test_Object", tag="TestTag")`
+- Call `mcp__UnityMCP__find_gameobjects(search_term="TestTag", search_method="by_tag")`
+- Verify response contains the tagged GameObject
+- **Pass criteria**: Returns at least one instance ID
+
+### GO-7. Single Component Resource Read
+**Goal**: Test reading a single component via resource
+**Actions**:
+- Get instance ID of GO_Test_Object from GO-5
+- Call `mcp__UnityMCP__read_resource(uri="unity://scene/gameobject/{instanceID}/component/Rigidbody")` replacing {instanceID}
+- Verify response includes component data with typeName="Rigidbody"
+- Verify mass property is 5.0 (set in GO-4)
+- **Pass criteria**: Component data returned with correct properties
+
+### GO-8. Remove Component
+**Goal**: Test manage_components remove action
+**Actions**:
+- Remove the Rigidbody from GO_Test_Object: `mcp__UnityMCP__manage_components(action="remove", target="GO_Test_Object", component_name="Rigidbody")`
+- Verify the component was removed by attempting to read it again
+- **Pass criteria**: Component successfully removed
+
+### GO-9. Find with Pagination
+**Goal**: Test find_gameobjects pagination
+**Actions**:
+- Call `mcp__UnityMCP__find_gameobjects(search_term="", search_method="by_name", page_size=2)`
+- Verify response includes cursor for next page
+- If cursor is present, call again with the cursor to get next page
+- Clean up: `mcp__UnityMCP__manage_gameobject(action="delete", target="GO_Test_Object")`
+- **Pass criteria**: Pagination works (cursor present when more results available)
+
+### GO-10. Deprecation Warnings
 **Goal**: Verify legacy actions log deprecation warnings
 **Actions**:
-- Call legacy action: `mcp__unity__manage_gameobject(action="find", search_term="Camera", search_method="by_component")`
-- Read console using `mcp__unity__read_console` for deprecation warning
+- Call legacy action: `mcp__UnityMCP__manage_gameobject(action="find", search_term="Camera", search_method="by_component")`
+- Read console using `mcp__UnityMCP__read_console` for deprecation warning
 - Verify warning mentions "find_gameobjects" as replacement
 - **Pass criteria**: Deprecation warning logged
 
