@@ -311,6 +311,7 @@ def resolve_project_id_for_unity_instance(unity_instance: str | None) -> str | N
             if target.hash:
                 return target.hash
             logger.warning(f"Unity instance {target.id} has empty hash; cannot resolve project ID")
+            return None
     except Exception:
         logger.debug(
             f"Failed to resolve project id via connection pool for {unity_instance}")

@@ -470,8 +470,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             // CancelledError stack traces on shutdown when streaming requests are cancelled; this is expected.
             startHttpServerButton.EnableInClassList("server-running", localServerRunning);
             startHttpServerButton.SetEnabled(
-                (shouldShowStop && !httpServerToggleInProgress) ||
-                (canStartLocalServer && !httpServerToggleInProgress));
+                !httpServerToggleInProgress && (shouldShowStop || canStartLocalServer));
             startHttpServerButton.tooltip = httpLocalSelected
                 ? (canStartLocalServer ? string.Empty : "HTTP Local requires a localhost URL (localhost/127.0.0.1/0.0.0.0/::1).")
                 : string.Empty;
