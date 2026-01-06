@@ -392,22 +392,21 @@ namespace MCPForUnityTests.Editor.Tools
         }
 
         [Test]
-        public void Modify_InvalidTag_HandlesGracefully()
+        public void Modify_NewTag_AutoCreatesTag()
         {
-            // Expect the error log from Unity about invalid tag
-            UnityEngine.TestTools.LogAssert.Expect(LogType.Error, 
-                new System.Text.RegularExpressions.Regex("Tag:.*NonExistentTag12345.*not defined"));
-            
+            // Tags that don't exist are now auto-created
             var p = new JObject
             {
                 ["action"] = "modify",
                 ["target"] = "ModifyTestObject",
-                ["tag"] = "NonExistentTag12345"
+                ["tag"] = "AutoModifyTag12345"
             };
 
             var result = ManageGameObject.HandleCommand(p);
-            // Current behavior: logs error but continues
-            Assert.IsNotNull(result, "Should return a result");
+            var resultObj = result as JObject ?? JObject.FromObject(result);
+            
+            Assert.IsTrue(resultObj.Value<bool>("success"), resultObj.ToString());
+            Assert.AreEqual("AutoModifyTag12345", testObjects[0].tag, "Tag should be auto-created and assigned");
         }
 
         #endregion

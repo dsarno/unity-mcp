@@ -334,42 +334,31 @@ namespace MCPForUnity.Editor.Tools
             // Set Tag (added for create action)
             if (!string.IsNullOrEmpty(tag))
             {
-                // Similar logic as in ModifyGameObject for setting/creating tags
                 string tagToSet = string.IsNullOrEmpty(tag) ? "Untagged" : tag;
+                
+                // Check if tag exists first (Unity doesn't throw exceptions for undefined tags, just logs a warning)
+                if (tagToSet != "Untagged" && !System.Linq.Enumerable.Contains(InternalEditorUtility.tags, tagToSet))
+                {
+                    Debug.Log($"[ManageGameObject.Create] Tag '{tagToSet}' not found. Creating it.");
+                    try
+                    {
+                        InternalEditorUtility.AddTag(tagToSet);
+                    }
+                    catch (Exception ex)
+                    {
+                        UnityEngine.Object.DestroyImmediate(newGo); // Clean up
+                        return new ErrorResponse($"Failed to create tag '{tagToSet}': {ex.Message}.");
+                    }
+                }
+                
                 try
                 {
                     newGo.tag = tagToSet;
                 }
-                catch (UnityException ex)
+                catch (Exception ex)
                 {
-                    if (ex.Message.Contains("is not defined"))
-                    {
-                        Debug.LogWarning(
-                            $"[ManageGameObject.Create] Tag '{tagToSet}' not found. Attempting to create it."
-                        );
-                        try
-                        {
-                            InternalEditorUtility.AddTag(tagToSet);
-                            newGo.tag = tagToSet; // Retry
-                            Debug.Log(
-                                $"[ManageGameObject.Create] Tag '{tagToSet}' created and assigned successfully."
-                            );
-                        }
-                        catch (Exception innerEx)
-                        {
-                            UnityEngine.Object.DestroyImmediate(newGo); // Clean up
-                            return new ErrorResponse(
-                                $"Failed to create or assign tag '{tagToSet}' during creation: {innerEx.Message}."
-                            );
-                        }
-                    }
-                    else
-                    {
-                        UnityEngine.Object.DestroyImmediate(newGo); // Clean up
-                        return new ErrorResponse(
-                            $"Failed to set tag to '{tagToSet}' during creation: {ex.Message}."
-                        );
-                    }
+                    UnityEngine.Object.DestroyImmediate(newGo); // Clean up
+                    return new ErrorResponse($"Failed to set tag to '{tagToSet}' during creation: {ex.Message}.");
                 }
             }
 
@@ -602,49 +591,29 @@ namespace MCPForUnity.Editor.Tools
             {
                 // Ensure the tag is not empty, if empty, it means "Untagged" implicitly
                 string tagToSet = string.IsNullOrEmpty(tag) ? "Untagged" : tag;
+                
+                // Check if tag exists first (Unity doesn't throw exceptions for undefined tags, just logs a warning)
+                if (tagToSet != "Untagged" && !System.Linq.Enumerable.Contains(InternalEditorUtility.tags, tagToSet))
+                {
+                    Debug.Log($"[ManageGameObject] Tag '{tagToSet}' not found. Creating it.");
+                    try
+                    {
+                        InternalEditorUtility.AddTag(tagToSet);
+                    }
+                    catch (Exception ex)
+                    {
+                        return new ErrorResponse($"Failed to create tag '{tagToSet}': {ex.Message}.");
+                    }
+                }
+                
                 try
                 {
                     targetGo.tag = tagToSet;
                     modified = true;
                 }
-                catch (UnityException ex)
+                catch (Exception ex)
                 {
-                    // Check if the error is specifically because the tag doesn't exist
-                    if (ex.Message.Contains("is not defined"))
-                    {
-                        Debug.LogWarning(
-                            $"[ManageGameObject] Tag '{tagToSet}' not found. Attempting to create it."
-                        );
-                        try
-                        {
-                            // Attempt to create the tag using internal utility
-                            InternalEditorUtility.AddTag(tagToSet);
-                            // Wait a frame maybe? Not strictly necessary but sometimes helps editor updates.
-                            // yield return null; // Cannot yield here, editor script limitation
-
-                            // Retry setting the tag immediately after creation
-                            targetGo.tag = tagToSet;
-                            modified = true;
-                            Debug.Log(
-                                $"[ManageGameObject] Tag '{tagToSet}' created and assigned successfully."
-                            );
-                        }
-                        catch (Exception innerEx)
-                        {
-                            // Handle failure during tag creation or the second assignment attempt
-                            Debug.LogError(
-                                $"[ManageGameObject] Failed to create or assign tag '{tagToSet}' after attempting creation: {innerEx.Message}"
-                            );
-                            return new ErrorResponse(
-                                $"Failed to create or assign tag '{tagToSet}': {innerEx.Message}. Check Tag Manager and permissions."
-                            );
-                        }
-                    }
-                    else
-                    {
-                        // If the exception was for a different reason, return the original error
-                        return new ErrorResponse($"Failed to set tag to '{tagToSet}': {ex.Message}.");
-                    }
+                    return new ErrorResponse($"Failed to set tag to '{tagToSet}': {ex.Message}.");
                 }
             }
 

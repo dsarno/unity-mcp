@@ -83,7 +83,7 @@ def _normalize_component_properties(value: Any) -> tuple[dict[str, dict[str, Any
 
 
 @mcp_for_unity_tool(
-    description="Performs CRUD operations on GameObjects and components. Read-only actions: find, get_components, get_component. Modifying actions: create, modify, delete, add_component, remove_component, set_component_property, duplicate, move_relative.",
+    description="Performs CRUD operations on GameObjects. Actions: create, modify, delete, duplicate, move_relative. For finding GameObjects use find_gameobjects tool. For component operations use manage_components tool.",
     annotations=ToolAnnotations(
         title="Manage GameObject",
         destructiveHint=True,
@@ -91,7 +91,7 @@ def _normalize_component_properties(value: Any) -> tuple[dict[str, dict[str, Any
 )
 async def manage_gameobject(
     ctx: Context,
-    action: Annotated[Literal["create", "modify", "delete", "find", "add_component", "remove_component", "set_component_property", "get_components", "get_component", "duplicate", "move_relative"], "Perform CRUD operations on GameObjects and components."] | None = None,
+    action: Annotated[Literal["create", "modify", "delete", "duplicate", "move_relative"], "Action to perform on GameObject."] | None = None,
     target: Annotated[str,
                       "GameObject identifier by name or path for modify/delete/component actions"] | None = None,
     search_method: Annotated[Literal["by_id", "by_name", "by_path", "by_tag", "by_layer", "by_component"],
