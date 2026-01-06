@@ -18,8 +18,9 @@ namespace MCPForUnity.Editor.Helpers
         {
             Converters = new List<JsonConverter>
             {
-                new Vector3Converter(),
                 new Vector2Converter(),
+                new Vector3Converter(),
+                new Vector4Converter(),
                 new QuaternionConverter(),
                 new ColorConverter(),
                 new RectConverter(),

@@ -482,11 +482,11 @@ namespace MCPForUnity.Editor.Tools
                 return new ErrorResponse("materialPath is required");
             }
 
-            // Path normalization handled by helper above, explicit check removed
-            // but we ensure it's valid for CreateAsset
+            // Safety check: SanitizeAssetPath should guarantee Assets/ prefix
+            // This check catches edge cases where normalization might fail
             if (!materialPath.StartsWith("Assets/"))
             {
-                 return new ErrorResponse("Path must start with Assets/ (normalization failed)");
+                 return new ErrorResponse($"Invalid path '{materialPath}'. Path must be within Assets/ folder.");
             }
 
             Shader shader = RenderPipelineUtility.ResolveShader(shaderName);

@@ -47,11 +47,14 @@ namespace MCPForUnity.Editor.Helpers
             string searchMethodToUse = string.IsNullOrEmpty(method) ? "by_id_or_name_or_path" : method;
 
             // --- Asset Search ---
+            // Normalize path separators before checking asset paths
+            string normalizedPath = AssetPathUtility.NormalizeSeparators(findTerm);
+            
             // If the target is an asset type, try AssetDatabase first
             if (IsAssetType(targetType) || 
-                (typeof(GameObject).IsAssignableFrom(targetType) && findTerm.StartsWith("Assets/")))
+                (typeof(GameObject).IsAssignableFrom(targetType) && normalizedPath.StartsWith("Assets/")))
             {
-                UnityEngine.Object asset = TryLoadAsset(findTerm, targetType);
+                UnityEngine.Object asset = TryLoadAsset(normalizedPath, targetType);
                 if (asset != null)
                     return asset;
                 // If still not found, fall through to scene search

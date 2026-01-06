@@ -1224,22 +1224,22 @@ namespace MCPForUnity.Editor.Tools
                     Type componentType = FindType(searchTerm);
                     if (componentType != null)
                     {
-                        // Determine FindObjectsInactive based on the searchInactive flag
-                        FindObjectsInactive findInactive = searchInactive
-                            ? FindObjectsInactive.Include
-                            : FindObjectsInactive.Exclude;
-                        // Replace FindObjectsOfType with FindObjectsByType, specifying the sorting mode and inactive state
-                        var searchPoolComp = rootSearchObject
-                            ? rootSearchObject
+                        // Use FindObjectsOfType for Unity 2021 compatibility
+                        IEnumerable<GameObject> searchPoolComp;
+                        if (rootSearchObject)
+                        {
+                            searchPoolComp = rootSearchObject
                                 .GetComponentsInChildren(componentType, searchInactive)
-                                .Select(c => (c as Component).gameObject)
-                            : UnityEngine
-                                .Object.FindObjectsByType(
-                                    componentType,
-                                    findInactive,
-                                    FindObjectsSortMode.None
-                                )
                                 .Select(c => (c as Component).gameObject);
+                        }
+                        else
+                        {
+                            // FindObjectsOfType doesn't filter inactive, so we filter manually
+                            searchPoolComp = UnityEngine.Object.FindObjectsOfType(componentType)
+                                .Cast<Component>()
+                                .Select(c => c.gameObject)
+                                .Where(go => searchInactive || (go != null && go.activeInHierarchy));
+                        }
                         results.AddRange(searchPoolComp.Where(go => go != null)); // Ensure GO is valid
                     }
                     else

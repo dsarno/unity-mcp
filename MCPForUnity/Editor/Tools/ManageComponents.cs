@@ -97,6 +97,8 @@ namespace MCPForUnity.Editor.Tools
             JObject properties = @params["properties"] as JObject ?? @params["componentProperties"] as JObject;
             if (properties != null && properties.HasValues)
             {
+                // Record for undo before modifying properties
+                Undo.RecordObject(newComponent, "Modify Component Properties");
                 SetPropertiesOnComponent(newComponent, properties);
             }
 

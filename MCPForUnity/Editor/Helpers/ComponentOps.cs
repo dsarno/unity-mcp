@@ -156,11 +156,14 @@ namespace MCPForUnity.Editor.Helpers
                 try
                 {
                     object convertedValue = PropertyConversion.ConvertToType(value, propInfo.PropertyType);
-                    if (convertedValue != null || value.Type == JTokenType.Null)
+                    // Detect conversion failure: null result when input wasn't null
+                    if (convertedValue == null && value.Type != JTokenType.Null)
                     {
-                        propInfo.SetValue(component, convertedValue);
-                        return true;
+                        error = $"Failed to convert value for property '{propertyName}' to type '{propInfo.PropertyType.Name}'.";
+                        return false;
                     }
+                    propInfo.SetValue(component, convertedValue);
+                    return true;
                 }
                 catch (Exception ex)
                 {
@@ -176,11 +179,14 @@ namespace MCPForUnity.Editor.Helpers
                 try
                 {
                     object convertedValue = PropertyConversion.ConvertToType(value, fieldInfo.FieldType);
-                    if (convertedValue != null || value.Type == JTokenType.Null)
+                    // Detect conversion failure: null result when input wasn't null
+                    if (convertedValue == null && value.Type != JTokenType.Null)
                     {
-                        fieldInfo.SetValue(component, convertedValue);
-                        return true;
+                        error = $"Failed to convert value for field '{propertyName}' to type '{fieldInfo.FieldType.Name}'.";
+                        return false;
                     }
+                    fieldInfo.SetValue(component, convertedValue);
+                    return true;
                 }
                 catch (Exception ex)
                 {
@@ -196,11 +202,14 @@ namespace MCPForUnity.Editor.Helpers
                 try
                 {
                     object convertedValue = PropertyConversion.ConvertToType(value, fieldInfo.FieldType);
-                    if (convertedValue != null || value.Type == JTokenType.Null)
+                    // Detect conversion failure: null result when input wasn't null
+                    if (convertedValue == null && value.Type != JTokenType.Null)
                     {
-                        fieldInfo.SetValue(component, convertedValue);
-                        return true;
+                        error = $"Failed to convert value for serialized field '{propertyName}' to type '{fieldInfo.FieldType.Name}'.";
+                        return false;
                     }
+                    fieldInfo.SetValue(component, convertedValue);
+                    return true;
                 }
                 catch (Exception ex)
                 {
