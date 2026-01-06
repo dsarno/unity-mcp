@@ -51,7 +51,7 @@ MCP for Unity acts as a bridge, allowing AI assistants (Claude, Cursor, Antigrav
 * `manage_script`: Legacy script operations (create, read, delete). Prefer `apply_text_edits` or `script_apply_edits`.
 * `manage_scriptable_object`: Creates and modifies ScriptableObject assets.
 * `manage_shader`: Shader CRUD operations (create, read, modify, delete).
-* `batch_execute`: Executes multiple MCP commands as one batch with parallel support.
+* `batch_execute`: ⚡ **RECOMMENDED** - Executes multiple commands in one batch for 10-100x better performance. Use this for any repetitive operations.
 * `find_gameobjects`: Search for GameObjects by name, tag, layer, component, path, or ID (paginated).
 * `read_console`: Gets messages from or clears the Unity console.
 * `refresh_unity`: Request asset database refresh and optional compilation.
@@ -80,6 +80,9 @@ MCP for Unity acts as a bridge, allowing AI assistants (Claude, Cursor, Antigrav
 * `menu_items`: All available menu items in the Unity Editor.
 * `tests`: All available tests (EditMode, PlayMode) in the Unity Editor.
 * `gameobject_api`: Documentation for GameObject resources and how to use `find_gameobjects` tool.
+* `unity://scene/gameobject/{instanceID}`: Read-only access to GameObject data (name, tag, transform, components, children).
+* `unity://scene/gameobject/{instanceID}/components`: Read-only access to all components on a GameObject with full property serialization.
+* `unity://scene/gameobject/{instanceID}/component/{componentName}`: Read-only access to a specific component's properties.
 * `editor_active_tool`: Currently active editor tool (Move, Rotate, Scale, etc.) and transform handle settings.
 * `editor_prefab_stage`: Current prefab editing context if a prefab is open in isolation mode.
 * `editor_selection`: Detailed information about currently selected objects in the editor.
@@ -346,6 +349,20 @@ Replace `YOUR_USERNAME` and `AppSupport` path segments as needed for your platfo
 3. **Interact!** Unity tools should now be available in your MCP Client.
 
     Example Prompt: `Create a 3D player controller`, `Create a tic-tac-toe game in 3D`, `Create a cool shader and apply to a cube`.
+
+### 💡 Performance Tip: Use `batch_execute`
+
+When performing multiple operations, use the `batch_execute` tool instead of calling tools one-by-one. This dramatically reduces latency and token costs:
+
+```
+❌ Slow: Create 5 cubes → 5 separate manage_gameobject calls
+✅ Fast: Create 5 cubes → 1 batch_execute call with 5 commands
+
+❌ Slow: Find objects, then add components to each → N+M separate calls  
+✅ Fast: Find objects, then add components → 1 find + 1 batch with M component adds
+```
+
+**Example prompt:** "Create 10 colored cubes in a grid using batch_execute"
 
 ### Working with Multiple Unity Instances
 
