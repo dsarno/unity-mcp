@@ -443,10 +443,10 @@ namespace MCPForUnityTests.Editor.Tools
             var data = resultObj["data"];
             Assert.IsNotNull(data, "Response should include data");
             
-            // Check that instanceID is returned
+            // Check that instanceID is returned (case-insensitive check)
             var instanceID = data["instanceID"]?.Value<int>() ?? data["InstanceID"]?.Value<int>();
-            Assert.IsTrue(instanceID.HasValue || instanceID > 0 || data.ToString().Contains("instanceID") || data.ToString().Contains("InstanceID"), 
-                "Response should include instanceID in some form");
+            Assert.IsTrue(instanceID.HasValue && instanceID.Value != 0, 
+                $"Response should include a non-zero instanceID. Data: {data}");
 
             FindAndTrack("TestInstanceID");
         }

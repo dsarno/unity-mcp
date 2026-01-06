@@ -396,7 +396,7 @@ namespace MCPForUnity.Editor.Tools
                     Camera cam = Camera.main;
                     if (cam == null)
                     {
-                        var cams = UnityEngine.Object.FindObjectsOfType<Camera>();
+                        var cams = UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsSortMode.None);
                         cam = cams.FirstOrDefault();
                     }
 

@@ -309,9 +309,10 @@ namespace MCPForUnity.Editor.Helpers
                     if (type != null && typeof(Component).IsAssignableFrom(type))
                         return type;
                 }
-                catch
+                catch (Exception)
                 {
-                    // Skip assemblies that can't be searched
+                    // Skip assemblies that can't be searched (e.g., dynamic, reflection-only)
+                    // This is expected for some assemblies in Unity's domain
                 }
             }
 

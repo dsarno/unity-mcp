@@ -40,7 +40,6 @@ namespace MCPForUnityTests.Editor.Tools
         public void Delete_ByName_DeletesObject()
         {
             var target = CreateTestObject("DeleteTargetByName");
-            int instanceID = target.GetInstanceID();
 
             var p = new JObject
             {

@@ -30,10 +30,10 @@ namespace MCPForUnity.Editor.Helpers
                 if (s.Length == 0)
                     return defaultValue;
 
-                if (int.TryParse(s, out var i))
+                if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i))
                     return i;
 
-                if (double.TryParse(s, out var d))
+                if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
                     return (int)d;
             }
             catch

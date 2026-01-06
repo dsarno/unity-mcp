@@ -24,6 +24,17 @@ def _normalize_response(response: dict | Any) -> MCPResponse:
     return response
 
 
+def _validate_instance_id(instance_id: str) -> tuple[int | None, MCPResponse | None]:
+    """
+    Validate and convert instance_id string to int.
+    Returns (id_int, None) on success or (None, error_response) on failure.
+    """
+    try:
+        return int(instance_id), None
+    except ValueError:
+        return None, MCPResponse(success=False, error=f"Invalid instance ID: {instance_id}")
+
+
 # =============================================================================
 # Static Helper Resource (shows in UI)
 # =============================================================================
@@ -119,10 +130,9 @@ async def get_gameobject(ctx: Context, instance_id: str) -> MCPResponse:
     """Get GameObject data by instance ID."""
     unity_instance = get_unity_instance_from_context(ctx)
     
-    try:
-        id_int = int(instance_id)
-    except ValueError:
-        return MCPResponse(success=False, error=f"Invalid instance ID: {instance_id}")
+    id_int, error = _validate_instance_id(instance_id)
+    if error:
+        return error
     
     response = await send_with_unity_instance(
         async_send_command_with_retry,
@@ -167,10 +177,9 @@ async def get_gameobject_components(
     """Get all components on a GameObject."""
     unity_instance = get_unity_instance_from_context(ctx)
     
-    try:
-        id_int = int(instance_id)
-    except ValueError:
-        return MCPResponse(success=False, error=f"Invalid instance ID: {instance_id}")
+    id_int, error = _validate_instance_id(instance_id)
+    if error:
+        return error
     
     response = await send_with_unity_instance(
         async_send_command_with_retry,
@@ -212,10 +221,9 @@ async def get_gameobject_component(
     """Get a specific component on a GameObject."""
     unity_instance = get_unity_instance_from_context(ctx)
     
-    try:
-        id_int = int(instance_id)
-    except ValueError:
-        return MCPResponse(success=False, error=f"Invalid instance ID: {instance_id}")
+    id_int, error = _validate_instance_id(instance_id)
+    if error:
+        return error
     
     response = await send_with_unity_instance(
         async_send_command_with_retry,

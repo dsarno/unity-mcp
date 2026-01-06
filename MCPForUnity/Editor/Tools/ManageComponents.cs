@@ -91,7 +91,7 @@ namespace MCPForUnity.Editor.Tools
 
             try
             {
-                Undo.RecordObject(targetGo, $"Add {componentType}");
+                // Undo.AddComponent creates its own undo record, no need for RecordObject
                 Component newComponent = Undo.AddComponent(targetGo, type);
 
                 if (newComponent == null)
