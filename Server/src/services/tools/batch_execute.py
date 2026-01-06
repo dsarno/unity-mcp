@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastmcp import Context
+from mcp.types import ToolAnnotations
 
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
@@ -20,6 +21,10 @@ MAX_COMMANDS_PER_BATCH = 25
         "STRONGLY RECOMMENDED when creating/modifying multiple objects, adding components to multiple targets, "
         "or performing any repetitive operations. Reduces latency and token costs by 10-100x compared to "
         "sequential tool calls. Example: creating 5 cubes → use 1 batch_execute with 5 create commands instead of 5 separate calls."
+    ),
+    annotations=ToolAnnotations(
+        title="Batch Execute",
+        destructiveHint=True,
     ),
 )
 async def batch_execute(
