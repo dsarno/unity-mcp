@@ -1,7 +1,6 @@
 """
 Defines the manage_asset tool for interacting with Unity assets.
 """
-import ast
 import asyncio
 import json
 from typing import Annotated, Any, Literal
@@ -21,9 +20,10 @@ def _normalize_properties(value: Any) -> tuple[dict[str, Any] | None, str | None
     """
     Robustly normalize properties parameter to a dict.
     Returns (parsed_dict, error_message). If error_message is set, parsed_dict is None.
+    Consistent with manage_components and manage_material normalizers.
     """
     if value is None:
-        return {}, None
+        return None, None
     
     # Already a dict - return as-is
     if isinstance(value, dict):
@@ -35,19 +35,11 @@ def _normalize_properties(value: Any) -> tuple[dict[str, Any] | None, str | None
         if value in ("[object Object]", "undefined", "null", ""):
             return None, f"properties received invalid value: '{value}'. Expected a JSON object like {{\"key\": value}}"
         
-        # Try JSON parsing first
         parsed = parse_json_payload(value)
         if isinstance(parsed, dict):
             return parsed, None
         
-        # Fallback to ast.literal_eval for Python dict literals
-        try:
-            parsed = ast.literal_eval(value)
-            if isinstance(parsed, dict):
-                return parsed, None
-            return None, f"properties must evaluate to a dict, got {type(parsed).__name__}"
-        except (ValueError, SyntaxError) as e:
-            return None, f"Failed to parse properties: {e}"
+        return None, f"properties must be a JSON object (dict), got string that parsed to {type(parsed).__name__}"
     
     return None, f"properties must be a dict or JSON string, got {type(value).__name__}"
 
