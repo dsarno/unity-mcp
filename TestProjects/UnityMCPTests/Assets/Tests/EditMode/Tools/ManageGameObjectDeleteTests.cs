@@ -123,6 +123,8 @@ namespace MCPForUnityTests.Editor.Tools
         [Test]
         public void Delete_ByTag_DeletesMatchingObjects()
         {
+            // Current behavior: delete action finds first matching object and deletes it.
+            // This test verifies at least one tagged object is deleted.
             var target1 = CreateTestObject("DeleteByTag1");
             var target2 = CreateTestObject("DeleteByTag2");
             
@@ -140,12 +142,20 @@ namespace MCPForUnityTests.Editor.Tools
             var result = ManageGameObject.HandleCommand(p);
             var resultObj = result as JObject ?? JObject.FromObject(result);
 
-            // Capture current behavior - may delete one or all
-            Assert.IsNotNull(result, "Should return a result");
+            Assert.IsTrue(resultObj.Value<bool>("success"), resultObj.ToString());
             
-            // Clean up tracking
-            testObjects.Remove(target1);
-            testObjects.Remove(target2);
+            // Verify at least one object was deleted (current behavior deletes first match)
+            bool target1Deleted = target1 == null; // Unity Object == null check
+            bool target2Deleted = target2 == null;
+            Assert.IsTrue(target1Deleted || target2Deleted, "At least one tagged object should be deleted");
+            
+            // Check response data for deletion info
+            var data = resultObj["data"];
+            Assert.IsNotNull(data, "Response should include data");
+            
+            // Clean up only surviving objects from tracking
+            if (!target1Deleted) testObjects.Remove(target1);
+            if (!target2Deleted) testObjects.Remove(target2);
         }
 
         [Test]
@@ -162,10 +172,17 @@ namespace MCPForUnityTests.Editor.Tools
             };
 
             var result = ManageGameObject.HandleCommand(p);
-            // Capture current behavior
-            Assert.IsNotNull(result, "Should return a result");
+            var resultObj = result as JObject ?? JObject.FromObject(result);
+
+            Assert.IsTrue(resultObj.Value<bool>("success"), resultObj.ToString());
             
-            testObjects.Remove(target);
+            // Verify the object was actually deleted
+            bool targetDeleted = target == null; // Unity Object == null check
+            Assert.IsTrue(targetDeleted, "Object on UI layer should be deleted");
+            Assert.IsFalse(testObjects.Contains(target) && target != null, "Deleted object should not be findable");
+            
+            // Only remove from tracking if not already destroyed
+            if (!targetDeleted) testObjects.Remove(target);
         }
 
         [Test]
@@ -276,11 +293,22 @@ namespace MCPForUnityTests.Editor.Tools
 
             Assert.IsTrue(resultObj.Value<bool>("success"), resultObj.ToString());
             
+            // Verify object was actually deleted
+            bool targetDeleted = target == null;
+            Assert.IsTrue(targetDeleted, "Object should be deleted");
+            
             // Check for deleted count in response
             var data = resultObj["data"];
             Assert.IsNotNull(data, "Response should include data");
             
-            testObjects.Remove(target);
+            // Verify the actual count if present
+            if (data is JObject dataObj && dataObj.ContainsKey("deletedCount"))
+            {
+                Assert.AreEqual(1, dataObj.Value<int>("deletedCount"), "Should report 1 deleted object");
+            }
+            
+            // Only remove from tracking if not already destroyed
+            if (!targetDeleted) testObjects.Remove(target);
         }
 
         #endregion
@@ -310,6 +338,8 @@ namespace MCPForUnityTests.Editor.Tools
         [Test]
         public void Delete_MultipleObjectsSameName_DeletesCorrectly()
         {
+            // Expected behavior: delete action with by_name finds the FIRST matching object
+            // and deletes only that one. This is consistent with Unity's GameObject.Find behavior.
             var target1 = CreateTestObject("DuplicateName");
             var target2 = CreateTestObject("DuplicateName");
 
@@ -321,11 +351,27 @@ namespace MCPForUnityTests.Editor.Tools
             };
 
             var result = ManageGameObject.HandleCommand(p);
-            // Capture current behavior - may delete one or all
-            Assert.IsNotNull(result, "Should return a result");
+            var resultObj = result as JObject ?? JObject.FromObject(result);
+
+            Assert.IsTrue(resultObj.Value<bool>("success"), resultObj.ToString());
             
-            testObjects.Remove(target1);
-            testObjects.Remove(target2);
+            // Verify deletion occurred - at least one should be deleted
+            bool target1Deleted = target1 == null;
+            bool target2Deleted = target2 == null;
+            Assert.IsTrue(target1Deleted || target2Deleted, "At least one object should be deleted");
+            
+            // Count remaining objects with the name to verify behavior
+            int remainingCount = 0;
+            if (!target1Deleted) remainingCount++;
+            if (!target2Deleted) remainingCount++;
+            
+            // Document the actual behavior: first match is deleted, second survives
+            // If both are deleted, that's also acceptable (bulk delete mode)
+            Assert.IsTrue(remainingCount <= 1, $"Expected at most 1 remaining, got {remainingCount}");
+            
+            // Clean up only survivors from tracking
+            if (!target1Deleted) testObjects.Remove(target1);
+            if (!target2Deleted) testObjects.Remove(target2);
         }
 
         #endregion
