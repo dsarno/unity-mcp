@@ -334,31 +334,29 @@ namespace MCPForUnity.Editor.Tools
             // Set Tag (added for create action)
             if (!string.IsNullOrEmpty(tag))
             {
-                string tagToSet = string.IsNullOrEmpty(tag) ? "Untagged" : tag;
-                
                 // Check if tag exists first (Unity doesn't throw exceptions for undefined tags, just logs a warning)
-                if (tagToSet != "Untagged" && !System.Linq.Enumerable.Contains(InternalEditorUtility.tags, tagToSet))
+                if (tag != "Untagged" && !System.Linq.Enumerable.Contains(InternalEditorUtility.tags, tag))
                 {
-                    Debug.Log($"[ManageGameObject.Create] Tag '{tagToSet}' not found. Creating it.");
+                    Debug.Log($"[ManageGameObject.Create] Tag '{tag}' not found. Creating it.");
                     try
                     {
-                        InternalEditorUtility.AddTag(tagToSet);
+                        InternalEditorUtility.AddTag(tag);
                     }
                     catch (Exception ex)
                     {
                         UnityEngine.Object.DestroyImmediate(newGo); // Clean up
-                        return new ErrorResponse($"Failed to create tag '{tagToSet}': {ex.Message}.");
+                        return new ErrorResponse($"Failed to create tag '{tag}': {ex.Message}.");
                     }
                 }
                 
                 try
                 {
-                    newGo.tag = tagToSet;
+                    newGo.tag = tag;
                 }
                 catch (Exception ex)
                 {
                     UnityEngine.Object.DestroyImmediate(newGo); // Clean up
-                    return new ErrorResponse($"Failed to set tag to '{tagToSet}' during creation: {ex.Message}.");
+                    return new ErrorResponse($"Failed to set tag to '{tag}' during creation: {ex.Message}.");
                 }
             }
 
@@ -1193,7 +1191,6 @@ namespace MCPForUnity.Editor.Tools
                     Type componentType = FindType(searchTerm);
                     if (componentType != null)
                     {
-                        // Use FindObjectsOfType for Unity 2021 compatibility
                         IEnumerable<GameObject> searchPoolComp;
                         if (rootSearchObject)
                         {
@@ -1203,11 +1200,10 @@ namespace MCPForUnity.Editor.Tools
                         }
                         else
                         {
-                            // FindObjectsOfType doesn't filter inactive, so we filter manually
-                            searchPoolComp = UnityEngine.Object.FindObjectsOfType(componentType)
+                            // Use FindObjectsOfType overload that respects includeInactive
+                            searchPoolComp = UnityEngine.Object.FindObjectsOfType(componentType, searchInactive)
                                 .Cast<Component>()
-                                .Select(c => c.gameObject)
-                                .Where(go => searchInactive || (go != null && go.activeInHierarchy));
+                                .Select(c => c.gameObject);
                         }
                         results.AddRange(searchPoolComp.Where(go => go != null)); // Ensure GO is valid
                     }

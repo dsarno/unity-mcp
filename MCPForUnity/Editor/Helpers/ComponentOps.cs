@@ -149,8 +149,9 @@ namespace MCPForUnity.Editor.Helpers
             BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
             string normalizedName = ParamCoercion.NormalizePropertyName(propertyName);
 
-            // Try property first
-            PropertyInfo propInfo = type.GetProperty(normalizedName, flags);
+            // Try property first - check both original and normalized names for backwards compatibility
+            PropertyInfo propInfo = type.GetProperty(propertyName, flags) 
+                                 ?? type.GetProperty(normalizedName, flags);
             if (propInfo != null && propInfo.CanWrite)
             {
                 try
@@ -172,8 +173,9 @@ namespace MCPForUnity.Editor.Helpers
                 }
             }
 
-            // Try field
-            FieldInfo fieldInfo = type.GetField(normalizedName, flags);
+            // Try field - check both original and normalized names for backwards compatibility
+            FieldInfo fieldInfo = type.GetField(propertyName, flags) 
+                               ?? type.GetField(normalizedName, flags);
             if (fieldInfo != null && !fieldInfo.IsInitOnly)
             {
                 try
@@ -195,8 +197,10 @@ namespace MCPForUnity.Editor.Helpers
                 }
             }
 
-            // Try non-public serialized fields
-            fieldInfo = type.GetField(normalizedName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            // Try non-public serialized fields - check both original and normalized names
+            BindingFlags privateFlags = BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase;
+            fieldInfo = type.GetField(propertyName, privateFlags) 
+                     ?? type.GetField(normalizedName, privateFlags);
             if (fieldInfo != null && fieldInfo.GetCustomAttribute<SerializeField>() != null)
             {
                 try

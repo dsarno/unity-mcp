@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEditorInternal;
 using Newtonsoft.Json.Linq;
 using MCPForUnity.Editor.Tools;
 
@@ -403,12 +404,14 @@ namespace MCPForUnityTests.Editor.Tools
         [Test]
         public void Create_WithNewTag_AutoCreatesTag()
         {
+            const string testTag = "AutoCreatedTag12345";
+            
             // Tags that don't exist are now auto-created
             var p = new JObject
             {
                 ["action"] = "create",
                 ["name"] = "TestAutoTag",
-                ["tag"] = "AutoCreatedTag12345"
+                ["tag"] = testTag
             };
 
             var result = ManageGameObject.HandleCommand(p);
@@ -418,7 +421,14 @@ namespace MCPForUnityTests.Editor.Tools
             
             var created = FindAndTrack("TestAutoTag");
             Assert.IsNotNull(created, "Object should be created");
-            Assert.AreEqual("AutoCreatedTag12345", created.tag, "Tag should be auto-created and assigned");
+            Assert.AreEqual(testTag, created.tag, "Tag should be auto-created and assigned");
+            
+            // Verify tag was actually added to the tag manager
+            Assert.That(UnityEditorInternal.InternalEditorUtility.tags, Does.Contain(testTag), 
+                "Tag should exist in Unity's tag manager");
+            
+            // Clean up the created tag
+            try { UnityEditorInternal.InternalEditorUtility.RemoveTag(testTag); } catch { }
         }
 
         #endregion

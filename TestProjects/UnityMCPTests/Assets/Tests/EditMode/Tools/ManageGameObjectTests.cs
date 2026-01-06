@@ -315,8 +315,9 @@ namespace MCPForUnityTests.Editor.Tools
             };
 
             // Expect the error logs from the invalid property
-            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Unexpected error converting token to UnityEngine.Vector3"));
-            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("SetProperty.*Failed to set 'velocity'"));
+            // Note: PropertyConversion logs "Error converting token to..." when conversion fails
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Error converting token to UnityEngine.Vector3"));
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex(@"\[SetProperty\].*Failed to set 'velocity'"));
             LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Property 'velocity' not found"));
 
             // Act

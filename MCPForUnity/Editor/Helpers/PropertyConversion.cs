@@ -35,19 +35,9 @@ namespace MCPForUnity.Editor.Helpers
                 // Use the shared Unity serializer with custom converters
                 return token.ToObject(targetType, UnityJsonSerializer.Instance);
             }
-            catch (JsonSerializationException jsonEx)
-            {
-                Debug.LogError($"JSON Deserialization Error converting token to {targetType.FullName}: {jsonEx.Message}\nToken: {token.ToString(Formatting.None)}");
-                throw;
-            }
-            catch (ArgumentException argEx)
-            {
-                Debug.LogError($"Argument Error converting token to {targetType.FullName}: {argEx.Message}\nToken: {token.ToString(Formatting.None)}");
-                throw;
-            }
             catch (Exception ex)
             {
-                Debug.LogError($"Unexpected error converting token to {targetType.FullName}: {ex}\nToken: {token.ToString(Formatting.None)}");
+                Debug.LogError($"Error converting token to {targetType.FullName}: {ex.Message}\nToken: {token.ToString(Formatting.None)}");
                 throw;
             }
         }

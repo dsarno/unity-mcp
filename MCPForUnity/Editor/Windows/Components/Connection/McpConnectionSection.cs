@@ -575,7 +575,9 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 {
                     // After many attempts without detection, try connecting anyway as a last resort.
                     // This handles cases where process detection fails but the server is actually running.
-                    // Only try a few times to avoid spamming connection errors.
+                    // Only try once every 3 attempts to avoid spamming connection errors (at attempts 20, 23, 26, 29).
+                    if ((attempt - 20) % 3 != 0) continue;
+                    
                     bool started = await bridgeService.StartAsync();
                     if (started)
                     {
