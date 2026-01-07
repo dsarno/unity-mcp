@@ -52,6 +52,7 @@ MCP for Unity acts as a bridge, allowing AI assistants (Claude, Cursor, Antigrav
 * `manage_script`: Legacy script operations (create, read, delete). Prefer `apply_text_edits` or `script_apply_edits`.
 * `manage_scriptable_object`: Creates and modifies ScriptableObject assets.
 * `manage_shader`: Shader CRUD operations (create, read, modify, delete).
+* `manage_vfx`: VFX effect operations, including line/trail renderer, particle system, and VisualEffectGraph (in development).
 * `batch_execute`: ⚡ **RECOMMENDED** - Executes multiple commands in one batch for 10-100x better performance. Use this for any repetitive operations.
 * `find_gameobjects`: Search for GameObjects by name, tag, layer, component, path, or ID (paginated).
 * `read_console`: Gets messages from or clears the Unity console.
