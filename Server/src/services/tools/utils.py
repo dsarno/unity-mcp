@@ -77,6 +77,23 @@ def coerce_int(value: Any, default: int | None = None) -> int | None:
         return default
 
 
+def coerce_float(value: Any, default: float | None = None) -> float | None:
+    """Attempt to coerce a loosely-typed value to a float-like number."""
+    if value is None:
+        return default
+    try:
+        # Treat booleans as invalid numeric input instead of coercing to 0/1.
+        if isinstance(value, bool):
+            return default
+        if isinstance(value, (int, float)):
+            return float(value)
+        s = str(value).strip()
+        if s.lower() in ("", "none", "null"):
+            return default
+        return float(s)
+    except (TypeError, ValueError):
+        return default
+      
 def normalize_properties(value: Any) -> tuple[dict[str, Any] | None, str | None]:
     """
     Robustly normalize a properties parameter to a dict.
