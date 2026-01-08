@@ -151,7 +151,7 @@ All installations require these:
   4. Add `USE_ROSLYN` to Scripting Define Symbols
   5. Restart Unity
 
-  **Note:** Without Roslyn, script validation falls back to basic structural checks. Roslyn enables full C# compiler diagnostics with precise error reporting.</details>
+  **Note:** Without Roslyn, script validation falls back to basic structural checks. Roslyn enables full C# compiler diagnostics with precise error reporting. Auto-formatting is optional and only runs when the Roslyn Workspaces assemblies are present (e.g., `Microsoft.CodeAnalysis.Workspaces.Common`).</details>
 
 ---
 ### 🌟 Step 1: Install the Unity Package
