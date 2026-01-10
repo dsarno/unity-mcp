@@ -218,6 +218,311 @@ namespace MCPForUnityTests.Editor.Tools
             }
         }
 
+        [Test]
+        public void CreateFromGameObject_FindsInactiveObject_WhenSearchInactiveTrue()
+        {
+            EnsureTempDirectoryExists();
+            StageUtility.GoToMainStage();
+
+            string prefabPath = Path.Combine(TempDirectory, "InactiveObjectSaved.prefab").Replace('\\', '/');
+            GameObject sceneObject = new GameObject("InactivePrefabSource");
+            sceneObject.SetActive(false);
+
+            try
+            {
+                // First, verify it fails without searchInactive
+                var failResult = ToJObject(ManagePrefabs.HandleCommand(new JObject
+                {
+                    ["action"] = "create_from_gameobject",
+                    ["target"] = sceneObject.name,
+                    ["prefabPath"] = prefabPath
+                }));
+
+                Assert.IsFalse(failResult.Value<bool>("success"), "create_from_gameobject should fail for inactive object without searchInactive.");
+                Assert.IsTrue(failResult.Value<string>("error").Contains("searchInactive"), "Error message should hint about searchInactive option.");
+
+                // Now try with searchInactive: true
+                var result = ToJObject(ManagePrefabs.HandleCommand(new JObject
+                {
+                    ["action"] = "create_from_gameobject",
+                    ["target"] = sceneObject.name,
+                    ["prefabPath"] = prefabPath,
+                    ["searchInactive"] = true
+                }));
+
+                Assert.IsTrue(result.Value<bool>("success"), "create_from_gameobject should succeed for inactive object with searchInactive: true.");
+
+                var data = result["data"] as JObject;
+                Assert.IsNotNull(data, "Response data should include prefab information.");
+
+                string savedPath = data.Value<string>("prefabPath");
+                Assert.AreEqual(prefabPath, savedPath, "Returned prefab path should match the requested path.");
+
+                GameObject prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(savedPath);
+                Assert.IsNotNull(prefabAsset, "Prefab asset should exist at the saved path.");
+
+                int instanceId = data.Value<int>("instanceId");
+                var linkedInstance = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+                Assert.IsNotNull(linkedInstance, "Linked instance should resolve from instanceId.");
+
+                sceneObject = linkedInstance;
+            }
+            finally
+            {
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(prefabPath) != null)
+                {
+                    AssetDatabase.DeleteAsset(prefabPath);
+                }
+
+                if (sceneObject != null)
+                {
+                    if (PrefabUtility.IsPartOfPrefabInstance(sceneObject))
+                    {
+                        PrefabUtility.UnpackPrefabInstance(
+                            sceneObject,
+                            PrefabUnpackMode.Completely,
+                            InteractionMode.AutomatedAction
+                        );
+                    }
+                    UnityEngine.Object.DestroyImmediate(sceneObject, true);
+                }
+            }
+        }
+
+        [Test]
+        public void CreateFromGameObject_FindsObjectByInstanceId_WithTargetInstanceId()
+        {
+            EnsureTempDirectoryExists();
+            StageUtility.GoToMainStage();
+
+            string prefabPath = Path.Combine(TempDirectory, "InstanceIdLookup.prefab").Replace('\\', '/');
+            GameObject sceneObject = new GameObject("InstanceIdPrefabSource");
+            int instanceId = sceneObject.GetInstanceID();
+
+            try
+            {
+                var result = ToJObject(ManagePrefabs.HandleCommand(new JObject
+                {
+                    ["action"] = "create_from_gameobject",
+                    ["target_instance_id"] = instanceId,
+                    ["prefabPath"] = prefabPath
+                }));
+
+                Assert.IsTrue(result.Value<bool>("success"), "create_from_gameobject should succeed with target_instance_id.");
+
+                var data = result["data"] as JObject;
+                Assert.IsNotNull(data, "Response data should include prefab information.");
+
+                string savedPath = data.Value<string>("prefabPath");
+                Assert.AreEqual(prefabPath, savedPath, "Returned prefab path should match the requested path.");
+
+                GameObject prefabAsset = AssetDatabase.LoadAssetAtPath<GameObject>(savedPath);
+                Assert.IsNotNull(prefabAsset, "Prefab asset should exist at the saved path.");
+
+                int returnedInstanceId = data.Value<int>("instanceId");
+                var linkedInstance = EditorUtility.InstanceIDToObject(returnedInstanceId) as GameObject;
+                Assert.IsNotNull(linkedInstance, "Linked instance should resolve from instanceId.");
+
+                sceneObject = linkedInstance;
+            }
+            finally
+            {
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(prefabPath) != null)
+                {
+                    AssetDatabase.DeleteAsset(prefabPath);
+                }
+
+                if (sceneObject != null)
+                {
+                    if (PrefabUtility.IsPartOfPrefabInstance(sceneObject))
+                    {
+                        PrefabUtility.UnpackPrefabInstance(
+                            sceneObject,
+                            PrefabUnpackMode.Completely,
+                            InteractionMode.AutomatedAction
+                        );
+                    }
+                    UnityEngine.Object.DestroyImmediate(sceneObject, true);
+                }
+            }
+        }
+
+        [Test]
+        public void CreateFromGameObject_FindsInactiveObjectByInstanceId()
+        {
+            EnsureTempDirectoryExists();
+            StageUtility.GoToMainStage();
+
+            string prefabPath = Path.Combine(TempDirectory, "InactiveInstanceId.prefab").Replace('\\', '/');
+            GameObject sceneObject = new GameObject("InactiveInstanceIdSource");
+            sceneObject.SetActive(false);
+            int instanceId = sceneObject.GetInstanceID();
+
+            try
+            {
+                // Instance ID lookup should find inactive objects without searchInactive flag
+                // because by_id search always uses searchInactive: true internally
+                var result = ToJObject(ManagePrefabs.HandleCommand(new JObject
+                {
+                    ["action"] = "create_from_gameobject",
+                    ["target_instance_id"] = instanceId,
+                    ["prefabPath"] = prefabPath
+                }));
+
+                Assert.IsTrue(result.Value<bool>("success"), "create_from_gameobject should succeed for inactive object with target_instance_id.");
+
+                var data = result["data"] as JObject;
+                Assert.IsNotNull(data, "Response data should include prefab information.");
+
+                int returnedInstanceId = data.Value<int>("instanceId");
+                var linkedInstance = EditorUtility.InstanceIDToObject(returnedInstanceId) as GameObject;
+                Assert.IsNotNull(linkedInstance, "Linked instance should resolve from instanceId.");
+
+                sceneObject = linkedInstance;
+            }
+            finally
+            {
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(prefabPath) != null)
+                {
+                    AssetDatabase.DeleteAsset(prefabPath);
+                }
+
+                if (sceneObject != null)
+                {
+                    if (PrefabUtility.IsPartOfPrefabInstance(sceneObject))
+                    {
+                        PrefabUtility.UnpackPrefabInstance(
+                            sceneObject,
+                            PrefabUnpackMode.Completely,
+                            InteractionMode.AutomatedAction
+                        );
+                    }
+                    UnityEngine.Object.DestroyImmediate(sceneObject, true);
+                }
+            }
+        }
+
+        [Test]
+        public void CreateFromGameObject_TargetAcceptsIntegerInstanceId()
+        {
+            EnsureTempDirectoryExists();
+            StageUtility.GoToMainStage();
+
+            string prefabPath = Path.Combine(TempDirectory, "IntegerTargetLookup.prefab").Replace('\\', '/');
+            GameObject sceneObject = new GameObject("IntegerTargetSource");
+            int instanceId = sceneObject.GetInstanceID();
+
+            try
+            {
+                // Pass instance ID as integer in target parameter (not target_instance_id)
+                var result = ToJObject(ManagePrefabs.HandleCommand(new JObject
+                {
+                    ["action"] = "create_from_gameobject",
+                    ["target"] = instanceId, // Integer, not string
+                    ["prefabPath"] = prefabPath
+                }));
+
+                Assert.IsTrue(result.Value<bool>("success"), "create_from_gameobject should succeed with integer target (instance ID).");
+
+                var data = result["data"] as JObject;
+                Assert.IsNotNull(data, "Response data should include prefab information.");
+
+                string savedPath = data.Value<string>("prefabPath");
+                Assert.AreEqual(prefabPath, savedPath, "Returned prefab path should match the requested path.");
+
+                int returnedInstanceId = data.Value<int>("instanceId");
+                var linkedInstance = EditorUtility.InstanceIDToObject(returnedInstanceId) as GameObject;
+                Assert.IsNotNull(linkedInstance, "Linked instance should resolve from instanceId.");
+
+                sceneObject = linkedInstance;
+            }
+            finally
+            {
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(prefabPath) != null)
+                {
+                    AssetDatabase.DeleteAsset(prefabPath);
+                }
+
+                if (sceneObject != null)
+                {
+                    if (PrefabUtility.IsPartOfPrefabInstance(sceneObject))
+                    {
+                        PrefabUtility.UnpackPrefabInstance(
+                            sceneObject,
+                            PrefabUnpackMode.Completely,
+                            InteractionMode.AutomatedAction
+                        );
+                    }
+                    UnityEngine.Object.DestroyImmediate(sceneObject, true);
+                }
+            }
+        }
+
+        [Test]
+        public void CreateFromGameObject_TargetInstanceIdTakesPrecedence()
+        {
+            EnsureTempDirectoryExists();
+            StageUtility.GoToMainStage();
+
+            string prefabPath = Path.Combine(TempDirectory, "PrecedenceTest.prefab").Replace('\\', '/');
+            GameObject correctObject = new GameObject("CorrectObject");
+            GameObject wrongObject = new GameObject("WrongObject");
+            int correctInstanceId = correctObject.GetInstanceID();
+
+            try
+            {
+                // Pass both target (pointing to wrong object) and target_instance_id (pointing to correct object)
+                // target_instance_id should take precedence
+                var result = ToJObject(ManagePrefabs.HandleCommand(new JObject
+                {
+                    ["action"] = "create_from_gameobject",
+                    ["target"] = wrongObject.name,
+                    ["target_instance_id"] = correctInstanceId,
+                    ["prefabPath"] = prefabPath
+                }));
+
+                Assert.IsTrue(result.Value<bool>("success"), "create_from_gameobject should succeed.");
+
+                var data = result["data"] as JObject;
+                Assert.IsNotNull(data, "Response data should include prefab information.");
+
+                int returnedInstanceId = data.Value<int>("instanceId");
+                var linkedInstance = EditorUtility.InstanceIDToObject(returnedInstanceId) as GameObject;
+                Assert.IsNotNull(linkedInstance, "Linked instance should resolve from instanceId.");
+
+                // The prefab should have been created from the correctObject (via target_instance_id)
+                // not from wrongObject (via target)
+                Assert.AreEqual("CorrectObject", linkedInstance.name, "Prefab should be created from object specified by target_instance_id.");
+
+                correctObject = linkedInstance;
+            }
+            finally
+            {
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(prefabPath) != null)
+                {
+                    AssetDatabase.DeleteAsset(prefabPath);
+                }
+
+                if (correctObject != null)
+                {
+                    if (PrefabUtility.IsPartOfPrefabInstance(correctObject))
+                    {
+                        PrefabUtility.UnpackPrefabInstance(
+                            correctObject,
+                            PrefabUnpackMode.Completely,
+                            InteractionMode.AutomatedAction
+                        );
+                    }
+                    UnityEngine.Object.DestroyImmediate(correctObject, true);
+                }
+
+                if (wrongObject != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(wrongObject, true);
+                }
+            }
+        }
+
         private static string CreateTestPrefab(string name)
         {
             EnsureTempDirectoryExists();

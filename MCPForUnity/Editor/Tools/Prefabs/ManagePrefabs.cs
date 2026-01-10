@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using MCPForUnity.Editor.Helpers;
+using MCPForUnity.Editor.Tools.GameObjects;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -131,17 +132,53 @@ namespace MCPForUnity.Editor.Tools.Prefabs
 
         private static object CreatePrefabFromGameObject(JObject @params)
         {
-            string targetName = @params["target"]?.ToString() ?? @params["name"]?.ToString();
-            if (string.IsNullOrEmpty(targetName))
+            // Support target_instance_id for direct instance ID lookup (takes precedence)
+            JToken targetInstanceIdToken = @params["target_instance_id"];
+            JToken targetToken = @params["target"] ?? @params["name"];
+
+            if (targetInstanceIdToken == null && targetToken == null)
             {
-                return new ErrorResponse("'target' parameter is required for create_from_gameobject.");
+                return new ErrorResponse("'target' or 'target_instance_id' parameter is required for create_from_gameobject.");
             }
 
-            bool includeInactive = @params["searchInactive"]?.ToObject<bool>() ?? false;
-            GameObject sourceObject = FindSceneObjectByName(targetName, includeInactive);
+            bool searchInactive = @params["searchInactive"]?.ToObject<bool>() ?? false;
+
+            // Build find params for ManageGameObjectCommon
+            var findParams = new JObject
+            {
+                ["searchInactive"] = searchInactive
+            };
+
+            // Determine lookup method - target_instance_id takes precedence
+            GameObject sourceObject = null;
+            string targetIdentifier;
+
+            if (targetInstanceIdToken != null)
+            {
+                // Direct instance ID lookup - always search inactive objects since instance IDs are unique
+                targetIdentifier = targetInstanceIdToken.ToString();
+                var idFindParams = new JObject { ["searchInactive"] = true };
+                sourceObject = ManageGameObjectCommon.FindObjectInternal(targetInstanceIdToken, "by_id", idFindParams);
+            }
+            else
+            {
+                // target parameter - supports both string (name/path) and integer (instance ID)
+                targetIdentifier = targetToken.ToString();
+
+                // Auto-detect search method based on token type
+                string searchMethod = null; // Let FindObjectInternal auto-detect
+                if (targetToken.Type == JTokenType.Integer)
+                {
+                    searchMethod = "by_id";
+                }
+
+                sourceObject = ManageGameObjectCommon.FindObjectInternal(targetToken, searchMethod, findParams);
+            }
+
             if (sourceObject == null)
             {
-                return new ErrorResponse($"GameObject '{targetName}' not found in the active scene.");
+                string inactiveHint = searchInactive ? "" : " Try setting searchInactive: true if the object is inactive.";
+                return new ErrorResponse($"GameObject '{targetIdentifier}' not found in the active scene.{inactiveHint}");
             }
 
             if (PrefabUtility.IsPartOfPrefabAsset(sourceObject))
@@ -225,36 +262,6 @@ namespace MCPForUnity.Editor.Tools.Prefabs
                 Directory.CreateDirectory(fullDirectory);
                 AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             }
-        }
-
-        private static GameObject FindSceneObjectByName(string name, bool includeInactive)
-        {
-            PrefabStage stage = PrefabStageUtility.GetCurrentPrefabStage();
-            if (stage?.prefabContentsRoot != null)
-            {
-                foreach (Transform transform in stage.prefabContentsRoot.GetComponentsInChildren<Transform>(includeInactive))
-                {
-                    if (transform.name == name)
-                    {
-                        return transform.gameObject;
-                    }
-                }
-            }
-
-            Scene activeScene = SceneManager.GetActiveScene();
-            foreach (GameObject root in activeScene.GetRootGameObjects())
-            {
-                foreach (Transform transform in root.GetComponentsInChildren<Transform>(includeInactive))
-                {
-                    GameObject candidate = transform.gameObject;
-                    if (candidate.name == name)
-                    {
-                        return candidate;
-                    }
-                }
-            }
-
-            return null;
         }
 
         private static object SerializeStage(PrefabStage stage)
