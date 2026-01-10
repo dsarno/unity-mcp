@@ -10,11 +10,11 @@ using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
 using System.Threading;
 using System.Security.Cryptography;
+using System.Reflection;
 
 #if USE_ROSLYN
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Formatting;
 #endif
 
 #if UNITY_EDITOR
@@ -54,6 +54,59 @@ namespace MCPForUnity.Editor.Tools
     [McpForUnityTool("manage_script", AutoRegister = false)]
     public static class ManageScript
     {
+#if USE_ROSLYN
+        private static readonly string[] RoslynWorkspaceAssemblies = new[]
+        {
+            "Microsoft.CodeAnalysis.Workspaces",
+            "Microsoft.CodeAnalysis.Workspaces.Common"
+        };
+
+        private static Type GetRoslynType(string typeName)
+        {
+            foreach (var assembly in RoslynWorkspaceAssemblies)
+            {
+                var resolved = Type.GetType($"{typeName}, {assembly}");
+                if (resolved != null)
+                {
+                    return resolved;
+                }
+            }
+
+            return Type.GetType(typeName);
+        }
+
+        private static object TryCreateAdhocWorkspace()
+        {
+            var workspaceType = GetRoslynType("Microsoft.CodeAnalysis.AdhocWorkspace");
+            return workspaceType != null ? Activator.CreateInstance(workspaceType) : null;
+        }
+
+        private static string TryFormatWithRoslyn(SyntaxNode root)
+        {
+            var workspace = TryCreateAdhocWorkspace();
+            if (workspace == null)
+            {
+                return null;
+            }
+
+            var formatterType = GetRoslynType("Microsoft.CodeAnalysis.Formatting.Formatter");
+            if (formatterType == null)
+            {
+                return null;
+            }
+
+            var formatMethod = formatterType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .FirstOrDefault(m => m.Name == "Format" && m.GetParameters().Length == 2);
+            if (formatMethod == null)
+            {
+                return null;
+            }
+
+            var formatted = formatMethod.Invoke(null, new object[] { root, workspace }) as SyntaxNode;
+            return formatted?.ToFullString();
+        }
+#endif
+
         /// <summary>
         /// Resolves a directory under Assets/, preventing traversal and escaping.
         /// Returns fullPathDir on disk and canonical 'Assets/...' relative path.
@@ -746,9 +799,11 @@ namespace MCPForUnity.Editor.Tools
                 try
                 {
                     var root = tree.GetRoot();
-                    var workspace = new AdhocWorkspace();
-                    root = Microsoft.CodeAnalysis.Formatting.Formatter.Format(root, workspace);
-                    working = root.ToFullString();
+                    var formatted = TryFormatWithRoslyn(root);
+                    if (!string.IsNullOrEmpty(formatted))
+                    {
+                        working = formatted;
+                    }
                 }
                 catch { }
             }
