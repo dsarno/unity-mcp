@@ -19,3 +19,4 @@ runs:
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         packages-dir: Server/dist/
+        attestations: false
