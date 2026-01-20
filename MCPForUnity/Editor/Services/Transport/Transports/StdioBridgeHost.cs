@@ -818,9 +818,22 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     nextHeartbeatAt = now + 0.5f;
                 }
 
+                // Early exit BEFORE acquiring lock or allocating. This prevents the per-frame
+                // List allocations that trigger GC every ~1 second (GitHub issue #577).
+                if (commandQueue.Count == 0)
+                {
+                    return;
+                }
+
                 List<(string id, QueuedCommand command)> work;
                 lock (lockObj)
                 {
+                    // Double-check inside lock to handle race condition
+                    if (commandQueue.Count == 0)
+                    {
+                        return;
+                    }
+
                     work = new List<(string, QueuedCommand)>(commandQueue.Count);
                     foreach (var kvp in commandQueue)
                     {
