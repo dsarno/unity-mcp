@@ -68,6 +68,7 @@ async def refresh_unity(
         is_connection_lost = (
             "connection closed" in err
             or "disconnected" in err
+            or "aborted" in err  # WinError 10053: connection aborted
             or "timeout" in err
             or reason == "reloading"
         )

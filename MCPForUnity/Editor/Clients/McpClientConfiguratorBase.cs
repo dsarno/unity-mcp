@@ -534,7 +534,8 @@ namespace MCPForUnity.Editor.Clients
             }
             else
             {
-                string devFlags = shouldForceRefresh ? "--no-cache --refresh --reinstall " : string.Empty;
+                // Note: --reinstall is not supported by uvx, use --no-cache --refresh instead
+                string devFlags = shouldForceRefresh ? "--no-cache --refresh " : string.Empty;
                 args = $"mcp add --transport stdio UnityMCP -- \"{uvxPath}\" {devFlags}--from \"{gitUrl}\" {packageName}";
             }
 
@@ -593,7 +594,8 @@ namespace MCPForUnity.Editor.Clients
             {
                 var (uvxPath, gitUrl, packageName) = AssetPathUtility.GetUvxCommandParts();
                 // Use central helper that checks both DevModeForceServerRefresh AND local path detection.
-                string devFlags = AssetPathUtility.ShouldForceUvxRefresh() ? "--no-cache --refresh --reinstall " : string.Empty;
+                // Note: --reinstall is not supported by uvx, use --no-cache --refresh instead
+                string devFlags = AssetPathUtility.ShouldForceUvxRefresh() ? "--no-cache --refresh " : string.Empty;
                 args = $"mcp add --transport stdio UnityMCP -- \"{uvxPath}\" {devFlags}--from \"{gitUrl}\" {packageName}";
             }
 
@@ -692,7 +694,8 @@ namespace MCPForUnity.Editor.Clients
 
             string packageSource = AssetPathUtility.GetMcpServerPackageSource();
             // Use central helper that checks both DevModeForceServerRefresh AND local path detection.
-            string devFlags = AssetPathUtility.ShouldForceUvxRefresh() ? "--no-cache --refresh --reinstall " : string.Empty;
+            // Note: --reinstall is not supported by uvx, use --no-cache --refresh instead
+            string devFlags = AssetPathUtility.ShouldForceUvxRefresh() ? "--no-cache --refresh " : string.Empty;
 
             return "# Register the MCP server with Claude Code:\n" +
                    $"claude mcp add --transport stdio UnityMCP -- \"{uvxPath}\" {devFlags}--from \"{packageSource}\" mcp-for-unity\n\n" +

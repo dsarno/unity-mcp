@@ -443,7 +443,7 @@ namespace MCPForUnity.Editor.Services
             }
             catch { }
 
-            // Note: Dev mode cache-busting is handled by `uvx --no-cache --refresh --reinstall` in the generated command.
+            // Note: Dev mode cache-busting is handled by `uvx --no-cache --refresh` in the generated command.
 
             // Create a per-launch token + pidfile path so Stop can be deterministic without relying on port/PID heuristics.
             string baseUrlForPid = HttpEndpointUtility.GetBaseUrl();
@@ -1310,7 +1310,8 @@ namespace MCPForUnity.Editor.Services
             }
 
             // Use central helper that checks both DevModeForceServerRefresh AND local path detection.
-            string devFlags = AssetPathUtility.ShouldForceUvxRefresh() ? "--no-cache --refresh --reinstall " : string.Empty;
+            // Note: --reinstall is not supported by uvx, use --no-cache --refresh instead
+            string devFlags = AssetPathUtility.ShouldForceUvxRefresh() ? "--no-cache --refresh " : string.Empty;
             string args = string.IsNullOrEmpty(fromUrl)
                 ? $"{devFlags}{packageName} --transport http --http-url {httpUrl}"
                 : $"{devFlags}--from {fromUrl} {packageName} --transport http --http-url {httpUrl}";
