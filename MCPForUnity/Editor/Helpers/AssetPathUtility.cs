@@ -195,7 +195,7 @@ namespace MCPForUnity.Editor.Helpers
         }
 
         /// <summary>
-        /// Determines whether uvx should use --no-cache --refresh flags.
+        /// Determines whether uvx should use --no-cache --refresh --reinstall flags.
         /// Returns true if DevModeForceServerRefresh is enabled OR if the server URL is a local path.
         /// Local paths (file:// or absolute) always need fresh builds to avoid stale uvx cache.
         /// </summary>

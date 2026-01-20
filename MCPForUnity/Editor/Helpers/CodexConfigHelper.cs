@@ -24,6 +24,7 @@ namespace MCPForUnity.Editor.Helpers
             if (!AssetPathUtility.ShouldForceUvxRefresh()) return;
             args.Add(new TomlString { Value = "--no-cache" });
             args.Add(new TomlString { Value = "--refresh" });
+            args.Add(new TomlString { Value = "--reinstall" });
         }
 
         public static string BuildCodexServerBlock(string uvPath)
