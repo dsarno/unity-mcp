@@ -74,8 +74,12 @@ async def refresh_unity(
         )
 
         if is_connection_lost and compile == "request":
-            # Refresh with compile was triggered; Unity disconnected during domain reload
-            # Return success to prevent retry loops
+            # EXPECTED BEHAVIOR: When compile="request", Unity triggers domain reload which
+            # causes connection to close mid-command. This is NOT a failure - the refresh
+            # was successfully triggered. Treating this as success prevents Claude Code from
+            # retrying unnecessarily (which would cause multiple domain reloads - issue #577).
+            # The subsequent wait_for_ready loop (below) will verify Unity becomes ready.
+            logger.info("refresh_unity: Connection lost during compile (expected - domain reload triggered)")
             recovered_from_disconnect = True
         elif hint == "retry" or "could not connect" in err:
             # Retryable error - proceed to wait loop if wait_for_ready
@@ -83,7 +87,8 @@ async def refresh_unity(
                 return MCPResponse(**response_dict)
             recovered_from_disconnect = True
         else:
-            # Non-recoverable error
+            # Non-recoverable error - connection issue unrelated to domain reload
+            logger.warning(f"refresh_unity: Non-recoverable error (compile={compile}): {err[:100]}")
             return MCPResponse(**response_dict)
 
     # Optional server-side wait loop (defensive): if Unity tool doesn't wait or returns quickly,
