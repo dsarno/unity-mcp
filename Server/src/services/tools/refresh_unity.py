@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Annotated, Any, Literal
 
@@ -14,6 +15,8 @@ import transport.unity_transport as unity_transport
 from transport.legacy.unity_connection import async_send_command_with_retry, _extract_response_reason
 from services.state.external_changes_scanner import external_changes_scanner
 import services.resources.editor_state as editor_state
+
+logger = logging.getLogger(__name__)
 
 
 @mcp_for_unity_tool(
