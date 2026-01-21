@@ -96,6 +96,7 @@ async def refresh_unity(
 
     # Optional server-side wait loop (defensive): if Unity tool doesn't wait or returns quickly,
     # poll the canonical editor_state resource until ready or timeout.
+    ready_confirmed = False
     if wait_for_ready:
         timeout_s = 60.0
         start = time.monotonic()
@@ -115,13 +116,24 @@ async def refresh_unity(
             if isinstance(advice, dict):
                 # Exit if ready_for_tools is True
                 if advice.get("ready_for_tools") is True:
+                    ready_confirmed = True
                     break
                 # Also exit if the only blocking reason is "stale_status" (Unity in background)
                 # Staleness means we can't confirm status, not that Unity is actually busy
                 blocking = set(advice.get("blocking_reasons") or [])
                 if not (blocking & real_blocking_reasons):
+                    ready_confirmed = True  # No real blocking reasons, consider ready
                     break
             await asyncio.sleep(0.25)
+
+        # If we timed out without confirming readiness, log and return failure
+        if not ready_confirmed:
+            logger.warning(f"refresh_unity: Timed out after {timeout_s}s waiting for editor to become ready")
+            return MCPResponse(
+                success=False,
+                message=f"Refresh triggered but timed out after {timeout_s}s waiting for editor readiness.",
+                data={"timeout": True, "wait_seconds": timeout_s},
+            )
 
     # After readiness is restored, clear any external-dirty flag for this instance so future tools can proceed cleanly.
     try:

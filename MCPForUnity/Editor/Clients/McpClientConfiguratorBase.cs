@@ -352,8 +352,11 @@ namespace MCPForUnity.Editor.Clients
         /// Internal thread-safe version of CheckStatus.
         /// Can be called from background threads because all main-thread-only values are passed as parameters.
         /// projectDir, useHttpTransport, and claudePath are REQUIRED (non-nullable) to enforce thread safety at compile time.
+        /// NOTE: attemptAutoRewrite is NOT fully thread-safe because Configure() requires the main thread.
+        /// When called from a background thread, pass attemptAutoRewrite=false and handle re-registration
+        /// on the main thread based on the returned status.
         /// </summary>
-        internal McpStatus CheckStatusWithProjectDir(string projectDir, bool useHttpTransport, string claudePath, bool attemptAutoRewrite = true)
+        internal McpStatus CheckStatusWithProjectDir(string projectDir, bool useHttpTransport, string claudePath, bool attemptAutoRewrite = false)
         {
             try
             {
@@ -430,7 +433,10 @@ namespace MCPForUnity.Editor.Clients
                             // If there's any mismatch and auto-rewrite is enabled, re-register
                             if (hasTransportMismatch || hasVersionMismatch)
                             {
-                                if (attemptAutoRewrite)
+                                // Configure() requires main thread (accesses EditorPrefs, Application.dataPath)
+                                // Only attempt auto-rewrite if we're on the main thread
+                                bool isMainThread = System.Threading.Thread.CurrentThread.ManagedThreadId == 1;
+                                if (attemptAutoRewrite && isMainThread)
                                 {
                                     string reason = hasTransportMismatch
                                         ? $"Transport mismatch (registered: {(registeredWithHttp ? "HTTP" : "stdio")}, expected: {(currentUseHttp ? "HTTP" : "stdio")})"
