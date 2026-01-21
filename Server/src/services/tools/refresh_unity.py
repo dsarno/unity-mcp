@@ -101,7 +101,8 @@ async def refresh_unity(
         start = time.monotonic()
 
         # Blocking reasons that indicate Unity is actually busy (not just stale status)
-        real_blocking_reasons = {"compiling", "domain_reload", "running_tests", "asset_refresh"}
+        # Must match activityPhase values from EditorStateCache.cs
+        real_blocking_reasons = {"compiling", "domain_reload", "running_tests", "asset_import"}
 
         while time.monotonic() - start < timeout_s:
             state_resp = await editor_state.get_editor_state(ctx)

@@ -218,16 +218,6 @@ namespace MCPForUnity.Editor.Services.Transport
 
         private static void ProcessQueue()
         {
-            // Early exit BEFORE acquiring lock or allocating. This prevents the per-frame
-            // List allocations that trigger GC every ~1 second (GitHub issue #577).
-            // This check is safe because Pending.Count is only modified under PendingLock,
-            // and a brief race (seeing 0 when a command was just added) is harmless since
-            // RequestMainThreadPump() will call ProcessQueue() again immediately.
-            if (Pending.Count == 0)
-            {
-                return;
-            }
-
             if (Interlocked.Exchange(ref _processingFlag, 1) == 1)
             {
                 return;
@@ -239,7 +229,7 @@ namespace MCPForUnity.Editor.Services.Transport
 
             lock (PendingLock)
             {
-                // Double-check inside lock to handle race condition
+                // Early exit inside lock to prevent per-frame List allocations (GitHub issue #577)
                 if (Pending.Count == 0)
                 {
                     return;

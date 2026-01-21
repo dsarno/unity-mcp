@@ -32,10 +32,6 @@ namespace MCPForUnity.Editor.Services
         private static double _lastUpdateTimeSinceStartup;
         private const double MinUpdateIntervalSeconds = 1.0; // Reduced frequency: 1s instead of 0.25s
 
-        // Cached clone to avoid DeepClone() allocations on every GetSnapshot() call
-        private static JObject _cachedClone;
-        private static long _cachedCloneSequence;
-
         // State tracking to detect when snapshot actually changes (checked BEFORE building)
         private static string _lastTrackedScenePath;
         private static string _lastTrackedSceneName;
@@ -502,16 +498,10 @@ namespace MCPForUnity.Editor.Services
                     _cached = BuildSnapshot("rebuild");
                 }
 
-                // Cache the cloned version to avoid allocating a new JObject on every GetSnapshot() call.
-                // This fixes the GC spikes that occurred when external tools polled editor state frequently.
-                // Only regenerate the clone when _cached changes (detected via sequence number).
-                if (_cachedClone == null || _cachedCloneSequence != _sequence)
-                {
-                    _cachedClone = (JObject)_cached.DeepClone();
-                    _cachedCloneSequence = _sequence;
-                }
-
-                return _cachedClone;
+                // Always return a fresh clone to prevent mutation bugs.
+                // The main GC optimization comes from state-change detection (OnUpdate)
+                // which prevents unnecessary _cached rebuilds, not from caching the clone.
+                return (JObject)_cached.DeepClone();
             }
         }
 
