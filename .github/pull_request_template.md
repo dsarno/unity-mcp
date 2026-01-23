@@ -20,7 +20,7 @@ Save your change type
 
 
 ## Documentation Updates
-<!-- Check if you updated documentation for tools/resources changes -->
+<!-- Check if you updated documentation for changes to tools/resources -->
 - [ ] I have added/removed/modified tools or resources
 - [ ] If yes, I have updated all documentation files using:
   - [ ] The LLM prompt at `tools/UPDATE_DOCS_PROMPT.md` (recommended)

@@ -236,11 +236,6 @@ def main() -> int:
         "--version",
         help="Version to set (auto-detected from package.json if not provided)",
     )
-    parser.add_argument(
-        "--update-package",
-        action="store_true",
-        help="Also update MCPForUnity/package.json with the specified version",
-    )
 
     args = parser.parse_args()
 

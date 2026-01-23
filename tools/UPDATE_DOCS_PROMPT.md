@@ -5,7 +5,7 @@ Copy and paste this prompt into your LLM when you need to update documentation a
 ## Example Usage
 
 After adding a new tool called "manage_new_feature" and a new resource called "feature_resource", you would:
-1. Copy the prompt above
+1. Copy the prompt in the section below
 2. Paste it into your LLM
 3. The LLM will analyze the codebase and update all documentation files
 4. Review the changes and run the check script to verify
