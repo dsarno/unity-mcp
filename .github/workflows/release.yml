@@ -107,7 +107,7 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git checkout -b "$BRANCH"
-          git add MCPForUnity/package.json manifest.json "Server/pyproject.toml" Server/README.md README.md docs/i18n/README-zh.md
+          git add MCPForUnity/package.json manifest.json "Server/pyproject.toml" Server/README.md
           if git diff --cached --quiet; then
             echo "No version changes to commit."
           else

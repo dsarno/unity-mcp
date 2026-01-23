@@ -265,11 +265,6 @@ def main() -> int:
         if update_server_readme(version, args.dry_run):
             updates_made.append("Server/README.md")
 
-        if update_root_readme(version, args.dry_run):
-            updates_made.append("README.md")
-
-        if update_zh_readme(version, args.dry_run):
-            updates_made.append("docs/i18n/README-zh.md")
 
         # Summary
         if args.dry_run:
