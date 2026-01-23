@@ -36,9 +36,9 @@ In Unity: `Window > Package Manager > + > Add package from git URL...`
 > https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity
 > ```
 
-**Need a stable/fixed version?** Use a tagged URL (requires uninstall to update):
+**Want the latest beta?** Use the beta branch:
 ```text
-https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#v9.1.0
+https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#beta
 ```
 
 <details>
