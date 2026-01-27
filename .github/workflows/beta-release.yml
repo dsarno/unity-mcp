@@ -1,0 +1,68 @@
+name: Beta Release (TestPyPI)
+
+concurrency:
+  group: beta-release
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - beta
+    paths:
+      - "Server/**"
+
+jobs:
+  publish_testpypi:
+    name: Publish beta to TestPyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/mcpforunityserver
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "Server/uv.lock"
+
+      - name: Generate dev version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_VERSION=$(grep -oP '(?<=version = ")[^"]+' Server/pyproject.toml)
+          # Use date + short SHA for unique dev version
+          DEV_SUFFIX="dev$(date +%Y%m%d%H%M).g$(git rev-parse --short HEAD)"
+          DEV_VERSION="${BASE_VERSION}.${DEV_SUFFIX}"
+          echo "Base version: $BASE_VERSION"
+          echo "Dev version: $DEV_VERSION"
+          echo "dev_version=$DEV_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update version for beta release
+        env:
+          DEV_VERSION: ${{ steps.version.outputs.dev_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i "s/^version = .*/version = \"${DEV_VERSION}\"/" Server/pyproject.toml
+          echo "Updated pyproject.toml:"
+          grep "^version" Server/pyproject.toml
+
+      - name: Build a binary wheel and a source tarball
+        shell: bash
+        run: uv build
+        working-directory: ./Server
+
+      - name: Publish distribution to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: Server/dist/
+          repository-url: https://test.pypi.org/legacy/
