@@ -40,10 +40,9 @@ jobs:
           set -euo pipefail
           BASE_VERSION=$(grep -oP '(?<=version = ")[^"]+' Server/pyproject.toml)
           # Use date for unique dev version (PEP 440 compliant: X.Y.Z.devN)
-          # Git SHA goes in local version identifier after +
-          DEV_NUMBER="$(date +%Y%m%d%H%M)"
-          GIT_SHA="$(git rev-parse --short HEAD)"
-          DEV_VERSION="${BASE_VERSION}.dev${DEV_NUMBER}+g${GIT_SHA}"
+          # Note: PyPI/TestPyPI don't support local version identifiers (+...)
+          DEV_NUMBER="$(date +%Y%m%d%H%M%S)"
+          DEV_VERSION="${BASE_VERSION}.dev${DEV_NUMBER}"
           echo "Base version: $BASE_VERSION"
           echo "Dev version: $DEV_VERSION"
           echo "dev_version=$DEV_VERSION" >> "$GITHUB_OUTPUT"
