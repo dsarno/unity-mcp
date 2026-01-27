@@ -134,7 +134,7 @@ custom_tool_service: CustomToolService | None = None
 
 
 @asynccontextmanager
-async def server_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
+async def server_lifespan(_server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     """Handle server startup and shutdown."""
     global _unity_connection_pool, _server_version
     _server_version = get_package_version()
