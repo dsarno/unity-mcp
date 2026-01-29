@@ -38,7 +38,7 @@ After switching, open Package Manager in Unity and Refresh to re-resolve package
 
 ## Running Tests
 
-All major new features (and some minor ones) must include test coverage. It's so easy to get LLMs to write tests, ya gotta do
+All major new features (and some minor ones) must include test coverage. It's so easy to get LLMs to write tests, ya gotta do it!
 
 ### Python Tests 
 
