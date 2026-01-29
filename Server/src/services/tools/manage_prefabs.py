@@ -5,7 +5,7 @@ from mcp.types import ToolAnnotations
 
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
-from services.tools.utils import coerce_bool
+from services.tools.utils import coerce_bool, normalize_vector3
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
 from services.tools.preflight import preflight
@@ -49,9 +49,9 @@ async def manage_prefabs(
     search_inactive: Annotated[bool, "Include inactive GameObjects in search."] | None = None,
     unlink_if_instance: Annotated[bool, "Unlink from existing prefab before creating new one."] | None = None,
     # modify_contents parameters
-    position: Annotated[list[float], "New local position [x, y, z] for modify_contents."] | None = None,
-    rotation: Annotated[list[float], "New local rotation (euler angles) [x, y, z] for modify_contents."] | None = None,
-    scale: Annotated[list[float], "New local scale [x, y, z] for modify_contents."] | None = None,
+    position: Annotated[list[float] | dict[str, float] | str, "New local position [x, y, z] or {x, y, z} for modify_contents."] | None = None,
+    rotation: Annotated[list[float] | dict[str, float] | str, "New local rotation (euler angles) [x, y, z] or {x, y, z} for modify_contents."] | None = None,
+    scale: Annotated[list[float] | dict[str, float] | str, "New local scale [x, y, z] or {x, y, z} for modify_contents."] | None = None,
     name: Annotated[str, "New name for the target object in modify_contents."] | None = None,
     tag: Annotated[str, "New tag for the target object in modify_contents."] | None = None,
     layer: Annotated[str, "New layer name for the target object in modify_contents."] | None = None,
@@ -114,11 +114,20 @@ async def manage_prefabs(
 
         # modify_contents parameters
         if position is not None:
-            params["position"] = position
+            position_value, position_error = normalize_vector3(position, "position")
+            if position_error:
+                return {"success": False, "message": position_error}
+            params["position"] = position_value
         if rotation is not None:
-            params["rotation"] = rotation
+            rotation_value, rotation_error = normalize_vector3(rotation, "rotation")
+            if rotation_error:
+                return {"success": False, "message": rotation_error}
+            params["rotation"] = rotation_value
         if scale is not None:
-            params["scale"] = scale
+            scale_value, scale_error = normalize_vector3(scale, "scale")
+            if scale_error:
+                return {"success": False, "message": scale_error}
+            params["scale"] = scale_value
         if name is not None:
             params["name"] = name
         if tag is not None:
