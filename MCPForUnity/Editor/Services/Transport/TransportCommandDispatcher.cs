@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Models;
+using MCPForUnity.Editor.Services;
 using MCPForUnity.Editor.Tools;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -337,6 +338,27 @@ namespace MCPForUnity.Editor.Services.Transport
                 }
 
                 var parameters = command.@params ?? new JObject();
+
+                // Block execution of disabled resources
+                var resourceMeta = MCPServiceLocator.ResourceDiscovery.GetResourceMetadata(command.type);
+                if (resourceMeta != null && !MCPServiceLocator.ResourceDiscovery.IsResourceEnabled(command.type))
+                {
+                    pending.TrySetResult(SerializeError(
+                        $"Resource '{command.type}' is disabled in the Unity Editor."));
+                    RemovePending(id, pending);
+                    return;
+                }
+
+                // Block execution of disabled tools
+                var toolMeta = MCPServiceLocator.ToolDiscovery.GetToolMetadata(command.type);
+                if (toolMeta != null && !MCPServiceLocator.ToolDiscovery.IsToolEnabled(command.type))
+                {
+                    pending.TrySetResult(SerializeError(
+                        $"Tool '{command.type}' is disabled in the Unity Editor."));
+                    RemovePending(id, pending);
+                    return;
+                }
+
                 var result = CommandRegistry.ExecuteCommand(command.type, parameters, pending.CompletionSource);
 
                 if (result == null)
