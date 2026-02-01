@@ -68,6 +68,9 @@ class PluginHub(WebSocketEndpoint):
     PING_INTERVAL = 10
     # Max time (seconds) to wait for pong before considering connection dead
     PING_TIMEOUT = 20
+    # Allow disabling the ping loop via environment variable (for debugging Windows issues)
+    # Set UNITY_MCP_DISABLE_PING_LOOP=true to disable
+    PING_LOOP_ENABLED = os.environ.get("UNITY_MCP_DISABLE_PING_LOOP", "").lower() not in ("true", "1", "yes")
     # Timeout (seconds) for fast-fail commands like ping/read_console/get_editor_state.
     # Keep short so MCP clients aren't blocked during Unity compilation/reload/unfocused throttling.
     FAST_FAIL_TIMEOUT = 2.0
@@ -180,6 +183,27 @@ class PluginHub(WebSocketEndpoint):
         lock = cls._lock
         if lock is None:
             return
+
+        # Map common WebSocket close codes to human-readable descriptions
+        close_code_descriptions = {
+            1000: "Normal closure",
+            1001: "Going away",
+            1002: "Protocol error",
+            1003: "Unsupported data",
+            1005: "No status received (connection closed without close frame)",
+            1006: "Abnormal closure (connection lost)",
+            1007: "Invalid frame payload data",
+            1008: "Policy violation",
+            1009: "Message too big",
+            1010: "Mandatory extension",
+            1011: "Internal error",
+            1012: "Service restart",
+            1013: "Try again later",
+            1014: "Bad gateway",
+            1015: "TLS handshake failure",
+        }
+        close_description = close_code_descriptions.get(close_code, "Unknown")
+
         async with lock:
             session_id = next(
                 (sid for sid, ws in cls._connections.items() if ws is websocket), None)
@@ -211,8 +235,19 @@ class PluginHub(WebSocketEndpoint):
                         )
                 if cls._registry:
                     await cls._registry.unregister(session_id)
-                logger.info(
-                    f"Plugin session {session_id} disconnected ({close_code})")
+
+                # Log with more detail for debugging Windows disconnect issues (#664)
+                if close_code in (1005, 1006):
+                    logger.warning(
+                        f"Plugin session {session_id} disconnected unexpectedly "
+                        f"(code={close_code}: {close_description}). "
+                        f"This may indicate a network issue or Windows asyncio IOCP problem. "
+                        f"Set UNITY_MCP_DISABLE_PING_LOOP=true to test if ping loop is involved."
+                    )
+                else:
+                    logger.info(
+                        f"Plugin session {session_id} disconnected (code={close_code}: {close_description})"
+                    )
 
     # ------------------------------------------------------------------
     # Public API
@@ -387,9 +422,12 @@ class PluginHub(WebSocketEndpoint):
             old_task = cls._ping_tasks.pop(session_id, None)
             if old_task and not old_task.done():
                 old_task.cancel()
-            # Start the server-side ping loop
-            ping_task = asyncio.create_task(cls._ping_loop(session_id, websocket))
-            cls._ping_tasks[session_id] = ping_task
+            # Start the server-side ping loop (can be disabled via UNITY_MCP_DISABLE_PING_LOOP=true)
+            if cls.PING_LOOP_ENABLED:
+                ping_task = asyncio.create_task(cls._ping_loop(session_id, websocket))
+                cls._ping_tasks[session_id] = ping_task
+            else:
+                logger.info(f"[Ping] Ping loop disabled for session {session_id} (UNITY_MCP_DISABLE_PING_LOOP=true)")
 
         if user_id:
             logger.info(f"Plugin registered: {project_name} ({project_hash}) for user {user_id}")
@@ -507,6 +545,19 @@ class PluginHub(WebSocketEndpoint):
                     ping_msg = PingMessage()
                     await websocket.send_json(ping_msg.model_dump())
                     logger.debug(f"[Ping] Sent ping to session {session_id}")
+                except OSError as os_ex:
+                    # OSError can indicate network issues (e.g., Windows error 64 "network name no longer available")
+                    # Log specifically to help diagnose Windows IOCP issues (#664)
+                    error_code = getattr(os_ex, 'winerror', None) or getattr(os_ex, 'errno', None)
+                    logger.warning(
+                        f"[Ping] OSError sending ping to session {session_id}: {os_ex} "
+                        f"(error_code={error_code}). Connection likely dead."
+                    )
+                    try:
+                        await websocket.close(code=1006)  # Abnormal closure
+                    except Exception:
+                        pass
+                    break
                 except Exception as send_ex:
                     # Send failed - connection is dead
                     logger.warning(
@@ -521,6 +572,13 @@ class PluginHub(WebSocketEndpoint):
 
         except asyncio.CancelledError:
             logger.debug(f"[Ping] Ping loop cancelled for session {session_id}")
+        except OSError as os_ex:
+            # OSError can indicate Windows IOCP issues (#664)
+            error_code = getattr(os_ex, 'winerror', None) or getattr(os_ex, 'errno', None)
+            logger.warning(
+                f"[Ping] OSError in ping loop for session {session_id}: {os_ex} "
+                f"(error_code={error_code})"
+            )
         except Exception as ex:
             logger.warning(f"[Ping] Ping loop error for session {session_id}: {ex}")
         finally:
