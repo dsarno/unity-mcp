@@ -409,18 +409,25 @@ namespace MCPForUnity.Editor.Clients
             bool useHttpTransport = EditorConfigurationCache.Instance.UseHttpTransport;
             // Resolve claudePath on the main thread (EditorPrefs access)
             string claudePath = MCPServiceLocator.Paths.GetClaudeCliPath();
-            return CheckStatusWithProjectDir(projectDir, useHttpTransport, claudePath, attemptAutoRewrite);
+            RuntimePlatform platform = Application.platform;
+            bool isRemoteScope = HttpEndpointUtility.IsRemoteScope();
+            string expectedPackageSource = AssetPathUtility.GetMcpServerPackageSource();
+            return CheckStatusWithProjectDir(projectDir, useHttpTransport, claudePath, platform, isRemoteScope, expectedPackageSource, attemptAutoRewrite);
         }
 
         /// <summary>
         /// Internal thread-safe version of CheckStatus.
         /// Can be called from background threads because all main-thread-only values are passed as parameters.
-        /// projectDir, useHttpTransport, and claudePath are REQUIRED (non-nullable) to enforce thread safety at compile time.
+        /// projectDir, useHttpTransport, claudePath, platform, isRemoteScope, and expectedPackageSource are REQUIRED
+        /// (non-nullable where applicable) to enforce thread safety at compile time.
         /// NOTE: attemptAutoRewrite is NOT fully thread-safe because Configure() requires the main thread.
         /// When called from a background thread, pass attemptAutoRewrite=false and handle re-registration
         /// on the main thread based on the returned status.
         /// </summary>
-        internal McpStatus CheckStatusWithProjectDir(string projectDir, bool useHttpTransport, string claudePath, bool attemptAutoRewrite = false)
+        internal McpStatus CheckStatusWithProjectDir(
+            string projectDir, bool useHttpTransport, string claudePath, RuntimePlatform platform,
+            bool isRemoteScope, string expectedPackageSource,
+            bool attemptAutoRewrite = false)
         {
             try
             {
@@ -438,11 +445,11 @@ namespace MCPForUnity.Editor.Clients
                 }
 
                 string pathPrepend = null;
-                if (Application.platform == RuntimePlatform.OSXEditor)
+                if (platform == RuntimePlatform.OSXEditor)
                 {
                     pathPrepend = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
                 }
-                else if (Application.platform == RuntimePlatform.LinuxEditor)
+                else if (platform == RuntimePlatform.LinuxEditor)
                 {
                     pathPrepend = "/usr/local/bin:/usr/bin:/bin";
                 }
@@ -485,7 +492,7 @@ namespace MCPForUnity.Editor.Clients
                             // so infer from the current scope setting when HTTP is detected.
                             if (registeredWithHttp)
                             {
-                                client.configuredTransport = HttpEndpointUtility.IsRemoteScope()
+                                client.configuredTransport = isRemoteScope
                                     ? Models.ConfiguredTransport.HttpRemote
                                     : Models.ConfiguredTransport.Http;
                             }
@@ -504,10 +511,9 @@ namespace MCPForUnity.Editor.Clients
                             // For stdio transport, also check package version
                             bool hasVersionMismatch = false;
                             string configuredPackageSource = null;
-                            string expectedPackageSource = null;
                             if (registeredWithStdio)
                             {
-                                expectedPackageSource = AssetPathUtility.GetMcpServerPackageSource();
+                                // expectedPackageSource was captured on main thread and passed as parameter
                                 configuredPackageSource = ExtractPackageSourceFromCliOutput(getStdout);
                                 hasVersionMismatch = !string.IsNullOrEmpty(configuredPackageSource) &&
                                     !string.Equals(configuredPackageSource, expectedPackageSource, StringComparison.OrdinalIgnoreCase);
@@ -566,6 +572,7 @@ namespace MCPForUnity.Editor.Clients
             }
             catch (Exception ex)
             {
+                McpLog.Warn($"[Claude Code] CheckStatus exception: {ex.GetType().Name}: {ex.Message}");
                 client.SetStatus(McpStatus.Error, ex.Message);
                 client.configuredTransport = Models.ConfiguredTransport.Unknown;
             }

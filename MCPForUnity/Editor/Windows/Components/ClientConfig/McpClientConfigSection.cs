@@ -458,6 +458,9 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
                 string projectDir = Path.GetDirectoryName(Application.dataPath);
                 bool useHttpTransport = EditorConfigurationCache.Instance.UseHttpTransport;
                 string claudePath = MCPServiceLocator.Paths.GetClaudeCliPath();
+                RuntimePlatform platform = Application.platform;
+                bool isRemoteScope = HttpEndpointUtility.IsRemoteScope();
+                string expectedPackageSource = AssetPathUtility.GetMcpServerPackageSource();
 
                 Task.Run(() =>
                 {
@@ -466,7 +469,7 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
                     if (client is ClaudeCliMcpConfigurator claudeConfigurator)
                     {
                         // Use thread-safe version with captured main-thread values
-                        claudeConfigurator.CheckStatusWithProjectDir(projectDir, useHttpTransport, claudePath, attemptAutoRewrite: false);
+                        claudeConfigurator.CheckStatusWithProjectDir(projectDir, useHttpTransport, claudePath, platform, isRemoteScope, expectedPackageSource, attemptAutoRewrite: false);
                     }
                 }).ContinueWith(t =>
                 {
