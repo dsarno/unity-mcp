@@ -249,7 +249,7 @@ namespace MCPForUnity.Editor.Helpers
         /// Centralizes the prerelease logic to avoid duplication between HTTP and stdio transports.
         /// Priority: explicit fromUrl override > beta server mode > default package.
         /// NOTE: This overload reads from EditorPrefs/cache and MUST be called from the main thread.
-        /// For background threads, use the overload that accepts useBetaServer and gitUrlOverride parameters.
+        /// For background threads, use the overload that accepts pre-captured parameters.
         /// </summary>
         /// <param name="quoteFromPath">Whether to quote the --from path (needed for command-line strings, not for arg lists)</param>
         /// <returns>The package source arguments (e.g., "--prerelease explicit --from mcpforunityserver>=0.0.0a0")</returns>
@@ -258,7 +258,8 @@ namespace MCPForUnity.Editor.Helpers
             // Read values from cache/EditorPrefs on main thread
             bool useBetaServer = Services.EditorConfigurationCache.Instance.UseBetaServer;
             string gitUrlOverride = EditorPrefs.GetString(EditorPrefKeys.GitUrlOverride, "");
-            return GetBetaServerFromArgs(useBetaServer, gitUrlOverride, quoteFromPath);
+            string packageSource = GetMcpServerPackageSource();
+            return GetBetaServerFromArgs(useBetaServer, gitUrlOverride, packageSource, quoteFromPath);
         }
 
         /// <summary>
@@ -267,13 +268,15 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         /// <param name="useBetaServer">Pre-captured value from EditorConfigurationCache.Instance.UseBetaServer</param>
         /// <param name="gitUrlOverride">Pre-captured value from EditorPrefs GitUrlOverride</param>
+        /// <param name="packageSource">Pre-captured value from GetMcpServerPackageSource()</param>
         /// <param name="quoteFromPath">Whether to quote the --from path</param>
-        public static string GetBetaServerFromArgs(bool useBetaServer, string gitUrlOverride, bool quoteFromPath = false)
+        public static string GetBetaServerFromArgs(bool useBetaServer, string gitUrlOverride, string packageSource, bool quoteFromPath = false)
         {
             // Explicit override (local path, git URL, etc.) always wins
             if (!string.IsNullOrEmpty(gitUrlOverride))
             {
-                return $"--from {gitUrlOverride}";
+                string fromValue = quoteFromPath ? $"\"{gitUrlOverride}\"" : gitUrlOverride;
+                return $"--from {fromValue}";
             }
 
             // Beta server mode: use prerelease from PyPI
@@ -286,10 +289,10 @@ namespace MCPForUnity.Editor.Helpers
             }
 
             // Standard mode: use pinned version from package.json
-            string fromUrl = GetMcpServerPackageSource();
-            if (!string.IsNullOrEmpty(fromUrl))
+            if (!string.IsNullOrEmpty(packageSource))
             {
-                return $"--from {fromUrl}";
+                string fromValue = quoteFromPath ? $"\"{packageSource}\"" : packageSource;
+                return $"--from {fromValue}";
             }
 
             return string.Empty;
@@ -299,7 +302,7 @@ namespace MCPForUnity.Editor.Helpers
         /// Builds the uvx package source arguments as a list (for JSON config builders).
         /// Priority: explicit fromUrl override > beta server mode > default package.
         /// NOTE: This overload reads from EditorPrefs/cache and MUST be called from the main thread.
-        /// For background threads, use the overload that accepts useBetaServer and gitUrlOverride parameters.
+        /// For background threads, use the overload that accepts pre-captured parameters.
         /// </summary>
         /// <returns>List of arguments to add to uvx command</returns>
         public static System.Collections.Generic.IList<string> GetBetaServerFromArgsList()
@@ -307,7 +310,8 @@ namespace MCPForUnity.Editor.Helpers
             // Read values from cache/EditorPrefs on main thread
             bool useBetaServer = Services.EditorConfigurationCache.Instance.UseBetaServer;
             string gitUrlOverride = EditorPrefs.GetString(EditorPrefKeys.GitUrlOverride, "");
-            return GetBetaServerFromArgsList(useBetaServer, gitUrlOverride);
+            string packageSource = GetMcpServerPackageSource();
+            return GetBetaServerFromArgsList(useBetaServer, gitUrlOverride, packageSource);
         }
 
         /// <summary>
@@ -316,7 +320,8 @@ namespace MCPForUnity.Editor.Helpers
         /// </summary>
         /// <param name="useBetaServer">Pre-captured value from EditorConfigurationCache.Instance.UseBetaServer</param>
         /// <param name="gitUrlOverride">Pre-captured value from EditorPrefs GitUrlOverride</param>
-        public static System.Collections.Generic.IList<string> GetBetaServerFromArgsList(bool useBetaServer, string gitUrlOverride)
+        /// <param name="packageSource">Pre-captured value from GetMcpServerPackageSource()</param>
+        public static System.Collections.Generic.IList<string> GetBetaServerFromArgsList(bool useBetaServer, string gitUrlOverride, string packageSource)
         {
             var args = new System.Collections.Generic.List<string>();
 
@@ -339,11 +344,10 @@ namespace MCPForUnity.Editor.Helpers
             }
 
             // Standard mode: use pinned version from package.json
-            string fromUrl = GetMcpServerPackageSource();
-            if (!string.IsNullOrEmpty(fromUrl))
+            if (!string.IsNullOrEmpty(packageSource))
             {
                 args.Add("--from");
-                args.Add(fromUrl);
+                args.Add(packageSource);
             }
 
             return args;
