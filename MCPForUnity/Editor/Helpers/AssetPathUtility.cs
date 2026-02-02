@@ -262,7 +262,7 @@ namespace MCPForUnity.Editor.Helpers
             }
 
             // Beta server mode: use prerelease from PyPI
-            bool useBetaServer = EditorPrefs.GetBool(EditorPrefKeys.UseBetaServer, true);
+            bool useBetaServer = Services.EditorConfigurationCache.Instance.UseBetaServer;
             if (useBetaServer)
             {
                 // Use --prerelease explicit with version specifier to only get prereleases of our package,
@@ -300,7 +300,7 @@ namespace MCPForUnity.Editor.Helpers
             }
 
             // Beta server mode: use prerelease from PyPI
-            bool useBetaServer = EditorPrefs.GetBool(EditorPrefKeys.UseBetaServer, true);
+            bool useBetaServer = Services.EditorConfigurationCache.Instance.UseBetaServer;
             if (useBetaServer)
             {
                 args.Add("--prerelease");
@@ -424,6 +424,32 @@ namespace MCPForUnity.Editor.Helpers
             {
                 McpLog.Warn($"Failed to get package version: {ex.Message}");
                 return "unknown";
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the installed package version is a prerelease (beta, alpha, rc, etc.).
+        /// Used to auto-enable beta server mode for beta package users.
+        /// </summary>
+        public static bool IsPreReleaseVersion()
+        {
+            try
+            {
+                string version = GetPackageVersion();
+                if (string.IsNullOrEmpty(version) || version == "unknown")
+                    return false;
+
+                // Check for common prerelease indicators in semver format
+                // e.g., "9.3.0-beta.1", "9.3.0-alpha", "9.3.0-rc.2", "9.3.0-preview"
+                return version.Contains("-beta", StringComparison.OrdinalIgnoreCase) ||
+                       version.Contains("-alpha", StringComparison.OrdinalIgnoreCase) ||
+                       version.Contains("-rc", StringComparison.OrdinalIgnoreCase) ||
+                       version.Contains("-preview", StringComparison.OrdinalIgnoreCase) ||
+                       version.Contains("-pre", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
             }
         }
     }
