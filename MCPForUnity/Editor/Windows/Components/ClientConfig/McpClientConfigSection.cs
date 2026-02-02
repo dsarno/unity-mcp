@@ -95,7 +95,22 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
             clientDropdown.choices = clientNames;
             if (clientNames.Count > 0)
             {
-                clientDropdown.index = 0;
+                // Restore last selected client from EditorPrefs
+                string lastClientId = EditorPrefs.GetString(EditorPrefKeys.LastSelectedClientId, string.Empty);
+                int restoredIndex = 0;
+                if (!string.IsNullOrEmpty(lastClientId))
+                {
+                    for (int i = 0; i < configurators.Count; i++)
+                    {
+                        if (string.Equals(configurators[i].Id, lastClientId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            restoredIndex = i;
+                            break;
+                        }
+                    }
+                }
+                clientDropdown.index = restoredIndex;
+                selectedClientIndex = restoredIndex;
             }
 
             claudeCliPathRow.style.display = DisplayStyle.None;
@@ -111,6 +126,11 @@ namespace MCPForUnity.Editor.Windows.Components.ClientConfig
             clientDropdown.RegisterValueChangedCallback(evt =>
             {
                 selectedClientIndex = clientDropdown.index;
+                // Persist the selected client so it's restored on next window open
+                if (selectedClientIndex >= 0 && selectedClientIndex < configurators.Count)
+                {
+                    EditorPrefs.SetString(EditorPrefKeys.LastSelectedClientId, configurators[selectedClientIndex].Id);
+                }
                 UpdateClientStatus();
                 UpdateManualConfiguration();
                 UpdateClaudeCliPathVisibility();
