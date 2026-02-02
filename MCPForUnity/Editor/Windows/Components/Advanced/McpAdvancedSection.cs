@@ -185,7 +185,7 @@ namespace MCPForUnity.Editor.Windows.Components.Advanced
 
             useBetaServerToggle.RegisterValueChangedCallback(evt =>
             {
-                EditorPrefs.SetBool(EditorPrefKeys.UseBetaServer, evt.newValue);
+                EditorConfigurationCache.Instance.SetUseBetaServer(evt.newValue);
                 OnHttpServerCommandUpdateRequested?.Invoke();
                 OnBetaModeChanged?.Invoke(evt.newValue);
             });

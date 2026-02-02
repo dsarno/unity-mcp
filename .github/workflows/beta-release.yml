@@ -40,6 +40,12 @@ jobs:
           # e.g., "9.3.1-beta.1" -> "9.3.1"
           BASE_VERSION=$(echo "$CURRENT_VERSION" | sed -E 's/-[a-zA-Z]+\.[0-9]+$//')
 
+          # Validate we have a proper X.Y.Z format before arithmetic
+          if ! [[ "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Could not parse version '$CURRENT_VERSION' -> '$BASE_VERSION'" >&2
+            exit 1
+          fi
+
           # Check if already a beta version
           if [[ "$CURRENT_VERSION" == *"-beta."* ]]; then
             echo "Already a beta version, keeping: $CURRENT_VERSION"
