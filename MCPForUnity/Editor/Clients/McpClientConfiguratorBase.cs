@@ -627,27 +627,28 @@ namespace MCPForUnity.Editor.Clients
             if (useHttpTransport)
             {
                 // Only include API key header for remote-hosted mode
+                // Use --scope local to register in the project-local config, avoiding conflicts with user-level config (#664)
                 if (serverTransport == Models.ConfiguredTransport.HttpRemote && !string.IsNullOrEmpty(apiKey))
                 {
                     string safeKey = SanitizeShellHeaderValue(apiKey);
-                    args = $"mcp add --transport http UnityMCP {httpUrl} --header \"{AuthConstants.ApiKeyHeader}: {safeKey}\"";
+                    args = $"mcp add --scope local --transport http UnityMCP {httpUrl} --header \"{AuthConstants.ApiKeyHeader}: {safeKey}\"";
                 }
                 else
                 {
-                    args = $"mcp add --transport http UnityMCP {httpUrl}";
+                    args = $"mcp add --scope local --transport http UnityMCP {httpUrl}";
                 }
             }
             else
             {
                 // Note: --reinstall is not supported by uvx, use --no-cache --refresh instead
                 string devFlags = shouldForceRefresh ? "--no-cache --refresh " : string.Empty;
-                args = $"mcp add --transport stdio UnityMCP -- \"{uvxPath}\" {devFlags}--from \"{gitUrl}\" {packageName}";
+                // Use --scope local to register in the project-local config, avoiding conflicts with user-level config (#664)
+                args = $"mcp add --scope local --transport stdio UnityMCP -- \"{uvxPath}\" {devFlags}--from \"{gitUrl}\" {packageName}";
             }
 
-            // Remove any existing registrations - handle both "UnityMCP" and "unityMCP" (legacy)
-            McpLog.Info("Removing any existing UnityMCP registrations before adding...");
-            ExecPath.TryRun(claudePath, "mcp remove UnityMCP", projectDir, out _, out _, 7000, pathPrepend);
-            ExecPath.TryRun(claudePath, "mcp remove unityMCP", projectDir, out _, out _, 7000, pathPrepend);
+            // Remove any existing registrations from ALL scopes to prevent stale config conflicts (#664)
+            McpLog.Info("Removing any existing UnityMCP registrations from all scopes before adding...");
+            RemoveFromAllScopes(claudePath, projectDir, pathPrepend);
 
             // Now add the registration
             if (!ExecPath.TryRun(claudePath, args, projectDir, out var stdout, out var stderr, 15000, pathPrepend))
@@ -670,10 +671,9 @@ namespace MCPForUnity.Editor.Clients
                 throw new InvalidOperationException("Claude CLI not found. Please install Claude Code first.");
             }
 
-            // Remove both "UnityMCP" and "unityMCP" (legacy naming)
-            McpLog.Info("Removing all UnityMCP registrations...");
-            ExecPath.TryRun(claudePath, "mcp remove UnityMCP", projectDir, out _, out _, 7000, pathPrepend);
-            ExecPath.TryRun(claudePath, "mcp remove unityMCP", projectDir, out _, out _, 7000, pathPrepend);
+            // Remove from ALL scopes to ensure complete cleanup (#664)
+            McpLog.Info("Removing all UnityMCP registrations from all scopes...");
+            RemoveFromAllScopes(claudePath, projectDir, pathPrepend);
 
             McpLog.Info("MCP server successfully unregistered from Claude Code.");
             client.SetStatus(McpStatus.NotConfigured);
@@ -696,22 +696,23 @@ namespace MCPForUnity.Editor.Clients
             {
                 string httpUrl = HttpEndpointUtility.GetMcpRpcUrl();
                 // Only include API key header for remote-hosted mode
+                // Use --scope local to register in the project-local config, avoiding conflicts with user-level config (#664)
                 if (HttpEndpointUtility.IsRemoteScope())
                 {
                     string apiKey = EditorPrefs.GetString(EditorPrefKeys.ApiKey, string.Empty);
                     if (!string.IsNullOrEmpty(apiKey))
                     {
                         string safeKey = SanitizeShellHeaderValue(apiKey);
-                        args = $"mcp add --transport http UnityMCP {httpUrl} --header \"{AuthConstants.ApiKeyHeader}: {safeKey}\"";
+                        args = $"mcp add --scope local --transport http UnityMCP {httpUrl} --header \"{AuthConstants.ApiKeyHeader}: {safeKey}\"";
                     }
                     else
                     {
-                        args = $"mcp add --transport http UnityMCP {httpUrl}";
+                        args = $"mcp add --scope local --transport http UnityMCP {httpUrl}";
                     }
                 }
                 else
                 {
-                    args = $"mcp add --transport http UnityMCP {httpUrl}";
+                    args = $"mcp add --scope local --transport http UnityMCP {httpUrl}";
                 }
             }
             else
@@ -720,7 +721,8 @@ namespace MCPForUnity.Editor.Clients
                 // Use central helper that checks both DevModeForceServerRefresh AND local path detection.
                 // Note: --reinstall is not supported by uvx, use --no-cache --refresh instead
                 string devFlags = AssetPathUtility.ShouldForceUvxRefresh() ? "--no-cache --refresh " : string.Empty;
-                args = $"mcp add --transport stdio UnityMCP -- \"{uvxPath}\" {devFlags}--from \"{gitUrl}\" {packageName}";
+                // Use --scope local to register in the project-local config, avoiding conflicts with user-level config (#664)
+                args = $"mcp add --scope local --transport stdio UnityMCP -- \"{uvxPath}\" {devFlags}--from \"{gitUrl}\" {packageName}";
             }
 
             string projectDir = Path.GetDirectoryName(Application.dataPath);
@@ -747,10 +749,9 @@ namespace MCPForUnity.Editor.Clients
             }
             catch { }
 
-            // Remove any existing registrations - handle both "UnityMCP" and "unityMCP" (legacy)
-            McpLog.Info("Removing any existing UnityMCP registrations before adding...");
-            ExecPath.TryRun(claudePath, "mcp remove UnityMCP", projectDir, out _, out _, 7000, pathPrepend);
-            ExecPath.TryRun(claudePath, "mcp remove unityMCP", projectDir, out _, out _, 7000, pathPrepend);
+            // Remove any existing registrations from ALL scopes to prevent stale config conflicts (#664)
+            McpLog.Info("Removing any existing UnityMCP registrations from all scopes before adding...");
+            RemoveFromAllScopes(claudePath, projectDir, pathPrepend);
 
             // Now add the registration with the current transport mode
             if (!ExecPath.TryRun(claudePath, args, projectDir, out var stdout, out var stderr, 15000, pathPrepend))
@@ -787,10 +788,9 @@ namespace MCPForUnity.Editor.Clients
                 pathPrepend = "/usr/local/bin:/usr/bin:/bin";
             }
 
-            // Remove both "UnityMCP" and "unityMCP" (legacy naming)
-            McpLog.Info("Removing all UnityMCP registrations...");
-            ExecPath.TryRun(claudePath, "mcp remove UnityMCP", projectDir, out _, out _, 7000, pathPrepend);
-            ExecPath.TryRun(claudePath, "mcp remove unityMCP", projectDir, out _, out _, 7000, pathPrepend);
+            // Remove from ALL scopes to ensure complete cleanup (#664)
+            McpLog.Info("Removing all UnityMCP registrations from all scopes...");
+            RemoveFromAllScopes(claudePath, projectDir, pathPrepend);
 
             McpLog.Info("MCP server successfully unregistered from Claude Code.");
             client.SetStatus(McpStatus.NotConfigured);
@@ -813,9 +813,11 @@ namespace MCPForUnity.Editor.Clients
                     headerArg = !string.IsNullOrEmpty(apiKey) ? $" --header \"{AuthConstants.ApiKeyHeader}: {SanitizeShellHeaderValue(apiKey)}\"" : "";
                 }
                 return "# Register the MCP server with Claude Code:\n" +
-                       $"claude mcp add --transport http UnityMCP {httpUrl}{headerArg}\n\n" +
-                       "# Unregister the MCP server:\n" +
-                       "claude mcp remove UnityMCP\n\n" +
+                       $"claude mcp add --scope local --transport http UnityMCP {httpUrl}{headerArg}\n\n" +
+                       "# Unregister the MCP server (from all scopes to clean up any stale configs):\n" +
+                       "claude mcp remove --scope local UnityMCP\n" +
+                       "claude mcp remove --scope user UnityMCP\n" +
+                       "claude mcp remove --scope project UnityMCP\n\n" +
                        "# List registered servers:\n" +
                        "claude mcp list";
             }
@@ -831,9 +833,11 @@ namespace MCPForUnity.Editor.Clients
             string devFlags = AssetPathUtility.ShouldForceUvxRefresh() ? "--no-cache --refresh " : string.Empty;
 
             return "# Register the MCP server with Claude Code:\n" +
-                   $"claude mcp add --transport stdio UnityMCP -- \"{uvxPath}\" {devFlags}--from \"{packageSource}\" mcp-for-unity\n\n" +
-                   "# Unregister the MCP server:\n" +
-                   "claude mcp remove UnityMCP\n\n" +
+                   $"claude mcp add --scope local --transport stdio UnityMCP -- \"{uvxPath}\" {devFlags}--from \"{packageSource}\" mcp-for-unity\n\n" +
+                   "# Unregister the MCP server (from all scopes to clean up any stale configs):\n" +
+                   "claude mcp remove --scope local UnityMCP\n" +
+                   "claude mcp remove --scope user UnityMCP\n" +
+                   "claude mcp remove --scope project UnityMCP\n\n" +
                    "# List registered servers:\n" +
                    "claude mcp list";
         }
@@ -844,6 +848,28 @@ namespace MCPForUnity.Editor.Clients
             "Use Register to add UnityMCP (or run claude mcp add UnityMCP)",
             "Restart Claude Code"
         };
+
+        /// <summary>
+        /// Removes UnityMCP registration from all Claude Code configuration scopes (local, user, project).
+        /// This ensures no stale or conflicting configurations remain across different scopes.
+        /// Also handles legacy "unityMCP" naming convention.
+        /// </summary>
+        private static void RemoveFromAllScopes(string claudePath, string projectDir, string pathPrepend)
+        {
+            // Remove from all three scopes to prevent stale configs causing connection issues.
+            // See GitHub issue #664 - conflicting configs at different scopes can cause
+            // Claude Code to connect with outdated/incorrect configuration.
+            string[] scopes = { "local", "user", "project" };
+            string[] names = { "UnityMCP", "unityMCP" }; // Include legacy naming
+
+            foreach (var scope in scopes)
+            {
+                foreach (var name in names)
+                {
+                    ExecPath.TryRun(claudePath, $"mcp remove --scope {scope} {name}", projectDir, out _, out _, 5000, pathPrepend);
+                }
+            }
+        }
 
         /// <summary>
         /// Sanitizes a value for safe inclusion inside a double-quoted shell argument.
