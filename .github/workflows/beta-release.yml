@@ -76,7 +76,7 @@ jobs:
           echo "Updated MCPForUnity/package.json:"
           jq '.version' MCPForUnity/package.json
 
-      - name: Commit and push beta version
+      - name: Commit and open PR for beta version
         id: commit
         if: steps.version.outputs.already_beta != 'true'
         shell: bash
@@ -96,11 +96,15 @@ jobs:
             git add MCPForUnity/package.json
             git commit -m "chore: update Unity package to beta version ${{ steps.version.outputs.unity_beta_version }}"
             git push origin "$BRANCH_NAME"
-            gh pr create \
-              --base beta \
-              --head "$BRANCH_NAME" \
-              --title "chore: update Unity package to beta version ${{ steps.version.outputs.unity_beta_version }}" \
-              --body "Automated beta version bump for the Unity package."
+            if gh pr view "$BRANCH_NAME" >/dev/null 2>&1; then
+              echo "PR already exists for $BRANCH_NAME"
+            else
+              gh pr create \
+                --base beta \
+                --head "$BRANCH_NAME" \
+                --title "chore: update Unity package to beta version ${{ steps.version.outputs.unity_beta_version }}" \
+                --body "Automated beta version bump for the Unity package."
+            fi
             echo "updated=true" >> "$GITHUB_OUTPUT"
           fi
 
