@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     outputs:
       unity_beta_version: ${{ steps.version.outputs.unity_beta_version }}
       version_updated: ${{ steps.commit.outputs.updated }}
@@ -79,6 +80,8 @@ jobs:
         id: commit
         if: steps.version.outputs.already_beta != 'true'
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git config user.name "GitHub Actions"
@@ -88,9 +91,16 @@ jobs:
             echo "No changes to commit"
             echo "updated=false" >> "$GITHUB_OUTPUT"
           else
+            BRANCH_NAME="beta-version-${{ steps.version.outputs.unity_beta_version }}-${GITHUB_RUN_ID}"
+            git checkout -b "$BRANCH_NAME"
             git add MCPForUnity/package.json
             git commit -m "chore: update Unity package to beta version ${{ steps.version.outputs.unity_beta_version }}"
-            git push origin beta
+            git push origin "$BRANCH_NAME"
+            gh pr create \
+              --base beta \
+              --head "$BRANCH_NAME" \
+              --title "chore: update Unity package to beta version ${{ steps.version.outputs.unity_beta_version }}" \
+              --body "Automated beta version bump for the Unity package."
             echo "updated=true" >> "$GITHUB_OUTPUT"
           fi
 
