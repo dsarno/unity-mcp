@@ -16,8 +16,12 @@ jobs:
   update_unity_beta_version:
     name: Update Unity package to beta version
     runs-on: ubuntu-latest
+    # Avoid running when the workflow's own automation merges the PR
+    # created by this workflow (prevents a version-bump loop).
+    if: github.actor != 'github-actions[bot]'
     permissions:
       contents: write
+      pull-requests: write
     outputs:
       unity_beta_version: ${{ steps.version.outputs.unity_beta_version }}
       version_updated: ${{ steps.commit.outputs.updated }}
@@ -75,10 +79,12 @@ jobs:
           echo "Updated MCPForUnity/package.json:"
           jq '.version' MCPForUnity/package.json
 
-      - name: Commit and push beta version
+      - name: Commit and open PR for beta version
         id: commit
         if: steps.version.outputs.already_beta != 'true'
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git config user.name "GitHub Actions"
@@ -88,9 +94,21 @@ jobs:
             echo "No changes to commit"
             echo "updated=false" >> "$GITHUB_OUTPUT"
           else
+            BRANCH_NAME="beta-version-${{ steps.version.outputs.unity_beta_version }}-${GITHUB_RUN_ID}"
+            git checkout -b "$BRANCH_NAME"
             git add MCPForUnity/package.json
             git commit -m "chore: update Unity package to beta version ${{ steps.version.outputs.unity_beta_version }}"
-            git push origin beta
+            git push origin "$BRANCH_NAME"
+            if gh pr view "$BRANCH_NAME" >/dev/null 2>&1; then
+              echo "PR already exists for $BRANCH_NAME"
+            else
+              PR_URL=$(gh pr create \
+                --base beta \
+                --head "$BRANCH_NAME" \
+                --title "chore: update Unity package to beta version ${{ steps.version.outputs.unity_beta_version }}" \
+                --body "Automated beta version bump for the Unity package.")
+              echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+            fi
             echo "updated=true" >> "$GITHUB_OUTPUT"
           fi
 
