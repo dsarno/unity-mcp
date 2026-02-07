@@ -39,11 +39,41 @@ git checkout 8c6cefdd
 git checkout fix/localhost-ipv6-resolution
 ```
 
+**Important:** Close and reopen Unity after each checkout. `HttpBridgeReloadHandler` is
+registered via `[InitializeOnLoad]`, and `EditorPrefs` state from a prior run can carry
+over if Unity stays open across checkouts. A fresh launch ensures the editor loads the
+correct version of every assembly with no stale static state.
+
+## Pre-Test Cleanup (before each run)
+
+Run these before every test to eliminate stale state from a previous run:
+
+1. **Kill stale server processes on port 8080:**
+```powershell
+$proc = Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique
+if ($proc) { Stop-Process -Id $proc -Force; Write-Host "Killed PID(s): $proc" }
+else { Write-Host "Port 8080 clear" }
+```
+2. **Verify hosts file matches the intended test configuration:**
+```powershell
+Get-Content C:\Windows\System32\drivers\etc\hosts | Select-String "localhost"
+```
+   Compare the output against the hosts-file mode required for the current test
+   (dual-stack for B tests, single-family for A tests). Fix before proceeding if
+   it doesn't match.
+3. **Flush DNS** (always, even if hosts file looks correct):
+```powershell
+ipconfig /flushdns
+```
+
 ## Preflight Checks (each run)
 
-1. Confirm server process is not already running on port 8080.
-2. Confirm Unity MCP window is open and HTTP Local mode is selected.
-3. Confirm Unity URL value is exactly `http://localhost:8080`.
+1. Confirm Unity MCP window is open and HTTP Local mode is selected.
+2. Confirm Unity URL value is exactly `http://localhost:8080`.
+3. Enable MCP Debug logging in Unity (Advanced Settings). The `[HTTP Reload]` retry
+   logs and `[WebSocket] Connect failed` logs are emitted at Debug level and will not
+   appear without this.
 
 ## Test A1: Forced localhost -> IPv6 resolution, server bound IPv4 only
 
@@ -58,12 +88,21 @@ By forcing `localhost` to resolve to `::1` while server binds only `127.0.0.1`, 
 ```powershell
 ipconfig /flushdns
 ```
-3. Start server (IPv4-only bind):
+3. Verify .NET resolves `localhost` to only IPv6:
+```powershell
+[System.Net.Dns]::GetHostAddresses("localhost") | ForEach-Object { $_.IPAddressToString }
+```
+   Expected output: `::1` only. If `127.0.0.1` also appears, the hosts file change
+   did not take effect — do not proceed. This can happen on some Windows 10/11
+   configurations where the DNS Client service resolves `localhost` independently of
+   the hosts file. Troubleshoot before continuing (disable "Smart Multi-Homed Name
+   Resolution" or restart the DNS Client service).
+4. Start server (IPv4-only bind):
 ```powershell
 cd Server
 uv run src/main.py --transport http --http-host 127.0.0.1 --http-port 8080
 ```
-4. Verify forced mismatch:
+5. Verify forced mismatch:
 ```powershell
 Test-NetConnection ::1 -Port 8080
 Test-NetConnection 127.0.0.1 -Port 8080
@@ -83,6 +122,13 @@ Start HTTP session in Unity.
 
 ## Test A2: Forced localhost -> IPv4 resolution, server bound IPv6 only
 
+### Prerequisite
+IPv6 must be enabled on the test machine. Verify with:
+```powershell
+Get-NetAdapterBinding -ComponentId ms_tcpip6 | Where-Object { $_.Enabled }
+```
+If no adapters show IPv6 enabled, skip this test — the server cannot bind to `::1`.
+
 ### Why this is deterministic
 Mirror of A1. Initial connect goes to wrong family; fallback must recover.
 
@@ -94,12 +140,18 @@ Mirror of A1. Initial connect goes to wrong family; fallback must recover.
 ```powershell
 ipconfig /flushdns
 ```
-3. Start server (IPv6-only bind):
+3. Verify .NET resolves `localhost` to only IPv4:
+```powershell
+[System.Net.Dns]::GetHostAddresses("localhost") | ForEach-Object { $_.IPAddressToString }
+```
+   Expected output: `127.0.0.1` only. If `::1` also appears, stop and troubleshoot
+   (same guidance as A1 step 3).
+4. Start server (IPv6-only bind):
 ```powershell
 cd Server
 uv run src/main.py --transport http --http-host ::1 --http-port 8080
 ```
-4. Verify forced mismatch:
+5. Verify forced mismatch:
 ```powershell
 Test-NetConnection 127.0.0.1 -Port 8080
 Test-NetConnection ::1 -Port 8080
@@ -117,35 +169,84 @@ Start HTTP session in Unity.
 
 ## Test B1: Deterministic domain-reload recovery inside retry window
 
+### What changed between before and after
+The baseline (`8c6cefdd`) already has `HttpBridgeReloadHandler.cs`, but it makes a
+**single fire-and-forget resume attempt** immediately after reload — no retries. The
+branch replaces this with a 6-attempt retry schedule `[0, 1, 3, 5, 10, 30]` seconds
+(cumulative: attempts fire at ~0, 1, 4, 9, 19, 49 seconds after reload completes).
+
+The baseline also uses async `StopAsync` in `OnBeforeAssemblyReload` (fire-and-forget,
+may leave an orphaned socket), while the branch uses synchronous `ForceStop` for clean
+teardown before reload.
+
 ### Why this is deterministic
-Server is intentionally unavailable during initial resume attempts, then restored before retry schedule ends.
+The server is stopped **before** triggering reload. By the time `OnAfterAssemblyReload`
+fires, the server has been down for the entire compilation window. The baseline's single
+immediate attempt is guaranteed to fail against a stopped server, with no retry to catch
+a later restart. The branch's retry schedule spans ~49 seconds, giving a wide window to
+restart the server and have a subsequent attempt succeed.
 
 ### Setup
 1. Return hosts to normal dual-stack entries.
 2. Start server on localhost/8080 and establish HTTP session.
+3. Verify connected state in MCP for Unity window.
 
 ### Action
-1. Stop server.
-2. Trigger domain reload by editing + saving any C# file.
-3. Restart server after ~15-20 seconds.
+1. **Stop server** (Ctrl+C in the server terminal).
+2. **Start a stopwatch** (or note the time).
+3. **Trigger domain reload**: edit and save any C# file in the Unity project.
+4. **Wait for reload to complete**: watch Unity's status bar for the compile spinner
+   to finish, and the Console for reload-related log output.
+5. **Checkpoint — verify the baseline attempt has fired**:
+   - **Before**: look for `Failed to resume HTTP MCP bridge after domain reload` in
+     the Unity Console (this is the single-shot failure at Warn level, always visible).
+   - **After**: look for `[HTTP Reload] Resume attempt 1/6` followed by a failure
+     message (Debug level — requires step 4 of Preflight Checks).
+6. **Restart server** once the checkpoint is confirmed (~15-30 seconds after stopping).
+7. **Wait 30 seconds** after restarting and observe the MCP for Unity window.
 
 ### Expected outcome
-- **Before**: often stuck in `No Session` until manual reconnect.
-- **After**: auto-resume succeeds within retry window, with logs like:
-  - `[HTTP Reload] Resume attempt X/6`
+- **Before** (`8c6cefdd`): Unity shows `No Session` / disconnected. The single resume
+  attempt already fired and failed (confirmed at step 5). No further attempts occur.
+  Manual reconnect is the only recovery path.
+- **After** (`fix/localhost-ipv6-resolution`): a later retry attempt catches the
+  restarted server. Unity logs show:
+  - `[HTTP Reload] Resume attempt 1/6` ... failed
+  - (possibly more failed attempts)
   - `[HTTP Reload] Resume succeeded on attempt X`
+  - MCP for Unity window returns to Connected state without manual intervention.
 
-## Test B2: Boundary behavior (non-overclaim guard)
+### Why "before" cannot spuriously pass
+The server is stopped before reload begins. Unity compilation takes several seconds.
+The baseline's single `StartAsync` call fires immediately after `OnAfterAssemblyReload`
+— at which point the server has been down for the entire compilation window. There is
+no code path in the baseline that retries, so a later server restart cannot be detected.
+
+## Test B2: Boundary — retry budget exhaustion (non-overclaim guard)
 
 ### Why this is deterministic
-Confirms current implementation has finite retry budget.
+The branch's retry schedule has 6 attempts spanning ~49 seconds. By waiting until all
+attempts have exhausted before restarting the server, we confirm the retry budget is
+finite and the system does not falsely claim infinite recovery.
+
+### Setup
+Same as B1: normal dual-stack hosts, establish HTTP session, verify connected.
 
 ### Action
-Repeat B1 but restart server after >50 seconds.
+1. **Stop server**.
+2. **Trigger domain reload** (edit + save C# file).
+3. **Wait for reload to complete** and watch the Unity Console for retry attempts.
+4. **Wait until all 6 attempts have fired and failed** (~50-60 seconds after reload
+   completes). In the **after** branch, look for:
+   - `[HTTP Reload] Resume attempt 6/6` followed by a failure
+   - `Failed to resume HTTP MCP bridge after domain reload` (final Warn log)
+5. **Restart server** only after step 4 is confirmed.
+6. **Wait 30 seconds** and observe.
 
 ### Expected outcome
-- **After**: auto-resume may not recover; manual reconnect required.
-- This confirms mitigation limits and prevents overclaiming.
+- **After**: Unity remains disconnected. All 6 retry attempts exhausted before the
+  server came back. Manual reconnect is required.
+- This confirms the retry window has a defined boundary and does not overclaim.
 
 ## Evidence Checklist
 For each test case capture:
@@ -153,9 +254,15 @@ For each test case capture:
 1. Tested revision (`before` or `after`)
 2. Hosts-file mode used
 3. Exact server launch command
-4. `Test-NetConnection` outputs
-5. Unity logs containing fallback/resume markers
-6. Final state: connected vs no session
+4. `Test-NetConnection` outputs (A tests)
+5. Unity logs containing fallback/resume markers:
+   - A tests: `[WebSocket] Connect failed for ...` and `[WebSocket] Connected via fallback host ...`
+   - B tests (before): `Failed to resume HTTP MCP bridge after domain reload`
+   - B tests (after): `[HTTP Reload] Resume attempt X/6`, `[HTTP Reload] Resume succeeded on attempt X`,
+     or `[HTTP Reload] Resume attempt 6/6` followed by final failure (B2)
+6. B test checkpoint confirmation: log evidence that the baseline's single attempt
+   (or all 6 branch attempts for B2) fired before server was restarted
+7. Final state: connected vs no session
 
 ## Pass/Fail Criteria
 
@@ -164,11 +271,38 @@ For each test case capture:
   - after succeeds through fallback under forced family mismatch.
 
 - B1 is **pass** only if:
-  - before does not reliably self-recover, and
-  - after self-recovers without manual reconnect.
+  - before: the single resume attempt fires and fails (confirmed via Warn log),
+    Unity remains disconnected after server restart, and
+  - after: retry schedule catches the restarted server, Unity auto-recovers
+    without manual reconnect, and `Resume succeeded on attempt X` appears in logs.
 
 - B2 is **pass** only if:
-  - behavior demonstrates finite retry window and no false claim of infinite retry.
+  - after: all 6 retry attempts fire and fail (confirmed via log),
+    Unity remains disconnected after server restart, and
+    manual reconnect is required to recover.
+
+## Result Template
+
+Copy this table for each full A/B run. Fill in one row per test execution.
+
+| Test | Revision | Hosts Mode | Server Bind | Checkpoint Log (exact message) | Final State | Verdict |
+|------|----------|------------|-------------|-------------------------------|-------------|---------|
+| A1 | before (`8c6cefdd`) | `::1` only | `127.0.0.1` | | connected / disconnected | PASS / FAIL |
+| A1 | after (branch) | `::1` only | `127.0.0.1` | | connected / disconnected | PASS / FAIL |
+| A2 | before (`8c6cefdd`) | `127.0.0.1` only | `::1` | | connected / disconnected | PASS / FAIL |
+| A2 | after (branch) | `127.0.0.1` only | `::1` | | connected / disconnected | PASS / FAIL |
+| B1 | before (`8c6cefdd`) | dual-stack | default | | connected / disconnected | PASS / FAIL |
+| B1 | after (branch) | dual-stack | default | | connected / disconnected | PASS / FAIL |
+| B2 | after (branch) | dual-stack | default | | connected / disconnected | PASS / FAIL |
+
+**Checkpoint Log column guidance:**
+- A tests: paste the `[WebSocket] Connected via fallback host ...` line, or the final error if it failed.
+- B1 before: paste `Failed to resume HTTP MCP bridge after domain reload`.
+- B1 after: paste `[HTTP Reload] Resume succeeded on attempt X`.
+- B2 after: paste `[HTTP Reload] Resume attempt 6/6` + final failure line.
+
+**Overall result:** All rows must show expected verdicts for the plan to pass.
+A single unexpected result requires investigation before the PR can be considered validated.
 
 ## Safety/Reset
 After testing, restore default hosts entries:
