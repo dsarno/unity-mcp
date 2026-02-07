@@ -19,8 +19,10 @@ from starlette.routing import WebSocketRoute
 from starlette.responses import JSONResponse
 import argparse
 import asyncio
+import anyio
 import logging
 from contextlib import asynccontextmanager
+from functools import partial
 import os
 import threading
 import time
@@ -579,6 +581,73 @@ def create_mcp_server(project_scoped_tools: bool) -> FastMCP:
     return mcp
 
 
+def _normalize_windows_loop_mode(raw_mode: str | None) -> str:
+    """Normalize UNITY_MCP_WINDOWS_ASYNCIO_LOOP to a supported mode."""
+    mode = (raw_mode or "auto").strip().lower()
+    if mode not in {"auto", "selector", "proactor"}:
+        logger.warning(
+            "Invalid UNITY_MCP_WINDOWS_ASYNCIO_LOOP=%r, defaulting to 'auto'",
+            raw_mode,
+        )
+        return "auto"
+    return mode
+
+
+def _build_anyio_backend_options_for_platform(
+    *,
+    platform_name: str | None = None,
+    raw_mode: str | None = None,
+) -> dict[str, Any] | None:
+    """Return AnyIO backend options for platform-specific loop behavior."""
+    platform_name = platform_name or os.name
+    if platform_name != "nt":
+        return None
+
+    mode = _normalize_windows_loop_mode(
+        raw_mode if raw_mode is not None else os.environ.get("UNITY_MCP_WINDOWS_ASYNCIO_LOOP")
+    )
+    if mode == "proactor":
+        logger.info(
+            "Windows asyncio loop mode: proactor (UNITY_MCP_WINDOWS_ASYNCIO_LOOP=%s)",
+            mode,
+        )
+        return None
+
+    # Use a selector loop via AnyIO backend options. This avoids deprecated global
+    # event-loop policies while preserving the Windows WinError64 mitigation path.
+    loop_factory = getattr(asyncio, "SelectorEventLoop", None)
+    if loop_factory is None:
+        logger.warning(
+            "SelectorEventLoop is unavailable; falling back to default asyncio loop on Windows."
+        )
+        return None
+
+    logger.info(
+        "Windows asyncio loop mode: selector (UNITY_MCP_WINDOWS_ASYNCIO_LOOP=%s)",
+        mode,
+    )
+    return {"loop_factory": loop_factory}
+
+
+def _run_fastmcp_sync(
+    mcp: FastMCP,
+    *,
+    transport: str,
+    **transport_kwargs: Any,
+) -> None:
+    """Run FastMCP via AnyIO with platform-aware backend options."""
+    backend_options = _build_anyio_backend_options_for_platform()
+    anyio.run(
+        partial(
+            mcp.run_async,
+            transport=transport,
+            **transport_kwargs,
+        ),
+        backend="asyncio",
+        backend_options=backend_options,
+    )
+
+
 def main():
     """Entry point for uvx and console scripts."""
     parser = argparse.ArgumentParser(
@@ -833,11 +902,11 @@ Examples:
             "UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "127.0.0.1"
         port = args.http_port or _env_port or parsed_url.port or 8080
         logger.info(f"Starting FastMCP with HTTP transport on {host}:{port}")
-        mcp.run(transport=transport, host=host, port=port)
+        _run_fastmcp_sync(mcp, transport=transport, host=host, port=port)
     else:
         # Use stdio transport for traditional MCP
         logger.info("Starting FastMCP with stdio transport")
-        mcp.run(transport='stdio')
+        _run_fastmcp_sync(mcp, transport='stdio')
 
 
 # Run the server

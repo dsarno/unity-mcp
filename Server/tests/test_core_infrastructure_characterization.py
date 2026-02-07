@@ -756,6 +756,40 @@ class TestHttpDefaultHostFallbacks:
         assert http_host == "localhost"
 
 
+class TestWindowsAsyncioLoopSelection:
+    """Tests for Windows asyncio loop mode selection in server startup."""
+
+    def test_normalize_windows_loop_mode_invalid_defaults_to_auto(self):
+        """Unknown modes should safely fall back to auto."""
+        from main import _normalize_windows_loop_mode
+        assert _normalize_windows_loop_mode("invalid-mode") == "auto"
+
+    def test_build_backend_options_non_windows_returns_none(self):
+        """Non-Windows platforms should not override AnyIO backend options."""
+        from main import _build_anyio_backend_options_for_platform
+        assert _build_anyio_backend_options_for_platform(
+            platform_name="posix", raw_mode="selector"
+        ) is None
+
+    def test_build_backend_options_windows_auto_uses_selector_loop(self):
+        """Windows auto mode should choose SelectorEventLoop via loop_factory."""
+        from main import _build_anyio_backend_options_for_platform
+
+        options = _build_anyio_backend_options_for_platform(
+            platform_name="nt", raw_mode="auto"
+        )
+
+        assert isinstance(options, dict)
+        assert options.get("loop_factory") is asyncio.SelectorEventLoop
+
+    def test_build_backend_options_windows_proactor_returns_none(self):
+        """Windows proactor mode should keep default runtime behavior."""
+        from main import _build_anyio_backend_options_for_platform
+        assert _build_anyio_backend_options_for_platform(
+            platform_name="nt", raw_mode="proactor"
+        ) is None
+
+
 class TestServerConfigLogging:
     """Tests documenting that ServerConfig.configure_logging() was removed.
 
