@@ -304,6 +304,79 @@ Copy this table for each full A/B run. Fill in one row per test execution.
 **Overall result:** All rows must show expected verdicts for the plan to pass.
 A single unexpected result requires investigation before the PR can be considered validated.
 
+## Diagnostic: Why Does My Machine Work When Others Fail?
+
+The IPv4/IPv6 localhost issue is **more common on newer Windows** (10 1803+, 11) where
+IPv6 is aggressively preferred. It is not an old-Windows problem. The failure occurs when
+`.NET`'s `ClientWebSocket.ConnectAsync` resolves `localhost` to `::1` (IPv6) first, but
+the Python server is bound to `127.0.0.1` (IPv4) only. Unity's Mono runtime does not
+implement Happy Eyeballs (try both address families) — it picks the first resolved
+address and uses it.
+
+If you cannot reproduce the failure natively, run these commands to understand why your
+machine is shielded. Compare the output with a failing machine to identify the
+differentiator.
+
+### 1. What does .NET resolve `localhost` to (and in what order)?
+
+This is the ground truth. The first address in the list is what `ClientWebSocket` will
+connect to.
+```powershell
+[System.Net.Dns]::GetHostAddresses("localhost") | ForEach-Object { "$($_.AddressFamily): $($_.IPAddressToString)" }
+```
+- If `InterNetwork: 127.0.0.1` appears first → your machine will always connect to IPv4.
+- If `InterNetworkV6: ::1` appears first → your machine hits the bug.
+
+### 2. Hosts file entry order
+
+The most common cause. If `127.0.0.1 localhost` is listed first (or `::1 localhost` is
+absent/commented), IPv4 wins the resolution race.
+```powershell
+type C:\Windows\System32\drivers\etc\hosts | findstr localhost
+```
+
+### 3. IPv6 prefix policy table
+
+Even with both hosts entries present, Windows applies RFC 6724 address sorting. By
+default `::1/128` (IPv6 loopback) has precedence 50 and `::ffff:0:0/96` (IPv4-mapped)
+has precedence 35 — meaning IPv6 wins when both are candidates.
+```powershell
+netsh interface ipv6 show prefixes
+```
+
+### 4. IPv6 disabled components registry key
+
+Some machines have IPv6 partially or fully disabled at the registry level. A value of
+`0x20` disables IPv6 prefix preference (forces IPv4 preferred). Gaming-oriented OEM
+installs, Dell/Alienware network optimizer tools, and "network optimization" guides
+commonly set this.
+```powershell
+reg query HKLM\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters /v DisabledComponents 2>$null
+```
+- Key absent or `0x0` → IPv6 fully enabled (default)
+- `0x20` → IPv6 enabled but IPv4 preferred for address selection
+- `0xff` → IPv6 fully disabled
+
+### 5. IPv6 adapter status
+
+Confirms whether IPv6 is enabled at the adapter level.
+```powershell
+Get-NetAdapterBinding -ComponentId ms_tcpip6 | Format-Table Name, Enabled
+```
+
+### Likely differentiators
+
+Machines that **work** (never see the failure) typically have one or more of:
+- `127.0.0.1 localhost` listed first or exclusively in the hosts file
+- `DisabledComponents` registry key set to `0x20` or higher (OEM/gaming tweaks)
+- Killer networking or similar drivers that deprioritize IPv6
+
+Machines that **fail** typically have:
+- Default/clean Windows 10 1803+ or Windows 11 install
+- Both `::1 localhost` and `127.0.0.1 localhost` in hosts with `::1` first, or no
+  hosts entries for localhost (Windows resolves to both, prefers IPv6)
+- No registry tweaks — default prefix policy prefers IPv6 loopback
+
 ## Safety/Reset
 After testing, restore default hosts entries:
 
