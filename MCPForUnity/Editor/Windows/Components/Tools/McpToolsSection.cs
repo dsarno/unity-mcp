@@ -225,7 +225,11 @@ namespace MCPForUnity.Editor.Windows.Components.Tools
             return row;
         }
 
-        private void HandleToggleChange(ToolMetadata tool, bool enabled, bool updateSummary = true)
+        private void HandleToggleChange(
+            ToolMetadata tool,
+            bool enabled,
+            bool updateSummary = true,
+            bool reregisterTools = true)
         {
             MCPServiceLocator.ToolDiscovery.SetToolEnabled(tool.Name, enabled);
 
@@ -234,8 +238,11 @@ namespace MCPForUnity.Editor.Windows.Components.Tools
                 UpdateSummary();
             }
 
-            // Trigger tool reregistration with connected MCP server
-            ReregisterToolsAsync();
+            if (reregisterTools)
+            {
+                // Trigger tool reregistration with connected MCP server
+                ReregisterToolsAsync();
+            }
         }
 
         private void ReregisterToolsAsync()
@@ -261,11 +268,18 @@ namespace MCPForUnity.Editor.Windows.Components.Tools
 
         private void SetAllToolsState(bool enabled)
         {
+            bool hasChanges = false;
+
             foreach (var tool in allTools)
             {
                 if (!toolToggleMap.TryGetValue(tool.Name, out var toggle))
                 {
-                    MCPServiceLocator.ToolDiscovery.SetToolEnabled(tool.Name, enabled);
+                    bool currentEnabled = MCPServiceLocator.ToolDiscovery.IsToolEnabled(tool.Name);
+                    if (currentEnabled != enabled)
+                    {
+                        MCPServiceLocator.ToolDiscovery.SetToolEnabled(tool.Name, enabled);
+                        hasChanges = true;
+                    }
                     continue;
                 }
 
@@ -275,13 +289,17 @@ namespace MCPForUnity.Editor.Windows.Components.Tools
                 }
 
                 toggle.SetValueWithoutNotify(enabled);
-                HandleToggleChange(tool, enabled, updateSummary: false);
+                HandleToggleChange(tool, enabled, updateSummary: false, reregisterTools: false);
+                hasChanges = true;
             }
 
             UpdateSummary();
 
-            // Trigger tool reregistration after bulk change
-            ReregisterToolsAsync();
+            if (hasChanges)
+            {
+                // Trigger a single reregistration after bulk change
+                ReregisterToolsAsync();
+            }
         }
 
         private void UpdateSummary()
