@@ -42,16 +42,6 @@ namespace MCPForUnity.Editor.Services.Transport
             };
         }
 
-        private IMcpTransportClient GetClient(TransportMode mode)
-        {
-            return mode switch
-            {
-                TransportMode.Http => _httpClient,
-                TransportMode.Stdio => _stdioClient,
-                _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported transport mode"),
-            };
-        }
-
         public async Task<bool> StartAsync(TransportMode mode)
         {
             IMcpTransportClient client = GetOrCreateClient(mode);
@@ -161,6 +151,20 @@ namespace MCPForUnity.Editor.Services.Transport
             {
                 UpdateState(mode, TransportState.Disconnected(transportName));
             }
+        }
+
+        /// <summary>
+        /// Gets the active transport client for the specified mode.
+        /// Returns null if the client hasn't been created yet.
+        /// </summary>
+        public IMcpTransportClient GetClient(TransportMode mode)
+        {
+            return mode switch
+            {
+                TransportMode.Http => _httpClient,
+                TransportMode.Stdio => _stdioClient,
+                _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported transport mode"),
+            };
         }
 
         private void UpdateState(TransportMode mode, TransportState state)
