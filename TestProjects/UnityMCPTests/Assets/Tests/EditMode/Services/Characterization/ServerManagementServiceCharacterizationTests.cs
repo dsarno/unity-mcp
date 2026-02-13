@@ -135,6 +135,20 @@ namespace MCPForUnityTests.Editor.Services.Characterization
         }
 
         [Test]
+        public void IsLocalUrl_IPv6LoopbackLongForm_ReturnsTrue()
+        {
+            // Arrange
+            EditorPrefs.SetString(EditorPrefKeys.HttpBaseUrl, "http://[0:0:0:0:0:0:0:1]:8080");
+            _service = new ServerManagementService();
+
+            // Act
+            bool result = _service.IsLocalUrl();
+
+            // Assert
+            Assert.IsTrue(result, "0:0:0:0:0:0:0:1 (IPv6 loopback long-form) should be recognized as local URL");
+        }
+
+        [Test]
         public void IsLocalUrl_RemoteUrl_ReturnsFalse()
         {
             // Arrange

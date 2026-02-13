@@ -148,11 +148,11 @@ namespace MCPForUnity.Editor.Windows.Components.Advanced
             devModeForceRefreshToggle.value = EditorPrefs.GetBool(EditorPrefKeys.DevModeForceServerRefresh, false);
             if (allowLanHttpBindToggle != null)
             {
-                allowLanHttpBindToggle.value = EditorPrefs.GetBool(EditorPrefKeys.AllowLanHttpBind, false);
+                allowLanHttpBindToggle.SetValueWithoutNotify(EditorPrefs.GetBool(EditorPrefKeys.AllowLanHttpBind, false));
             }
             if (allowInsecureRemoteHttpToggle != null)
             {
-                allowInsecureRemoteHttpToggle.value = EditorPrefs.GetBool(EditorPrefKeys.AllowInsecureRemoteHttp, false);
+                allowInsecureRemoteHttpToggle.SetValueWithoutNotify(EditorPrefs.GetBool(EditorPrefKeys.AllowInsecureRemoteHttp, false));
             }
             UpdatePathOverrides();
             UpdateDeploymentSection();
