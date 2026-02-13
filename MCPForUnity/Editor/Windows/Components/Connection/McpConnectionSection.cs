@@ -393,14 +393,42 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                     statusIndicator.AddToClassList("disconnected");
                     connectionToggleButton.text = "Start Session";
 
-                    // Disable Start Session for HTTP Remote when no API key is set
-                    bool httpRemoteNeedsKey = transportDropdown != null
-                        && (TransportProtocol)transportDropdown.value == TransportProtocol.HTTPRemote
+                    bool httpRemoteSelected = transportDropdown != null
+                        && (TransportProtocol)transportDropdown.value == TransportProtocol.HTTPRemote;
+                    bool httpRemoteNeedsKey = httpRemoteSelected
                         && string.IsNullOrEmpty(EditorPrefs.GetString(EditorPrefKeys.ApiKey, string.Empty));
-                    connectionToggleButton.SetEnabled(!httpRemoteNeedsKey);
-                    connectionToggleButton.tooltip = httpRemoteNeedsKey
-                        ? "An API key is required for HTTP Remote. Enter one above."
-                        : string.Empty;
+                    string remoteUrlError = null;
+                    bool remoteUrlAllowed = !httpRemoteSelected
+                        || HttpEndpointUtility.IsCurrentRemoteUrlAllowed(out remoteUrlError);
+
+                    bool httpLocalSelected = IsHttpLocalSelected();
+                    string localUrlError = null;
+                    bool localUrlAllowed = !httpLocalSelected
+                        || HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(
+                            HttpEndpointUtility.GetLocalBaseUrl(),
+                            out localUrlError);
+
+                    bool blockedByRemoteUrlPolicy = httpRemoteSelected && !remoteUrlAllowed;
+                    bool blockedByLocalUrlPolicy = httpLocalSelected && !localUrlAllowed;
+                    bool canStartSession = !httpRemoteNeedsKey && !blockedByRemoteUrlPolicy && !blockedByLocalUrlPolicy;
+                    connectionToggleButton.SetEnabled(canStartSession);
+
+                    if (httpRemoteNeedsKey)
+                    {
+                        connectionToggleButton.tooltip = "An API key is required for HTTP Remote. Enter one above.";
+                    }
+                    else if (blockedByRemoteUrlPolicy)
+                    {
+                        connectionToggleButton.tooltip = remoteUrlError ?? "HTTP Remote URL is blocked by current security settings.";
+                    }
+                    else if (blockedByLocalUrlPolicy)
+                    {
+                        connectionToggleButton.tooltip = localUrlError ?? "HTTP Local URL is blocked by current security settings.";
+                    }
+                    else
+                    {
+                        connectionToggleButton.tooltip = string.Empty;
+                    }
                 }
 
                 unityPortField.SetEnabled(!isStdioResuming);
@@ -425,7 +453,8 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
 
             bool useHttp = transportDropdown != null && (TransportProtocol)transportDropdown.value != TransportProtocol.Stdio;
             bool httpLocalSelected = IsHttpLocalSelected();
-            bool isLocalHttpUrl = MCPServiceLocator.Server.IsLocalUrl();
+            string localBaseUrl = HttpEndpointUtility.GetLocalBaseUrl();
+            bool isLocalHttpUrlAllowed = HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(localBaseUrl, out string localUrlError);
 
             // Only show the local-server helper UI when HTTP Local is selected.
             if (!useHttp || !httpLocalSelected)
@@ -447,7 +476,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
 
             httpServerCommandSection.style.display = DisplayStyle.Flex;
 
-            if (!isLocalHttpUrl)
+            if (!isLocalHttpUrlAllowed)
             {
                 httpServerCommandField.value = string.Empty;
                 httpServerCommandField.tooltip = string.Empty;
@@ -455,7 +484,8 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 httpServerCommandSection.EnableInClassList("http-local-invalid-url", true);
                 if (httpServerCommandHint != null)
                 {
-                    httpServerCommandHint.text = "⚠ HTTP Local requires a localhost URL (localhost/127.0.0.1/0.0.0.0/::1).";
+                    string requirements = HttpEndpointUtility.GetHttpLocalHostRequirementText();
+                    httpServerCommandHint.text = $"⚠ {localUrlError ?? $"HTTP Local requires a loopback URL ({requirements})."}";
                     httpServerCommandHint.AddToClassList("http-local-url-error");
                 }
                 copyHttpServerCommandButton?.SetEnabled(false);
@@ -542,7 +572,9 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             }
 
             bool httpLocalSelected = IsHttpLocalSelected();
-            bool canStartLocalServer = httpLocalSelected && MCPServiceLocator.Server.IsLocalUrl();
+            string localBaseUrl = HttpEndpointUtility.GetLocalBaseUrl();
+            bool localUrlAllowedForLaunch = HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(localBaseUrl, out string localUrlError);
+            bool canStartLocalServer = httpLocalSelected && localUrlAllowedForLaunch;
             bool localServerRunning = false;
 
             // Avoid running expensive port/PID checks every UI tick; use a fast socket probe for UI state.
@@ -567,7 +599,9 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             startHttpServerButton.SetEnabled(
                 !httpServerToggleInProgress && (shouldShowStop || canStartLocalServer));
             startHttpServerButton.tooltip = httpLocalSelected
-                ? (canStartLocalServer ? string.Empty : "HTTP Local requires a localhost URL (localhost/127.0.0.1/0.0.0.0/::1).")
+                ? (canStartLocalServer
+                    ? string.Empty
+                    : localUrlError ?? $"HTTP Local requires a loopback URL ({HttpEndpointUtility.GetHttpLocalHostRequirementText()}).")
                 : string.Empty;
         }
 
@@ -611,6 +645,16 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                     // Start Server: launch the local HTTP server.
                     // When WE start the server, auto-start our session (we clearly want to use it).
                     // This differs from detecting an already-running server, where we require manual session start.
+                    if (!HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(
+                            HttpEndpointUtility.GetLocalBaseUrl(),
+                            out string localPolicyError))
+                    {
+                        string errorMsg = localPolicyError ?? "HTTP Local URL is blocked by current security settings.";
+                        EditorUtility.DisplayDialog("Cannot Start HTTP Server", errorMsg, "OK");
+                        McpLog.Warn($"Start server blocked by local URL security policy: {errorMsg}");
+                        return;
+                    }
+
                     bool serverStarted = MCPServiceLocator.Server.StartLocalHttpServer();
                     if (serverStarted)
                     {
@@ -745,6 +789,29 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                 }
                 else
                 {
+                    bool httpRemoteSelected = transportDropdown != null
+                        && (TransportProtocol)transportDropdown.value == TransportProtocol.HTTPRemote;
+                    if (httpRemoteSelected
+                        && !HttpEndpointUtility.IsCurrentRemoteUrlAllowed(out string remotePolicyError))
+                    {
+                        string errorMsg = remotePolicyError ?? "HTTP Remote URL is blocked by current security settings.";
+                        EditorUtility.DisplayDialog("Connection Blocked", errorMsg, "OK");
+                        McpLog.Warn($"Connection blocked by remote URL security policy: {errorMsg}");
+                        return;
+                    }
+
+                    bool httpLocalSelected = IsHttpLocalSelected();
+                    if (httpLocalSelected
+                        && !HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(
+                            HttpEndpointUtility.GetLocalBaseUrl(),
+                            out string localPolicyError))
+                    {
+                        string errorMsg = localPolicyError ?? "HTTP Local URL is blocked by current security settings.";
+                        EditorUtility.DisplayDialog("Connection Blocked", errorMsg, "OK");
+                        McpLog.Warn($"Connection blocked by local URL security policy: {errorMsg}");
+                        return;
+                    }
+
                     bool started = await bridgeService.StartAsync();
                     if (started)
                     {
