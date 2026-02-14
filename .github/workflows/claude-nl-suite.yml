@@ -625,7 +625,7 @@ jobs:
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
-          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-nl.md
+          GITHUB_STEP_SUMMARY: /dev/null
         with:
           prompt: |
             ${{ steps.nl_prompt.outputs.content }}
@@ -692,7 +692,7 @@ jobs:
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
-          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-nl-retry.md
+          GITHUB_STEP_SUMMARY: /dev/null
         with:
           prompt: |
             ${{ steps.nl_prompt.outputs.content }}
@@ -728,7 +728,7 @@ jobs:
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
-          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-t.md
+          GITHUB_STEP_SUMMARY: /dev/null
         with:
           prompt: |
             ${{ steps.t_prompt.outputs.content }}
@@ -776,7 +776,7 @@ jobs:
         if: steps.t_cov.outputs.missing != '0'
         uses: anthropics/claude-code-action@v1
         env:
-          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-t-retry.md
+          GITHUB_STEP_SUMMARY: /dev/null
         with:
           prompt: |
             ${{ steps.t_prompt.outputs.content }}
@@ -831,7 +831,7 @@ jobs:
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
-          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-go.md
+          GITHUB_STEP_SUMMARY: /dev/null
         with:
           prompt: |
             ${{ steps.go_prompt.outputs.content }}
@@ -876,7 +876,7 @@ jobs:
         if: steps.go_cov.outputs.missing != '0'
         uses: anthropics/claude-code-action@v1
         env:
-          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-go-retry.md
+          GITHUB_STEP_SUMMARY: /dev/null
         with:
           prompt: |
             ${{ steps.go_prompt.outputs.content }}
@@ -1615,7 +1615,6 @@ jobs:
             ${{ env.JUNIT_OUT }}
             ${{ env.MD_OUT }}
             reports/*_results.xml
-            reports/claude-step-summary-*.md
             reports/claude-execution-output.json
             ${{ github.workspace }}/.unity-mcp/mcp-server-startup-debug.log
           retention-days: 7
