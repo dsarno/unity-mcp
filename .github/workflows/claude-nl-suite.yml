@@ -606,7 +606,7 @@ jobs:
           set -euxo pipefail
           echo "=== Unity container status ==="
           docker inspect -f '{{.State.Status}} {{.State.Running}}' unity-mcp || echo "Container not found!"
-          
+
           echo "=== Raw socket probe to Unity ==="
           # Try raw TCP connect without Python overhead
           for host in 127.0.0.1 localhost; do
@@ -617,10 +617,10 @@ jobs:
               echo "$host:6400 - FAILED"
             fi
           done
-          
+
           echo "=== Netstat for port 6400 ==="
           docker exec unity-mcp netstat -tlnp 2>/dev/null | grep 6400 || ss -tlnp | grep 6400 || echo "No listener found on 6400"
-          
+
           echo "=== Python probe with timing ==="
           python3 <<'PY'
           import socket, time
@@ -653,7 +653,7 @@ jobs:
         with:
           prompt: |
             ${{ steps.nl_prompt.outputs.content }}
-            
+
             You are running the NL pass only.
             - Emit exactly NL-0, NL-1, NL-2, NL-3, NL-4.
             - Write each to reports/${ID}_results.xml.
@@ -696,7 +696,7 @@ jobs:
         with:
           prompt: |
             ${{ steps.t_prompt.outputs.content }}
-            
+
             You are running the T pass (A–J) only.
             Output requirements:
             - Emit exactly 10 test fragments: T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
@@ -740,7 +740,7 @@ jobs:
         with:
           prompt: |
             ${{ steps.t_prompt.outputs.content }}
-            
+
             You are running the T pass only.
             Output requirements:
             - Emit exactly 10 test fragments: T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
@@ -792,7 +792,7 @@ jobs:
         with:
           prompt: |
             ${{ steps.go_prompt.outputs.content }}
-            
+
             You are running the GO pass (GameObject API tests) only.
             Output requirements:
             - Emit exactly 11 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10.
@@ -833,7 +833,7 @@ jobs:
         with:
           prompt: |
             ${{ steps.go_prompt.outputs.content }}
-            
+
             You are running the GO pass only.
             Output requirements:
             - Emit exactly 11 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10.
