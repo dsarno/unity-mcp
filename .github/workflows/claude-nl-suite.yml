@@ -625,6 +625,7 @@ jobs:
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
+          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-nl.md
         with:
           prompt: |
             ${{ steps.nl_prompt.outputs.content }}
@@ -691,6 +692,7 @@ jobs:
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
+          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-nl-retry.md
         with:
           prompt: |
             ${{ steps.nl_prompt.outputs.content }}
@@ -726,6 +728,7 @@ jobs:
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
+          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-t.md
         with:
           prompt: |
             ${{ steps.t_prompt.outputs.content }}
@@ -772,6 +775,8 @@ jobs:
       - name: Retry T pass (Sonnet) if incomplete
         if: steps.t_cov.outputs.missing != '0'
         uses: anthropics/claude-code-action@v1
+        env:
+          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-t-retry.md
         with:
           prompt: |
             ${{ steps.t_prompt.outputs.content }}
@@ -826,6 +831,7 @@ jobs:
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
+          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-go.md
         with:
           prompt: |
             ${{ steps.go_prompt.outputs.content }}
@@ -869,6 +875,8 @@ jobs:
       - name: Retry GO pass (Sonnet) if incomplete
         if: steps.go_cov.outputs.missing != '0'
         uses: anthropics/claude-code-action@v1
+        env:
+          GITHUB_STEP_SUMMARY: ${{ github.workspace }}/reports/claude-step-summary-go-retry.md
         with:
           prompt: |
             ${{ steps.go_prompt.outputs.content }}
@@ -1607,6 +1615,7 @@ jobs:
             ${{ env.JUNIT_OUT }}
             ${{ env.MD_OUT }}
             reports/*_results.xml
+            reports/claude-step-summary-*.md
             reports/claude-execution-output.json
             ${{ github.workspace }}/.unity-mcp/mcp-server-startup-debug.log
           retention-days: 7
