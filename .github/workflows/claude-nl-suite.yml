@@ -552,7 +552,10 @@ jobs:
             sleep 2
           done
 
-      - name: Verify MCP Unity instance and Claude args
+      # ---------- Readiness diagnostics (only if preflight fails) ----------
+      - name: Readiness diagnostics (on preflight failure)
+        if: failure()
+        continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
         run: |
@@ -565,76 +568,17 @@ jobs:
             export UNITY_MCP_DEFAULT_INSTANCE
           fi
 
-          # Debug: check what PortDiscovery sees
-          echo "--- PortDiscovery debug ---"
-          python3 - <<'PY'
-          import sys
-          sys.path.insert(0, "Server/src")
-          from transport.legacy.port_discovery import PortDiscovery
-          import json
-
-          print(f"status_dir: {PortDiscovery.get_registry_dir()}")
-          instances = PortDiscovery.discover_all_unity_instances()
-          print(f"discover_all_unity_instances: {[{'id':i.id,'port':i.port} for i in instances]}")
-          print(f"try_probe_direct(6400): {PortDiscovery._try_probe_unity_mcp(6400)}")
-          print(f"discover_unity_port: {PortDiscovery.discover_unity_port()}")
-          PY
-
-          python3 - <<'PY'
-          import json
-          import subprocess
-          cmd = [
-              "uv", "run", "--active", "--directory", "Server", "python", "-c",
-              "from transport.legacy.stdio_port_registry import stdio_port_registry; "
-              "inst = stdio_port_registry.get_instances(force_refresh=True); "
-              "import json; print(json.dumps([{'id':i.id,'port':i.port} for i in inst]))"
-          ]
-          result = subprocess.run(cmd, capture_output=True, text=True)
-          print(result.stdout.strip())
-          if result.returncode != 0:
-              print(result.stderr)
-              raise SystemExit(1)
-          try:
-              data = json.loads(result.stdout.strip() or "[]")
-              if not data:
-                  print("::error::No Unity instances discovered by MCP registry")
-                  raise SystemExit(1)
-          except Exception as e:
-              print(f"::error::Failed to parse instances: {e}")
-              raise SystemExit(1)
-          PY
-
-          echo "=== Testing MCP server startup with --status-dir flag ==="
-          uv run --active --directory Server python <<'PYTEST'
-          import os
-          import sys
-          import glob
-          sys.path.insert(0, 'src')
-          from transport.legacy.port_discovery import PortDiscovery
-          status_dir = PortDiscovery.get_registry_dir()
-          print('Status dir:', status_dir)
-          print('Exists:', status_dir.exists())
-          pattern = str(status_dir / 'unity-mcp-status-*.json')
-          files = glob.glob(pattern)
-          print('Files:', files)
-          instances = PortDiscovery.discover_all_unity_instances()
-          print('Instances:', [i.id for i in instances])
-          if not instances:
-              print('::error::Discovery returned empty list!')
-              sys.exit(1)
-          PYTEST
-
-      # ---------- Final Unity check before Claude ----------
-      - name: Verify Unity IMMEDIATELY before Claude
-        run: |
-          set -euxo pipefail
           echo "=== Unity container status ==="
-          docker inspect -f '{{.State.Status}} {{.State.Running}}' unity-mcp || echo "Container not found!"
+          docker inspect -f '{{.State.Status}} {{.State.Running}} {{.State.ExitCode}}' unity-mcp || true
+          echo "=== Unity container logs (tail 200) ==="
+          docker logs unity-mcp --tail 200 | sed -E 's/((email|serial|license|password|token)[^[:space:]]*)/[REDACTED]/ig' || true
 
-          echo "=== Raw socket probe to Unity ==="
-          # Try raw TCP connect without Python overhead
+          echo "=== Status directory ==="
+          ls -la "$GITHUB_WORKSPACE/.unity-mcp" || true
+          jq -r . "$GITHUB_WORKSPACE"/.unity-mcp/unity-mcp-status-*.json | sed -n '1,120p' || true
+
+          echo "=== Raw TCP probe to 6400 ==="
           for host in 127.0.0.1 localhost; do
-            echo "Probing $host:6400..."
             if timeout 2 bash -c "exec 3<>/dev/tcp/$host/6400" 2>/dev/null; then
               echo "$host:6400 - SUCCESS"
             else
@@ -642,21 +586,28 @@ jobs:
             fi
           done
 
-          echo "=== Netstat for port 6400 ==="
-          docker exec unity-mcp netstat -tlnp 2>/dev/null | grep 6400 || ss -tlnp | grep 6400 || echo "No listener found on 6400"
+          echo "--- PortDiscovery debug ---"
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, "Server/src")
+          from transport.legacy.port_discovery import PortDiscovery
 
-          echo "=== Python probe with timing ==="
-          python3 <<'PY'
-          import socket, time
-          start = time.time()
-          for host in ['127.0.0.1', 'localhost']:
-              try:
-                  s = socket.create_connection((host, 6400), timeout=2)
-                  s.close()
-                  print(f"{host}:6400 OK ({time.time()-start:.2f}s)")
-              except Exception as e:
-                  print(f"{host}:6400 FAILED: {e} ({time.time()-start:.2f}s)")
+          print(f"status_dir: {PortDiscovery.get_registry_dir()}")
+          instances = PortDiscovery.discover_all_unity_instances()
+          print(f"discover_all_unity_instances: {[{'id': i.id, 'port': i.port} for i in instances]}")
+          print(f"discover_unity_port: {PortDiscovery.discover_unity_port()}")
           PY
+
+          echo "--- Stdio registry debug ---"
+          uv run --active --directory Server python - <<'PY'
+          from transport.legacy.stdio_port_registry import stdio_port_registry
+          import json
+          instances = stdio_port_registry.get_instances(force_refresh=True)
+          print(json.dumps([{"id": i.id, "port": i.port} for i in instances]))
+          PY
+
+          echo "=== MCP startup debug log ==="
+          cat "$GITHUB_WORKSPACE/.unity-mcp/mcp-server-startup-debug.log" 2>/dev/null || echo "(no startup debug log)"
 
       # ---------- Run suite in two passes ----------
       - name: Load NL prompt
