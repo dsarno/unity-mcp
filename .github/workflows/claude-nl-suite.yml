@@ -1388,7 +1388,7 @@ jobs:
               lines.append(f"- [x] {label}" if st is True else (f"- [ ] {label} (fail)" if st is False else f"- [ ] {label} (not run)"))
           lines.append('')
 
-          lines.append('## Test Details')
+          lines.append('## Test Details (trimmed)')
 
           def order_key(n: str):
               if n.startswith('NL-'):
@@ -1405,7 +1405,8 @@ jobs:
                       return (2, 999)
               return (3, n)
 
-          MAX_CHARS = 2000
+          MAX_CHARS = 800
+          MAX_LINES = 8
           seen = set()
           for tid in sorted(id_status.keys(), key=order_key):
               seen.add(tid)
@@ -1419,8 +1420,16 @@ jobs:
               text = '' if so is None or so.text is None else html.unescape(so.text.replace('\r\n','\n'))
               if text.strip():
                   t = text.strip()
+                  truncated = False
+                  lines_out = t.splitlines()
+                  if len(lines_out) > MAX_LINES:
+                      t = "\n".join(lines_out[:MAX_LINES]).rstrip()
+                      truncated = True
                   if len(t) > MAX_CHARS:
-                      t = t[:MAX_CHARS] + "\n…(truncated)"
+                      t = t[:MAX_CHARS].rstrip()
+                      truncated = True
+                  if truncated:
+                      t += "\n…(truncated)"
                   fence = '```' if '```' not in t else '````'
                   lines += [fence, t, fence]
               else:
@@ -1571,9 +1580,13 @@ jobs:
         uses: mikepenz/action-junit-report@v5
         with:
           report_paths: "${{ env.JUNIT_OUT }}"
-          include_passed: true
-          detailed_summary: true
-          annotate_notice: true
+          include_passed: false
+          detailed_summary: false
+          annotate_notice: false
+          check_annotations: false
+          job_summary: false
+          verbose_summary: false
+          skip_success_summary: true
           require_tests: false
           fail_on_parse_error: true
 
