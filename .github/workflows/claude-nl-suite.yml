@@ -641,6 +641,8 @@ jobs:
             --disallowedTools Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
             --model claude-haiku-4-5-20251001
             --fallback-model claude-sonnet-4-5-20250929
+          track_progress: false
+          show_full_output: true
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Debug MCP server startup (after NL pass)
@@ -705,6 +707,8 @@ jobs:
             --disallowedTools Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
             --model claude-sonnet-4-5-20250929
             --fallback-model claude-haiku-4-5-20251001
+          track_progress: false
+          show_full_output: true
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Load T prompt
@@ -742,6 +746,8 @@ jobs:
             --disallowedTools Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
             --model claude-haiku-4-5-20251001
             --fallback-model claude-sonnet-4-5-20250929
+          track_progress: false
+          show_full_output: true
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       # (moved) Assert T coverage after staged fragments are promoted
@@ -786,6 +792,8 @@ jobs:
             --disallowedTools Bash,MultiEdit(/!(reports/**)),WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
             --model claude-sonnet-4-5-20250929
             --fallback-model claude-haiku-4-5-20251001
+          track_progress: false
+          show_full_output: true
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Re-assert T coverage (post-retry)
@@ -837,6 +845,8 @@ jobs:
             --disallowedTools Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
             --model claude-haiku-4-5-20251001
             --fallback-model claude-sonnet-4-5-20250929
+          track_progress: false
+          show_full_output: true
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Check GO coverage incomplete (pre-retry)
@@ -878,6 +888,8 @@ jobs:
             --disallowedTools Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
             --model claude-sonnet-4-5-20250929
             --fallback-model claude-haiku-4-5-20251001
+          track_progress: false
+          show_full_output: true
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       # (kept) Finalize staged report fragments (promote to reports/)
