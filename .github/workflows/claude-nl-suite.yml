@@ -635,28 +635,37 @@ jobs:
           PY
 
       # ---------- Run suite in two passes ----------
+      - name: Load NL prompt
+        id: nl_prompt
+        if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
+        run: |
+          PROMPT_CONTENT=$(cat .claude/prompts/nl-unity-suite-nl.md)
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$PROMPT_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Run Claude NL pass
-        uses: anthropics/claude-code-base-action@beta
+        uses: anthropics/claude-code-action@v1
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
         with:
-          use_node_cache: false
-          prompt_file: .claude/prompts/nl-unity-suite-nl.md
-          mcp_config: .claude/mcp.json
-          settings: .claude/settings.json
-          allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
-          disallowed_tools: "Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: claude-haiku-4-5-20251001
-          fallback_model: claude-sonnet-4-5-20250929
-          append_system_prompt: |
+          prompt: |
+            ${{ steps.nl_prompt.outputs.content }}
+            
             You are running the NL pass only.
             - Emit exactly NL-0, NL-1, NL-2, NL-3, NL-4.
             - Write each to reports/${ID}_results.xml.
             - Prefer a single MultiEdit(reports/**) batch. Do not emit any T-* tests.
             - Stop after NL-4_results.xml is written.
-          timeout_minutes: "30"
+          settings: .claude/settings.json
+          claude_args: |
+            --mcp-config .claude/mcp.json
+            --allowedTools mcp__unity,Edit(reports/**),MultiEdit(reports/**)
+            --disallowedTools Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
+            --model claude-haiku-4-5-20251001
+            --fallback-model claude-sonnet-4-5-20250929
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Debug MCP server startup (after NL pass)
@@ -669,22 +678,25 @@ jobs:
           echo "=== Status dir after Claude ==="
           ls -la "$GITHUB_WORKSPACE/.unity-mcp" || true
 
+      - name: Load T prompt
+        id: t_prompt
+        if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
+        run: |
+          PROMPT_CONTENT=$(cat .claude/prompts/nl-unity-suite-t.md)
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$PROMPT_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Run Claude T pass A-J
-        uses: anthropics/claude-code-base-action@beta
+        uses: anthropics/claude-code-action@v1
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
         with:
-          use_node_cache: false
-          prompt_file: .claude/prompts/nl-unity-suite-t.md
-          mcp_config: .claude/mcp.json
-          settings: .claude/settings.json
-          allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
-          disallowed_tools: "Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: claude-haiku-4-5-20251001
-          fallback_model: claude-sonnet-4-5-20250929
-          append_system_prompt: |
+          prompt: |
+            ${{ steps.t_prompt.outputs.content }}
+            
             You are running the T pass (A–J) only.
             Output requirements:
             - Emit exactly 10 test fragments: T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
@@ -694,7 +706,13 @@ jobs:
             - Do not emit any NL-* fragments.
             Stop condition:
             - After T-J_results.xml is written, stop.
-          timeout_minutes: "30"
+          settings: .claude/settings.json
+          claude_args: |
+            --mcp-config .claude/mcp.json
+            --allowedTools mcp__unity,Edit(reports/**),MultiEdit(reports/**)
+            --disallowedTools Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
+            --model claude-haiku-4-5-20251001
+            --fallback-model claude-sonnet-4-5-20250929
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       # (moved) Assert T coverage after staged fragments are promoted
@@ -718,17 +736,11 @@ jobs:
 
       - name: Retry T pass (Sonnet) if incomplete
         if: steps.t_cov.outputs.missing != '0'
-        uses: anthropics/claude-code-base-action@beta
+        uses: anthropics/claude-code-action@v1
         with:
-          use_node_cache: false
-          prompt_file: .claude/prompts/nl-unity-suite-t.md
-          mcp_config: .claude/mcp.json
-          settings: .claude/settings.json
-          allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
-          disallowed_tools: "Bash,MultiEdit(/!(reports/**)),WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: claude-sonnet-4-5-20250929
-          fallback_model: claude-haiku-4-5-20251001
-          append_system_prompt: |
+          prompt: |
+            ${{ steps.t_prompt.outputs.content }}
+            
             You are running the T pass only.
             Output requirements:
             - Emit exactly 10 test fragments: T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
@@ -738,7 +750,13 @@ jobs:
             - Do not emit any NL-* fragments.
             Stop condition:
             - After T-J_results.xml is written, stop.
-          timeout_minutes: "30"
+          settings: .claude/settings.json
+          claude_args: |
+            --mcp-config .claude/mcp.json
+            --allowedTools mcp__unity,Edit(reports/**),MultiEdit(reports/**)
+            --disallowedTools Bash,MultiEdit(/!(reports/**)),WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
+            --model claude-sonnet-4-5-20250929
+            --fallback-model claude-haiku-4-5-20251001
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Re-assert T coverage (post-retry)
@@ -756,22 +774,25 @@ jobs:
           fi
 
       # ---------- Run GO pass (GameObject API tests) ----------
+      - name: Load GO prompt
+        id: go_prompt
+        if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
+        run: |
+          PROMPT_CONTENT=$(cat .claude/prompts/nl-gameobject-suite.md)
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$PROMPT_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Run Claude GO pass
-        uses: anthropics/claude-code-base-action@beta
+        uses: anthropics/claude-code-action@v1
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
         with:
-          use_node_cache: false
-          prompt_file: .claude/prompts/nl-gameobject-suite.md
-          mcp_config: .claude/mcp.json
-          settings: .claude/settings.json
-          allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
-          disallowed_tools: "Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: claude-haiku-4-5-20251001
-          fallback_model: claude-sonnet-4-5-20250929
-          append_system_prompt: |
+          prompt: |
+            ${{ steps.go_prompt.outputs.content }}
+            
             You are running the GO pass (GameObject API tests) only.
             Output requirements:
             - Emit exactly 11 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10.
@@ -780,7 +801,13 @@ jobs:
             - Do not emit any NL-* or T-* fragments.
             Stop condition:
             - After GO-10_results.xml is written, stop.
-          timeout_minutes: "20"
+          settings: .claude/settings.json
+          claude_args: |
+            --mcp-config .claude/mcp.json
+            --allowedTools mcp__unity,Edit(reports/**),MultiEdit(reports/**)
+            --disallowedTools Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
+            --model claude-haiku-4-5-20251001
+            --fallback-model claude-sonnet-4-5-20250929
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Check GO coverage incomplete (pre-retry)
@@ -802,17 +829,11 @@ jobs:
 
       - name: Retry GO pass (Sonnet) if incomplete
         if: steps.go_cov.outputs.missing != '0'
-        uses: anthropics/claude-code-base-action@beta
+        uses: anthropics/claude-code-action@v1
         with:
-          use_node_cache: false
-          prompt_file: .claude/prompts/nl-gameobject-suite.md
-          mcp_config: .claude/mcp.json
-          settings: .claude/settings.json
-          allowed_tools: "mcp__unity,Edit(reports/**),MultiEdit(reports/**)"
-          disallowed_tools: "Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead"
-          model: claude-sonnet-4-5-20250929
-          fallback_model: claude-haiku-4-5-20251001
-          append_system_prompt: |
+          prompt: |
+            ${{ steps.go_prompt.outputs.content }}
+            
             You are running the GO pass only.
             Output requirements:
             - Emit exactly 11 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10.
@@ -821,7 +842,13 @@ jobs:
             - Do not emit any NL-* or T-* fragments.
             Stop condition:
             - After GO-10_results.xml is written, stop.
-          timeout_minutes: "20"
+          settings: .claude/settings.json
+          claude_args: |
+            --mcp-config .claude/mcp.json
+            --allowedTools mcp__unity,Edit(reports/**),MultiEdit(reports/**)
+            --disallowedTools Bash,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit,NotebookRead
+            --model claude-sonnet-4-5-20250929
+            --fallback-model claude-haiku-4-5-20251001
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       # (kept) Finalize staged report fragments (promote to reports/)
