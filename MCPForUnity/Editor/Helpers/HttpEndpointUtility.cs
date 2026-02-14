@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Models;
 using MCPForUnity.Editor.Services;
@@ -175,10 +176,17 @@ namespace MCPForUnity.Editor.Helpers
             }
 
             string normalized = host.Trim().Trim('[', ']').ToLowerInvariant();
-            return normalized == "localhost"
-                   || normalized == "127.0.0.1"
-                   || normalized == "::1"
-                   || normalized == "0:0:0:0:0:0:0:1";
+            if (normalized == "localhost")
+            {
+                return true;
+            }
+
+            if (IPAddress.TryParse(normalized, out IPAddress parsedIp))
+            {
+                return IPAddress.IsLoopback(parsedIp);
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -192,9 +200,12 @@ namespace MCPForUnity.Editor.Helpers
             }
 
             string normalized = host.Trim().Trim('[', ']').ToLowerInvariant();
-            return normalized == "0.0.0.0"
-                   || normalized == "::"
-                   || normalized == "0:0:0:0:0:0:0:0";
+            if (IPAddress.TryParse(normalized, out IPAddress parsedIp))
+            {
+                return parsedIp.Equals(IPAddress.Any) || parsedIp.Equals(IPAddress.IPv6Any);
+            }
+
+            return false;
         }
 
         /// <summary>

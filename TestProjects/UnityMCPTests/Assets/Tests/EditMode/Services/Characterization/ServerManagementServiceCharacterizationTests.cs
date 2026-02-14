@@ -107,6 +107,20 @@ namespace MCPForUnityTests.Editor.Services.Characterization
         }
 
         [Test]
+        public void IsLocalUrl_127002_ReturnsTrue()
+        {
+            // Arrange
+            EditorPrefs.SetString(EditorPrefKeys.HttpBaseUrl, "http://127.0.0.2:8080");
+            _service = new ServerManagementService();
+
+            // Act
+            bool result = _service.IsLocalUrl();
+
+            // Assert
+            Assert.IsTrue(result, "127.0.0.2 should be recognized as loopback local URL");
+        }
+
+        [Test]
         public void IsLocalUrl_0000_ReturnsTrue()
         {
             // Arrange

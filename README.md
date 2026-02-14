@@ -207,7 +207,7 @@ Anonymous, privacy-focused telemetry (no code, no project names, no personal dat
 
 Network defaults are intentionally fail-closed:
 * **HTTP Local** allows loopback-only hosts by default (`127.0.0.1`, `localhost`, `::1`).
-* Bind-all interfaces (`0.0.0.0`, `::`) requires explicit opt-in in **Advanced Settings** via **Allow LAN Bind (HTTP Local)**.
+* Bind-all interfaces (`0.0.0.0`, `::`) require explicit opt-in in **Advanced Settings** via **Allow LAN Bind (HTTP Local)**.
 * **HTTP Remote** requires `https://` by default.
 * Plaintext `http://` for remote endpoints requires explicit opt-in via **Allow Insecure Remote HTTP**.
 </details>

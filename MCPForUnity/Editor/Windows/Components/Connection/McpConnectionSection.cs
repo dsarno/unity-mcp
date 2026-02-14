@@ -404,9 +404,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                     bool httpLocalSelected = IsHttpLocalSelected();
                     string localUrlError = null;
                     bool localUrlAllowed = !httpLocalSelected
-                        || HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(
-                            HttpEndpointUtility.GetLocalBaseUrl(),
-                            out localUrlError);
+                        || TryGetLocalHttpLaunchPolicy(out _, out localUrlError);
 
                     bool blockedByRemoteUrlPolicy = httpRemoteSelected && !remoteUrlAllowed;
                     bool blockedByLocalUrlPolicy = httpLocalSelected && !localUrlAllowed;
@@ -453,8 +451,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
 
             bool useHttp = transportDropdown != null && (TransportProtocol)transportDropdown.value != TransportProtocol.Stdio;
             bool httpLocalSelected = IsHttpLocalSelected();
-            string localBaseUrl = HttpEndpointUtility.GetLocalBaseUrl();
-            bool isLocalHttpUrlAllowed = HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(localBaseUrl, out string localUrlError);
+            bool isLocalHttpUrlAllowed = TryGetLocalHttpLaunchPolicy(out _, out string localUrlError);
 
             // Only show the local-server helper UI when HTTP Local is selected.
             if (!useHttp || !httpLocalSelected)
@@ -551,6 +548,12 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             return transportDropdown != null && (TransportProtocol)transportDropdown.value == TransportProtocol.HTTPLocal;
         }
 
+        private bool TryGetLocalHttpLaunchPolicy(out string localBaseUrl, out string localUrlError)
+        {
+            localBaseUrl = HttpEndpointUtility.GetLocalBaseUrl();
+            return HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(localBaseUrl, out localUrlError);
+        }
+
         private void SyncUrlFieldToScope()
         {
             if (httpUrlField == null) return;
@@ -572,8 +575,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             }
 
             bool httpLocalSelected = IsHttpLocalSelected();
-            string localBaseUrl = HttpEndpointUtility.GetLocalBaseUrl();
-            bool localUrlAllowedForLaunch = HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(localBaseUrl, out string localUrlError);
+            bool localUrlAllowedForLaunch = TryGetLocalHttpLaunchPolicy(out _, out string localUrlError);
             bool canStartLocalServer = httpLocalSelected && localUrlAllowedForLaunch;
             bool localServerRunning = false;
 
@@ -645,9 +647,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
                     // Start Server: launch the local HTTP server.
                     // When WE start the server, auto-start our session (we clearly want to use it).
                     // This differs from detecting an already-running server, where we require manual session start.
-                    if (!HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(
-                            HttpEndpointUtility.GetLocalBaseUrl(),
-                            out string localPolicyError))
+                    if (!TryGetLocalHttpLaunchPolicy(out _, out string localPolicyError))
                     {
                         string errorMsg = localPolicyError ?? "HTTP Local URL is blocked by current security settings.";
                         EditorUtility.DisplayDialog("Cannot Start HTTP Server", errorMsg, "OK");
@@ -802,9 +802,7 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
 
                     bool httpLocalSelected = IsHttpLocalSelected();
                     if (httpLocalSelected
-                        && !HttpEndpointUtility.IsHttpLocalUrlAllowedForLaunch(
-                            HttpEndpointUtility.GetLocalBaseUrl(),
-                            out string localPolicyError))
+                        && !TryGetLocalHttpLaunchPolicy(out _, out string localPolicyError))
                     {
                         string errorMsg = localPolicyError ?? "HTTP Local URL is blocked by current security settings.";
                         EditorUtility.DisplayDialog("Connection Blocked", errorMsg, "OK");
