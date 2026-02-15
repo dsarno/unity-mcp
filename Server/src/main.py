@@ -394,63 +394,83 @@ def create_mcp_server(project_scoped_tools: bool) -> FastMCP:
                             session_details = details
                             break
 
-                    # If a specific unity_instance was requested but not found, return an error
-                    if not session_id:
+                # If a specific unity_instance was requested but not found, return an error
+                # (Check done here so execute_custom_tool can also validate the instance)
+                if unity_instance and not session_id:
+                    return JSONResponse(
+                        {
+                            "success": False,
+                            "error": f"Unity instance '{unity_instance}' not found",
+                        },
+                        status_code=404,
+                    )
+
+                # If no specific unity_instance requested, use first available session
+                # (Must be done before execute_custom_tool check so all command types benefit)
+                if not session_id:
+                    try:
+                        session_id = next(iter(sessions.sessions.keys()))
+                        session_details = sessions.sessions.get(session_id)
+                    except StopIteration:
+                        # No sessions available - sessions.sessions is empty
+                        # This should not happen since we checked at line 378, but handle gracefully
+                        return JSONResponse({
+                            "success": False,
+                            "error": "No Unity instances connected. Make sure Unity is running with MCP plugin."
+                        }, status_code=503)
+
+                # Custom tool execution - must be checked BEFORE the final PluginHub.send_command call
+                # This applies to both cases: with or without explicit unity_instance
+                if command_type == "execute_custom_tool":
+                    # session_id and session_details are already set above
+                    if not session_id or not session_details:
                         return JSONResponse(
-                            {
-                                "success": False,
-                                "error": f"Unity instance '{unity_instance}' not found",
-                            },
-                            status_code=404,
+                            {"success": False,
+                                "error": "No valid Unity session available for custom tool execution"},
+                            status_code=503,
                         )
-                else:
-                    # No specific unity_instance requested: use first available session
-                    session_id = next(iter(sessions.sessions.keys()))
-                    session_details = sessions.sessions.get(session_id)
+                    tool_name = None
+                    tool_params = {}
+                    if isinstance(params, dict):
+                        tool_name = params.get(
+                            "tool_name") or params.get("name")
+                        tool_params = params.get(
+                            "parameters") or params.get("params") or {}
 
-                    if command_type == "execute_custom_tool":
-                        tool_name = None
+                    if not tool_name:
+                        return JSONResponse(
+                            {"success": False,
+                                "error": "Missing 'tool_name' for execute_custom_tool"},
+                            status_code=400,
+                        )
+                    if tool_params is None:
                         tool_params = {}
-                        if isinstance(params, dict):
-                            tool_name = params.get(
-                                "tool_name") or params.get("name")
-                            tool_params = params.get(
-                                "parameters") or params.get("params") or {}
-
-                        if not tool_name:
-                            return JSONResponse(
-                                {"success": False,
-                                    "error": "Missing 'tool_name' for execute_custom_tool"},
-                                status_code=400,
-                            )
-                        if tool_params is None:
-                            tool_params = {}
-                        if not isinstance(tool_params, dict):
-                            return JSONResponse(
-                                {"success": False,
-                                    "error": "Tool parameters must be an object/dict"},
-                                status_code=400,
-                            )
-
-                        # Prefer a concrete hash for project-scoped tools.
-                        unity_instance_hint = unity_instance
-                        if session_details and session_details.hash:
-                            unity_instance_hint = session_details.hash
-
-                        project_id = resolve_project_id_for_unity_instance(
-                            unity_instance_hint)
-                        if not project_id:
-                            return JSONResponse(
-                                {"success": False,
-                                    "error": "Could not resolve project id for custom tool"},
-                                status_code=400,
-                            )
-
-                        service = CustomToolService.get_instance()
-                        result = await service.execute_tool(
-                            project_id, tool_name, unity_instance_hint, tool_params
+                    if not isinstance(tool_params, dict):
+                        return JSONResponse(
+                            {"success": False,
+                                "error": "Tool parameters must be an object/dict"},
+                            status_code=400,
                         )
-                        return JSONResponse(result.model_dump())
+
+                    # Prefer a concrete hash for project-scoped tools.
+                    unity_instance_hint = unity_instance
+                    if session_details and session_details.hash:
+                        unity_instance_hint = session_details.hash
+
+                    project_id = resolve_project_id_for_unity_instance(
+                        unity_instance_hint)
+                    if not project_id:
+                        return JSONResponse(
+                            {"success": False,
+                                "error": "Could not resolve project id for custom tool"},
+                            status_code=400,
+                        )
+
+                    service = CustomToolService.get_instance()
+                    result = await service.execute_tool(
+                        project_id, tool_name, unity_instance_hint, tool_params
+                    )
+                    return JSONResponse(result.model_dump())
 
                 # Send command to Unity
                 result = await PluginHub.send_command(session_id, command_type, params)
@@ -590,7 +610,7 @@ Environment Variables:
   UNITY_MCP_SKIP_STARTUP_CONNECT   Skip initial Unity connection attempt (set to 1/true/yes/on)
   UNITY_MCP_TELEMETRY_ENABLED   Enable telemetry (set to 1/true/yes/on)
   UNITY_MCP_TRANSPORT   Transport protocol: stdio or http (default: stdio)
-  UNITY_MCP_HTTP_URL   HTTP server URL (default: http://localhost:8080)
+  UNITY_MCP_HTTP_URL   HTTP server URL (default: http://127.0.0.1:8080)
   UNITY_MCP_HTTP_HOST   HTTP server host (overrides URL host)
   UNITY_MCP_HTTP_PORT   HTTP server port (overrides URL port)
 
@@ -599,7 +619,7 @@ Examples:
   python -m src.server --default-instance "MyProject"
 
   # Start with HTTP transport
-  python -m src.server --transport http --http-url http://localhost:8080
+  python -m src.server --transport http --http-url http://127.0.0.1:8080
 
   # Start with stdio transport (default)
   python -m src.server --transport stdio
@@ -626,9 +646,9 @@ Examples:
     parser.add_argument(
         "--http-url",
         type=str,
-        default="http://localhost:8080",
+        default="http://127.0.0.1:8080",
         metavar="URL",
-        help="HTTP server URL (default: http://localhost:8080). "
+        help="HTTP server URL (default: http://127.0.0.1:8080). "
              "Can also set via UNITY_MCP_HTTP_URL environment variable."
     )
     parser.add_argument(
@@ -779,7 +799,7 @@ Examples:
 
     # Allow individual host/port to override URL components
     http_host = args.http_host or os.environ.get(
-        "UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "localhost"
+        "UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "127.0.0.1"
 
     # Safely parse optional environment port (may be None or non-numeric)
     _env_port_str = os.environ.get("UNITY_MCP_HTTP_PORT")
@@ -809,7 +829,7 @@ Examples:
             logger.warning(
                 "Failed to write pidfile '%s': %s", args.pidfile, exc)
 
-    if args.http_url != "http://localhost:8080":
+    if args.http_url != "http://127.0.0.1:8080":
         logger.info(f"HTTP URL set to: {http_url}")
     if args.http_host:
         logger.info(f"HTTP host override: {http_host}")
@@ -830,7 +850,7 @@ Examples:
         http_url = os.environ.get("UNITY_MCP_HTTP_URL", args.http_url)
         parsed_url = urlparse(http_url)
         host = args.http_host or os.environ.get(
-            "UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "localhost"
+            "UNITY_MCP_HTTP_HOST") or parsed_url.hostname or "127.0.0.1"
         port = args.http_port or _env_port or parsed_url.port or 8080
         logger.info(f"Starting FastMCP with HTTP transport on {host}:{port}")
         mcp.run(transport=transport, host=host, port=port)
