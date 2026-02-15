@@ -614,10 +614,25 @@ jobs:
         id: nl_prompt
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         run: |
-          PROMPT_CONTENT=$(cat .claude/prompts/nl-unity-suite-nl.md)
-          echo "content<<EOF" >> $GITHUB_OUTPUT
-          echo "$PROMPT_CONTENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          cp .claude/prompts/nl-unity-suite-nl.md .claude/prompts/nl-unity-suite-nl-run.md
+          cat >> .claude/prompts/nl-unity-suite-nl-run.md <<'EOF'
+
+          You are running the NL pass only.
+          - Emit exactly NL-0, NL-1, NL-2, NL-3, NL-4.
+          - Write each to reports/${ID}_results.xml.
+          - Prefer a single MultiEdit(reports/**) batch. Do not emit any T-* tests.
+          - Stop after NL-4_results.xml is written.
+          EOF
+          cp .claude/prompts/nl-unity-suite-nl.md .claude/prompts/nl-unity-suite-nl-retry.md
+          cat >> .claude/prompts/nl-unity-suite-nl-retry.md <<'EOF'
+
+          You are retrying the NL pass only.
+          - Emit exactly NL-0, NL-1, NL-2, NL-3, NL-4.
+          - Overwrite reports/${ID}_results.xml for each ID.
+          - Do not emit any T-* or GO-* tests.
+          - Stop after NL-4_results.xml is written.
+          EOF
 
       - name: Run Claude NL pass
         uses: anthropics/claude-code-action@v1
@@ -626,15 +641,9 @@ jobs:
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
           GITHUB_STEP_SUMMARY: /dev/null
+          INPUT_PROMPT_FILE: ${{ github.workspace }}/.claude/prompts/nl-unity-suite-nl-run.md
         with:
-          prompt: |
-            ${{ steps.nl_prompt.outputs.content }}
-
-            You are running the NL pass only.
-            - Emit exactly NL-0, NL-1, NL-2, NL-3, NL-4.
-            - Write each to reports/${ID}_results.xml.
-            - Prefer a single MultiEdit(reports/**) batch. Do not emit any T-* tests.
-            - Stop after NL-4_results.xml is written.
+          prompt: Execute instructions from INPUT_PROMPT_FILE.
           settings: .claude/settings.json
           claude_args: |
             --mcp-config .claude/mcp.json
@@ -693,15 +702,9 @@ jobs:
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
           GITHUB_STEP_SUMMARY: /dev/null
+          INPUT_PROMPT_FILE: ${{ github.workspace }}/.claude/prompts/nl-unity-suite-nl-retry.md
         with:
-          prompt: |
-            ${{ steps.nl_prompt.outputs.content }}
-
-            You are retrying the NL pass only.
-            - Emit exactly NL-0, NL-1, NL-2, NL-3, NL-4.
-            - Overwrite reports/${ID}_results.xml for each ID.
-            - Do not emit any T-* or GO-* tests.
-            - Stop after NL-4_results.xml is written.
+          prompt: Execute instructions from INPUT_PROMPT_FILE.
           settings: .claude/settings.json
           claude_args: |
             --mcp-config .claude/mcp.json
@@ -717,10 +720,33 @@ jobs:
         id: t_prompt
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         run: |
-          PROMPT_CONTENT=$(cat .claude/prompts/nl-unity-suite-t.md)
-          echo "content<<EOF" >> $GITHUB_OUTPUT
-          echo "$PROMPT_CONTENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          cp .claude/prompts/nl-unity-suite-t.md .claude/prompts/nl-unity-suite-t-run.md
+          cat >> .claude/prompts/nl-unity-suite-t-run.md <<'EOF'
+
+          You are running the T pass (A–J) only.
+          Output requirements:
+          - Emit exactly 10 test fragments: T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
+          - Write each fragment to reports/${ID}_results.xml (e.g., T-A_results.xml).
+          - Prefer a single MultiEdit(reports/**) call that writes all ten files in one batch.
+          - If MultiEdit is not used, emit individual writes for any missing IDs until all ten exist.
+          - Do not emit any NL-* fragments.
+          Stop condition:
+          - After T-J_results.xml is written, stop.
+          EOF
+          cp .claude/prompts/nl-unity-suite-t.md .claude/prompts/nl-unity-suite-t-retry.md
+          cat >> .claude/prompts/nl-unity-suite-t-retry.md <<'EOF'
+
+          You are running the T pass only.
+          Output requirements:
+          - Emit exactly 10 test fragments: T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
+          - Write each fragment to reports/${ID}_results.xml (e.g., T-A_results.xml).
+          - Prefer a single MultiEdit(reports/**) call that writes all ten files in one batch.
+          - If MultiEdit is not used, emit individual writes for any missing IDs until all ten exist.
+          - Do not emit any NL-* fragments.
+          Stop condition:
+          - After T-J_results.xml is written, stop.
+          EOF
 
       - name: Run Claude T pass A-J
         uses: anthropics/claude-code-action@v1
@@ -729,19 +755,9 @@ jobs:
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
           GITHUB_STEP_SUMMARY: /dev/null
+          INPUT_PROMPT_FILE: ${{ github.workspace }}/.claude/prompts/nl-unity-suite-t-run.md
         with:
-          prompt: |
-            ${{ steps.t_prompt.outputs.content }}
-
-            You are running the T pass (A–J) only.
-            Output requirements:
-            - Emit exactly 10 test fragments: T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
-            - Write each fragment to reports/${ID}_results.xml (e.g., T-A_results.xml).
-            - Prefer a single MultiEdit(reports/**) call that writes all ten files in one batch.
-            - If MultiEdit is not used, emit individual writes for any missing IDs until all ten exist.
-            - Do not emit any NL-* fragments.
-            Stop condition:
-            - After T-J_results.xml is written, stop.
+          prompt: Execute instructions from INPUT_PROMPT_FILE.
           settings: .claude/settings.json
           claude_args: |
             --mcp-config .claude/mcp.json
@@ -777,19 +793,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         env:
           GITHUB_STEP_SUMMARY: /dev/null
+          INPUT_PROMPT_FILE: ${{ github.workspace }}/.claude/prompts/nl-unity-suite-t-retry.md
         with:
-          prompt: |
-            ${{ steps.t_prompt.outputs.content }}
-
-            You are running the T pass only.
-            Output requirements:
-            - Emit exactly 10 test fragments: T-A, T-B, T-C, T-D, T-E, T-F, T-G, T-H, T-I, T-J.
-            - Write each fragment to reports/${ID}_results.xml (e.g., T-A_results.xml).
-            - Prefer a single MultiEdit(reports/**) call that writes all ten files in one batch.
-            - If MultiEdit is not used, emit individual writes for any missing IDs until all ten exist.
-            - Do not emit any NL-* fragments.
-            Stop condition:
-            - After T-J_results.xml is written, stop.
+          prompt: Execute instructions from INPUT_PROMPT_FILE.
           settings: .claude/settings.json
           claude_args: |
             --mcp-config .claude/mcp.json
@@ -820,10 +826,31 @@ jobs:
         id: go_prompt
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         run: |
-          PROMPT_CONTENT=$(cat .claude/prompts/nl-gameobject-suite.md)
-          echo "content<<EOF" >> $GITHUB_OUTPUT
-          echo "$PROMPT_CONTENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          cp .claude/prompts/nl-gameobject-suite.md .claude/prompts/nl-gameobject-suite-run.md
+          cat >> .claude/prompts/nl-gameobject-suite-run.md <<'EOF'
+
+          You are running the GO pass (GameObject API tests) only.
+          Output requirements:
+          - Emit exactly 11 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10.
+          - Write each fragment to reports/${ID}_results.xml (e.g., GO-0_results.xml).
+          - Prefer a single MultiEdit(reports/**) call that writes all eleven files in one batch.
+          - Do not emit any NL-* or T-* fragments.
+          Stop condition:
+          - After GO-10_results.xml is written, stop.
+          EOF
+          cp .claude/prompts/nl-gameobject-suite.md .claude/prompts/nl-gameobject-suite-retry.md
+          cat >> .claude/prompts/nl-gameobject-suite-retry.md <<'EOF'
+
+          You are running the GO pass only.
+          Output requirements:
+          - Emit exactly 11 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10.
+          - Write each fragment to reports/${ID}_results.xml (e.g., GO-0_results.xml).
+          - Prefer a single MultiEdit(reports/**) call that writes all eleven files in one batch.
+          - Do not emit any NL-* or T-* fragments.
+          Stop condition:
+          - After GO-10_results.xml is written, stop.
+          EOF
 
       - name: Run Claude GO pass
         uses: anthropics/claude-code-action@v1
@@ -832,18 +859,9 @@ jobs:
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
           GITHUB_STEP_SUMMARY: /dev/null
+          INPUT_PROMPT_FILE: ${{ github.workspace }}/.claude/prompts/nl-gameobject-suite-run.md
         with:
-          prompt: |
-            ${{ steps.go_prompt.outputs.content }}
-
-            You are running the GO pass (GameObject API tests) only.
-            Output requirements:
-            - Emit exactly 11 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10.
-            - Write each fragment to reports/${ID}_results.xml (e.g., GO-0_results.xml).
-            - Prefer a single MultiEdit(reports/**) call that writes all eleven files in one batch.
-            - Do not emit any NL-* or T-* fragments.
-            Stop condition:
-            - After GO-10_results.xml is written, stop.
+          prompt: Execute instructions from INPUT_PROMPT_FILE.
           settings: .claude/settings.json
           claude_args: |
             --mcp-config .claude/mcp.json
@@ -877,18 +895,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         env:
           GITHUB_STEP_SUMMARY: /dev/null
+          INPUT_PROMPT_FILE: ${{ github.workspace }}/.claude/prompts/nl-gameobject-suite-retry.md
         with:
-          prompt: |
-            ${{ steps.go_prompt.outputs.content }}
-
-            You are running the GO pass only.
-            Output requirements:
-            - Emit exactly 11 test fragments: GO-0, GO-1, GO-2, GO-3, GO-4, GO-5, GO-6, GO-7, GO-8, GO-9, GO-10.
-            - Write each fragment to reports/${ID}_results.xml (e.g., GO-0_results.xml).
-            - Prefer a single MultiEdit(reports/**) call that writes all eleven files in one batch.
-            - Do not emit any NL-* or T-* fragments.
-            Stop condition:
-            - After GO-10_results.xml is written, stop.
+          prompt: Execute instructions from INPUT_PROMPT_FILE.
           settings: .claude/settings.json
           claude_args: |
             --mcp-config .claude/mcp.json
