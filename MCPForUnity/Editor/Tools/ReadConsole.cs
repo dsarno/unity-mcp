@@ -508,29 +508,6 @@ namespace MCPForUnity.Editor.Tools
         }
 
         /// <summary>
-        /// Applies the "one level lower" remapping for filtering, like the old version.
-        /// This ensures compatibility with the filtering logic that expects remapped types.
-        /// </summary>
-        private static LogType GetRemappedTypeForFiltering(LogType unityType)
-        {
-            switch (unityType)
-            {
-                case LogType.Error:
-                    return LogType.Warning; // Error becomes Warning
-                case LogType.Warning:
-                    return LogType.Log; // Warning becomes Log
-                case LogType.Assert:
-                    return LogType.Assert; // Assert remains Assert
-                case LogType.Log:
-                    return LogType.Log; // Log remains Log
-                case LogType.Exception:
-                    return LogType.Warning; // Exception becomes Warning
-                default:
-                    return LogType.Log; // Default fallback
-            }
-        }
-
-        /// <summary>
         /// Attempts to extract the stack trace part from a log message.
         /// Unity log messages often have the stack trace appended after the main message,
         /// starting on a new line and typically indented or beginning with "at ".
