@@ -635,7 +635,7 @@ jobs:
           EOF
 
       - name: Run Claude NL pass
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@cc5ef44546fda0649ddde3c5ab0cd3db7b7c5035
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         continue-on-error: true
         env:
@@ -653,6 +653,7 @@ jobs:
             --fallback-model claude-sonnet-4-5-20250929
           track_progress: false
           show_full_output: true
+          display_report: false
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Debug MCP server startup (after NL pass)
@@ -697,7 +698,7 @@ jobs:
 
       - name: Retry NL pass (Sonnet) if incomplete or failed
         if: steps.nl_cov.outputs.missing != '0' || steps.nl_cov.outputs.failed != '0'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@cc5ef44546fda0649ddde3c5ab0cd3db7b7c5035
         continue-on-error: true
         env:
           UNITY_MCP_DEFAULT_INSTANCE: ${{ env.UNITY_MCP_DEFAULT_INSTANCE }}
@@ -714,6 +715,7 @@ jobs:
             --fallback-model claude-haiku-4-5-20251001
           track_progress: false
           show_full_output: true
+          display_report: false
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Load T prompt
@@ -749,7 +751,7 @@ jobs:
           EOF
 
       - name: Run Claude T pass A-J
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@cc5ef44546fda0649ddde3c5ab0cd3db7b7c5035
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         continue-on-error: true
         env:
@@ -767,6 +769,7 @@ jobs:
             --fallback-model claude-sonnet-4-5-20250929
           track_progress: false
           show_full_output: true
+          display_report: false
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       # (moved) Assert T coverage after staged fragments are promoted
@@ -790,7 +793,7 @@ jobs:
 
       - name: Retry T pass (Sonnet) if incomplete
         if: steps.t_cov.outputs.missing != '0'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@cc5ef44546fda0649ddde3c5ab0cd3db7b7c5035
         env:
           GITHUB_STEP_SUMMARY: /dev/null
           INPUT_PROMPT_FILE: ${{ github.workspace }}/.claude/prompts/nl-unity-suite-t-retry.md
@@ -805,6 +808,7 @@ jobs:
             --fallback-model claude-haiku-4-5-20251001
           track_progress: false
           show_full_output: true
+          display_report: false
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Re-assert T coverage (post-retry)
@@ -853,7 +857,7 @@ jobs:
           EOF
 
       - name: Run Claude GO pass
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@cc5ef44546fda0649ddde3c5ab0cd3db7b7c5035
         if: steps.detect.outputs.anthropic_ok == 'true' && steps.detect.outputs.unity_ok == 'true'
         continue-on-error: true
         env:
@@ -871,6 +875,7 @@ jobs:
             --fallback-model claude-sonnet-4-5-20250929
           track_progress: false
           show_full_output: true
+          display_report: false
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Check GO coverage incomplete (pre-retry)
@@ -892,7 +897,7 @@ jobs:
 
       - name: Retry GO pass (Sonnet) if incomplete
         if: steps.go_cov.outputs.missing != '0'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@cc5ef44546fda0649ddde3c5ab0cd3db7b7c5035
         env:
           GITHUB_STEP_SUMMARY: /dev/null
           INPUT_PROMPT_FILE: ${{ github.workspace }}/.claude/prompts/nl-gameobject-suite-retry.md
@@ -907,6 +912,7 @@ jobs:
             --fallback-model claude-haiku-4-5-20251001
           track_progress: false
           show_full_output: true
+          display_report: false
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       # (kept) Finalize staged report fragments (promote to reports/)
