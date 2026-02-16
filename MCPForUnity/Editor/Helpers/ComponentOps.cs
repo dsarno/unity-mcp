@@ -515,7 +515,7 @@ namespace MCPForUnity.Editor.Helpers
                         return true;
 
                     case SerializedPropertyType.String:
-                        prop.stringValue = value.Type == JTokenType.Null ? null : value.ToString();
+                        prop.stringValue = value == null || value.Type == JTokenType.Null ? null : value.ToString();
                         return true;
 
                     case SerializedPropertyType.Enum:
