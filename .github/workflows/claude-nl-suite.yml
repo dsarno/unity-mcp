@@ -521,7 +521,7 @@ jobs:
           import json
           import os
           import sys
-          sys.path.insert(0, "Server/src")
+          sys.path.insert(0, "src")
           from transport.legacy.unity_connection import send_command_with_retry
 
           unity_instance = (os.environ.get("UNITY_MCP_DEFAULT_INSTANCE") or "").strip() or None
