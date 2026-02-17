@@ -172,14 +172,26 @@ namespace MCPForUnity.Editor.Tools.GameObjects
 
                 try
                 {
-                    bool setResult = SetProperty(targetComponent, propName, propValue);
+                    bool setResult = SetProperty(targetComponent, propName, propValue, out string setError);
                     if (!setResult)
                     {
-                        var availableProperties = ComponentResolver.GetAllComponentProperties(targetComponent.GetType());
-                        var suggestions = ComponentResolver.GetFuzzyPropertySuggestions(propName, availableProperties);
-                        var msg = suggestions.Any()
-                            ? $"Property '{propName}' not found. Did you mean: {string.Join(", ", suggestions)}? Available: [{string.Join(", ", availableProperties)}]"
-                            : $"Property '{propName}' not found. Available: [{string.Join(", ", availableProperties)}]";
+                        // Local reflection failed — fall back to ComponentOps which
+                        // tries SerializedProperty (handles arrays, UdonSharp, etc.)
+                        if (ComponentOps.SetProperty(targetComponent, propName, propValue, out string opsError))
+                        {
+                            continue;
+                        }
+
+                        // Both paths failed. Prefer the more specific error.
+                        string msg = setError ?? opsError;
+                        if (msg == null || msg.Contains("not found"))
+                        {
+                            var availableProperties = ComponentResolver.GetAllComponentProperties(targetComponent.GetType());
+                            var suggestions = ComponentResolver.GetFuzzyPropertySuggestions(propName, availableProperties);
+                            msg = suggestions.Any()
+                                ? $"Property '{propName}' not found. Did you mean: {string.Join(", ", suggestions)}? Available: [{string.Join(", ", availableProperties)}]"
+                                : $"Property '{propName}' not found. Available: [{string.Join(", ", availableProperties)}]";
+                        }
                         McpLog.Warn($"[ManageGameObject] {msg}");
                         failures.Add(msg);
                     }
@@ -199,8 +211,9 @@ namespace MCPForUnity.Editor.Tools.GameObjects
 
         private static JsonSerializer InputSerializer => UnityJsonSerializer.Instance;
 
-        private static bool SetProperty(object target, string memberName, JToken value)
+        private static bool SetProperty(object target, string memberName, JToken value, out string error)
         {
+            error = null;
             Type type = target.GetType();
             BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
 
@@ -223,39 +236,44 @@ namespace MCPForUnity.Editor.Tools.GameObjects
                         propInfo.SetValue(target, convertedValue);
                         return true;
                     }
+                    error = $"Failed to convert value for property '{memberName}' to type '{propInfo.PropertyType.Name}'.";
+                    return false;
                 }
-                else
+
+                FieldInfo fieldInfo = type.GetField(memberName, flags) ?? type.GetField(normalizedName, flags);
+                if (fieldInfo != null)
                 {
-                    FieldInfo fieldInfo = type.GetField(memberName, flags) ?? type.GetField(normalizedName, flags);
-                    if (fieldInfo != null)
+                    object convertedValue = ConvertJTokenToType(value, fieldInfo.FieldType, inputSerializer);
+                    if (convertedValue != null || value.Type == JTokenType.Null)
                     {
-                        object convertedValue = ConvertJTokenToType(value, fieldInfo.FieldType, inputSerializer);
-                        if (convertedValue != null || value.Type == JTokenType.Null)
-                        {
-                            fieldInfo.SetValue(target, convertedValue);
-                            return true;
-                        }
+                        fieldInfo.SetValue(target, convertedValue);
+                        return true;
                     }
-                    else
+                    error = $"Failed to convert value for field '{memberName}' to type '{fieldInfo.FieldType.Name}'.";
+                    return false;
+                }
+
+                var npField = type.GetField(memberName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase)
+                           ?? type.GetField(normalizedName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (npField != null && npField.GetCustomAttribute<SerializeField>() != null)
+                {
+                    object convertedValue = ConvertJTokenToType(value, npField.FieldType, inputSerializer);
+                    if (convertedValue != null || value.Type == JTokenType.Null)
                     {
-                        var npField = type.GetField(memberName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase)
-                                   ?? type.GetField(normalizedName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
-                        if (npField != null && npField.GetCustomAttribute<SerializeField>() != null)
-                        {
-                            object convertedValue = ConvertJTokenToType(value, npField.FieldType, inputSerializer);
-                            if (convertedValue != null || value.Type == JTokenType.Null)
-                            {
-                                npField.SetValue(target, convertedValue);
-                                return true;
-                            }
-                        }
+                        npField.SetValue(target, convertedValue);
+                        return true;
                     }
+                    error = $"Failed to convert value for serialized field '{memberName}' to type '{npField.FieldType.Name}'.";
+                    return false;
                 }
             }
             catch (Exception ex)
             {
-                McpLog.Error($"[SetProperty] Failed to set '{memberName}' on {type.Name}: {ex.Message}\nToken: {value.ToString(Formatting.None)}");
+                error = $"Failed to set '{memberName}' on {type.Name}: {ex.Message}";
+                return false;
             }
+
+            // Property/field not found — caller will generate "not found" with suggestions
             return false;
         }
 
