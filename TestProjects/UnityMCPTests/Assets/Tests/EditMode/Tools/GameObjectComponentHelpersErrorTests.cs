@@ -38,9 +38,7 @@ namespace MCPForUnityTests.Editor.Tools
         [Test]
         public void SetComponentProperties_ConversionFailure_ReportsConversionError_NotPropertyNotFound()
         {
-            // Expect conversion error logs from PropertyConversion (once from local SetProperty,
-            // once from ComponentOps fallback trying reflection before SerializedProperty)
-            LogAssert.Expect(LogType.Error, new Regex("Error converting token"));
+            // Expect conversion error log from PropertyConversion (ComponentOps reflection attempt)
             LogAssert.Expect(LogType.Error, new Regex("Error converting token"));
             // Expect the warning log from SetComponentPropertiesInternal
             LogAssert.Expect(LogType.Warning, new Regex("Failed to set"));

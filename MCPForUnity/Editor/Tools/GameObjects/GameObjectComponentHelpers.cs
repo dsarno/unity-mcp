@@ -172,18 +172,24 @@ namespace MCPForUnity.Editor.Tools.GameObjects
 
                 try
                 {
-                    bool setResult = SetProperty(targetComponent, propName, propValue, out string setError);
+                    bool setResult;
+                    string setError;
+
+                    // Nested paths (e.g. "transform.position") need local handling
+                    // since ComponentOps doesn't support dot/bracket notation.
+                    if (propName.Contains('.') || propName.Contains('['))
+                    {
+                        setResult = SetNestedProperty(targetComponent, propName, propValue, InputSerializer, out setError);
+                    }
+                    else
+                    {
+                        // ComponentOps handles reflection + SerializedProperty fallback
+                        setResult = ComponentOps.SetProperty(targetComponent, propName, propValue, out setError);
+                    }
+
                     if (!setResult)
                     {
-                        // Local reflection failed — fall back to ComponentOps which
-                        // tries SerializedProperty (handles arrays, UdonSharp, etc.)
-                        if (ComponentOps.SetProperty(targetComponent, propName, propValue, out string opsError))
-                        {
-                            continue;
-                        }
-
-                        // Both paths failed. Prefer the more specific error.
-                        string msg = setError ?? opsError;
+                        string msg = setError;
                         if (msg == null || msg.Contains("not found"))
                         {
                             var availableProperties = ComponentResolver.GetAllComponentProperties(targetComponent.GetType());
@@ -211,79 +217,17 @@ namespace MCPForUnity.Editor.Tools.GameObjects
 
         private static JsonSerializer InputSerializer => UnityJsonSerializer.Instance;
 
-        private static bool SetProperty(object target, string memberName, JToken value, out string error)
+        private static bool SetNestedProperty(object target, string path, JToken value, JsonSerializer inputSerializer, out string error)
         {
             error = null;
-            Type type = target.GetType();
-            BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
-
-            string normalizedName = Helpers.ParamCoercion.NormalizePropertyName(memberName);
-            var inputSerializer = InputSerializer;
-
-            try
-            {
-                if (memberName.Contains('.') || memberName.Contains('['))
-                {
-                    return SetNestedProperty(target, memberName, value, inputSerializer);
-                }
-
-                PropertyInfo propInfo = type.GetProperty(memberName, flags) ?? type.GetProperty(normalizedName, flags);
-                if (propInfo != null && propInfo.CanWrite)
-                {
-                    object convertedValue = ConvertJTokenToType(value, propInfo.PropertyType, inputSerializer);
-                    if (convertedValue != null || value.Type == JTokenType.Null)
-                    {
-                        propInfo.SetValue(target, convertedValue);
-                        return true;
-                    }
-                    error = $"Failed to convert value for property '{memberName}' to type '{propInfo.PropertyType.Name}'.";
-                    return false;
-                }
-
-                FieldInfo fieldInfo = type.GetField(memberName, flags) ?? type.GetField(normalizedName, flags);
-                if (fieldInfo != null)
-                {
-                    object convertedValue = ConvertJTokenToType(value, fieldInfo.FieldType, inputSerializer);
-                    if (convertedValue != null || value.Type == JTokenType.Null)
-                    {
-                        fieldInfo.SetValue(target, convertedValue);
-                        return true;
-                    }
-                    error = $"Failed to convert value for field '{memberName}' to type '{fieldInfo.FieldType.Name}'.";
-                    return false;
-                }
-
-                var npField = type.GetField(memberName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase)
-                           ?? type.GetField(normalizedName, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase);
-                if (npField != null && npField.GetCustomAttribute<SerializeField>() != null)
-                {
-                    object convertedValue = ConvertJTokenToType(value, npField.FieldType, inputSerializer);
-                    if (convertedValue != null || value.Type == JTokenType.Null)
-                    {
-                        npField.SetValue(target, convertedValue);
-                        return true;
-                    }
-                    error = $"Failed to convert value for serialized field '{memberName}' to type '{npField.FieldType.Name}'.";
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                error = $"Failed to set '{memberName}' on {type.Name}: {ex.Message}\nToken: {value.ToString(Formatting.None)}";
-                return false;
-            }
-
-            // Property/field not found — caller will generate "not found" with suggestions
-            return false;
-        }
-
-        private static bool SetNestedProperty(object target, string path, JToken value, JsonSerializer inputSerializer)
-        {
             try
             {
                 string[] pathParts = SplitPropertyPath(path);
                 if (pathParts.Length == 0)
+                {
+                    error = $"Invalid nested property path '{path}'.";
                     return false;
+                }
 
                 object currentObject = target;
                 Type currentType = currentObject.GetType();
@@ -317,7 +261,7 @@ namespace MCPForUnity.Editor.Tools.GameObjects
                         fieldInfo = currentType.GetField(part, flags);
                         if (fieldInfo == null)
                         {
-                            McpLog.Warn($"[SetNestedProperty] Could not find property or field '{part}' on type '{currentType.Name}'");
+                            error = $"Could not find property or field '{part}' on type '{currentType.Name}' in path '{path}'.";
                             return false;
                         }
                     }
@@ -325,7 +269,7 @@ namespace MCPForUnity.Editor.Tools.GameObjects
                     currentObject = propInfo != null ? propInfo.GetValue(currentObject) : fieldInfo.GetValue(currentObject);
                     if (currentObject == null)
                     {
-                        McpLog.Warn($"[SetNestedProperty] Property '{part}' is null, cannot access nested properties.");
+                        error = $"Property '{part}' is null in path '{path}', cannot access nested properties.";
                         return false;
                     }
 
@@ -336,7 +280,7 @@ namespace MCPForUnity.Editor.Tools.GameObjects
                             var materials = currentObject as Material[];
                             if (arrayIndex < 0 || arrayIndex >= materials.Length)
                             {
-                                McpLog.Warn($"[SetNestedProperty] Material index {arrayIndex} out of range (0-{materials.Length - 1})");
+                                error = $"Material index {arrayIndex} out of range (0-{materials.Length - 1}) in path '{path}'.";
                                 return false;
                             }
                             currentObject = materials[arrayIndex];
@@ -346,14 +290,14 @@ namespace MCPForUnity.Editor.Tools.GameObjects
                             var list = currentObject as System.Collections.IList;
                             if (arrayIndex < 0 || arrayIndex >= list.Count)
                             {
-                                McpLog.Warn($"[SetNestedProperty] Index {arrayIndex} out of range (0-{list.Count - 1})");
+                                error = $"Index {arrayIndex} out of range (0-{list.Count - 1}) in path '{path}'.";
                                 return false;
                             }
                             currentObject = list[arrayIndex];
                         }
                         else
                         {
-                            McpLog.Warn($"[SetNestedProperty] Property '{part}' is not an array or list, cannot access by index.");
+                            error = $"Property '{part}' is not an array or list in path '{path}', cannot access by index.";
                             return false;
                         }
                     }
@@ -365,7 +309,12 @@ namespace MCPForUnity.Editor.Tools.GameObjects
 
                 if (currentObject is Material material && finalPart.StartsWith("_"))
                 {
-                    return MaterialOps.TrySetShaderProperty(material, finalPart, value, inputSerializer);
+                    if (!MaterialOps.TrySetShaderProperty(material, finalPart, value, inputSerializer))
+                    {
+                        error = $"Failed to set shader property '{finalPart}' on material '{material.name}' in path '{path}'.";
+                        return false;
+                    }
+                    return true;
                 }
 
                 PropertyInfo finalPropInfo = currentType.GetProperty(finalPart, flags);
@@ -377,24 +326,28 @@ namespace MCPForUnity.Editor.Tools.GameObjects
                         finalPropInfo.SetValue(currentObject, convertedValue);
                         return true;
                     }
+                    error = $"Failed to convert value for '{finalPart}' to type '{finalPropInfo.PropertyType.Name}' in path '{path}'.";
+                    return false;
                 }
-                else
+
+                FieldInfo finalFieldInfo = currentType.GetField(finalPart, flags);
+                if (finalFieldInfo != null)
                 {
-                    FieldInfo finalFieldInfo = currentType.GetField(finalPart, flags);
-                    if (finalFieldInfo != null)
+                    object convertedValue = ConvertJTokenToType(value, finalFieldInfo.FieldType, inputSerializer);
+                    if (convertedValue != null || value.Type == JTokenType.Null)
                     {
-                        object convertedValue = ConvertJTokenToType(value, finalFieldInfo.FieldType, inputSerializer);
-                        if (convertedValue != null || value.Type == JTokenType.Null)
-                        {
-                            finalFieldInfo.SetValue(currentObject, convertedValue);
-                            return true;
-                        }
+                        finalFieldInfo.SetValue(currentObject, convertedValue);
+                        return true;
                     }
+                    error = $"Failed to convert value for '{finalPart}' to type '{finalFieldInfo.FieldType.Name}' in path '{path}'.";
+                    return false;
                 }
+
+                error = $"Property or field '{finalPart}' not found on type '{currentType.Name}' in path '{path}'.";
             }
             catch (Exception ex)
             {
-                McpLog.Error($"[SetNestedProperty] Error setting nested property '{path}': {ex.Message}\nToken: {value.ToString(Formatting.None)}");
+                error = $"Error setting nested property '{path}': {ex.Message}";
             }
 
             return false;
