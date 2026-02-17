@@ -269,7 +269,7 @@ namespace MCPForUnity.Editor.Tools.GameObjects
             }
             catch (Exception ex)
             {
-                error = $"Failed to set '{memberName}' on {type.Name}: {ex.Message}";
+                error = $"Failed to set '{memberName}' on {type.Name}: {ex.Message}\nToken: {value.ToString(Formatting.None)}";
                 return false;
             }
 
