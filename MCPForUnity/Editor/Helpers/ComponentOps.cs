@@ -325,7 +325,7 @@ namespace MCPForUnity.Editor.Helpers
         /// Type.GetField() with NonPublic only returns fields declared directly on that type,
         /// so this method walks up the chain to find inherited private serialized fields.
         /// </summary>
-        private static FieldInfo FindSerializedFieldInHierarchy(Type type, string fieldName)
+        internal static FieldInfo FindSerializedFieldInHierarchy(Type type, string fieldName)
         {
             if (type == null || string.IsNullOrEmpty(fieldName))
                 return null;

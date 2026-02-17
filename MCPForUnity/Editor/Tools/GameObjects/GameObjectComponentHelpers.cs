@@ -278,6 +278,11 @@ namespace MCPForUnity.Editor.Tools.GameObjects
                         if (currentObject is Material[])
                         {
                             var materials = currentObject as Material[];
+                            if (materials.Length == 0)
+                            {
+                                error = $"Material array is empty in path '{path}', cannot access index {arrayIndex}.";
+                                return false;
+                            }
                             if (arrayIndex < 0 || arrayIndex >= materials.Length)
                             {
                                 error = $"Material index {arrayIndex} out of range (0-{materials.Length - 1}) in path '{path}'.";
@@ -288,6 +293,11 @@ namespace MCPForUnity.Editor.Tools.GameObjects
                         else if (currentObject is System.Collections.IList)
                         {
                             var list = currentObject as System.Collections.IList;
+                            if (list.Count == 0)
+                            {
+                                error = $"List is empty in path '{path}', cannot access index {arrayIndex}.";
+                                return false;
+                            }
                             if (arrayIndex < 0 || arrayIndex >= list.Count)
                             {
                                 error = $"Index {arrayIndex} out of range (0-{list.Count - 1}) in path '{path}'.";
@@ -340,6 +350,20 @@ namespace MCPForUnity.Editor.Tools.GameObjects
                         return true;
                     }
                     error = $"Failed to convert value for '{finalPart}' to type '{finalFieldInfo.FieldType.Name}' in path '{path}'.";
+                    return false;
+                }
+
+                // Try non-public [SerializeField] fields (nested paths need this too)
+                FieldInfo serializedField = ComponentOps.FindSerializedFieldInHierarchy(currentType, finalPart);
+                if (serializedField != null)
+                {
+                    object convertedValue = ConvertJTokenToType(value, serializedField.FieldType, inputSerializer);
+                    if (convertedValue != null || value.Type == JTokenType.Null)
+                    {
+                        serializedField.SetValue(currentObject, convertedValue);
+                        return true;
+                    }
+                    error = $"Failed to convert value for '{finalPart}' to type '{serializedField.FieldType.Name}' in path '{path}'.";
                     return false;
                 }
 
