@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Services;
+using MCPForUnity.Editor.Services.Transport;
 using MCPForUnity.Editor.Tools;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 
 namespace MCPForUnity.Editor.Windows.Components.Tools
@@ -220,10 +223,19 @@ namespace MCPForUnity.Editor.Windows.Components.Tools
                 row.Add(CreateManageSceneActions());
             }
 
+            if (IsBatchExecuteTool(tool))
+            {
+                row.Add(CreateBatchExecuteSettings());
+            }
+
             return row;
         }
 
-        private void HandleToggleChange(ToolMetadata tool, bool enabled, bool updateSummary = true)
+        private void HandleToggleChange(
+            ToolMetadata tool,
+            bool enabled,
+            bool updateSummary = true,
+            bool reregisterTools = true)
         {
             MCPServiceLocator.ToolDiscovery.SetToolEnabled(tool.Name, enabled);
 
@@ -231,15 +243,51 @@ namespace MCPForUnity.Editor.Windows.Components.Tools
             {
                 UpdateSummary();
             }
+
+            if (reregisterTools)
+            {
+                // Trigger tool reregistration with connected MCP server
+                ReregisterToolsAsync();
+            }
+        }
+
+        private void ReregisterToolsAsync()
+        {
+            // Fire and forget - don't block UI thread
+            var transportManager = MCPServiceLocator.TransportManager;
+            var client = transportManager.GetClient(TransportMode.Http);
+            if (client == null || !client.IsConnected)
+            {
+                return;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await client.ReregisterToolsAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    McpLog.Warn($"Failed to reregister tools: {ex}");
+                }
+            });
         }
 
         private void SetAllToolsState(bool enabled)
         {
+            bool hasChanges = false;
+
             foreach (var tool in allTools)
             {
                 if (!toolToggleMap.TryGetValue(tool.Name, out var toggle))
                 {
-                    MCPServiceLocator.ToolDiscovery.SetToolEnabled(tool.Name, enabled);
+                    bool currentEnabled = MCPServiceLocator.ToolDiscovery.IsToolEnabled(tool.Name);
+                    if (currentEnabled != enabled)
+                    {
+                        MCPServiceLocator.ToolDiscovery.SetToolEnabled(tool.Name, enabled);
+                        hasChanges = true;
+                    }
                     continue;
                 }
 
@@ -249,10 +297,17 @@ namespace MCPForUnity.Editor.Windows.Components.Tools
                 }
 
                 toggle.SetValueWithoutNotify(enabled);
-                HandleToggleChange(tool, enabled, updateSummary: false);
+                HandleToggleChange(tool, enabled, updateSummary: false, reregisterTools: false);
+                hasChanges = true;
             }
 
             UpdateSummary();
+
+            if (hasChanges)
+            {
+                // Trigger a single reregistration after bulk change
+                ReregisterToolsAsync();
+            }
         }
 
         private void UpdateSummary()
@@ -296,6 +351,52 @@ namespace MCPForUnity.Editor.Windows.Components.Tools
             return actions;
         }
 
+        private VisualElement CreateBatchExecuteSettings()
+        {
+            var container = new VisualElement();
+            container.AddToClassList("tool-item-actions");
+            container.style.flexDirection = FlexDirection.Row;
+            container.style.alignItems = Align.Center;
+            container.style.marginTop = 4;
+
+            var label = new Label("Max commands per batch:");
+            label.style.marginRight = 8;
+            label.style.unityFontStyleAndWeight = UnityEngine.FontStyle.Normal;
+            container.Add(label);
+
+            int currentValue = EditorPrefs.GetInt(
+                EditorPrefKeys.BatchExecuteMaxCommands,
+                BatchExecute.DefaultMaxCommandsPerBatch
+            );
+
+            var field = new IntegerField
+            {
+                value = Math.Clamp(currentValue, 1, BatchExecute.AbsoluteMaxCommandsPerBatch),
+                style = { width = 60 }
+            };
+            field.tooltip = $"Number of commands allowed per batch_execute call (1–{BatchExecute.AbsoluteMaxCommandsPerBatch}). Default: {BatchExecute.DefaultMaxCommandsPerBatch}.";
+
+            field.RegisterValueChangedCallback(evt =>
+            {
+                int clamped = Math.Clamp(evt.newValue, 1, BatchExecute.AbsoluteMaxCommandsPerBatch);
+                if (clamped != evt.newValue)
+                {
+                    field.SetValueWithoutNotify(clamped);
+                }
+                EditorPrefs.SetInt(EditorPrefKeys.BatchExecuteMaxCommands, clamped);
+            });
+
+            container.Add(field);
+
+            var hint = new Label($"(max {BatchExecute.AbsoluteMaxCommandsPerBatch})");
+            hint.style.marginLeft = 4;
+            hint.style.color = new UnityEngine.Color(0.5f, 0.5f, 0.5f);
+            hint.style.fontSize = 10;
+            container.Add(hint);
+
+            return container;
+        }
+
         private void OnManageSceneScreenshotClicked()
         {
             try
@@ -328,6 +429,8 @@ namespace MCPForUnity.Editor.Windows.Components.Tools
         }
 
         private static bool IsManageSceneTool(ToolMetadata tool) => string.Equals(tool?.Name, "manage_scene", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsBatchExecuteTool(ToolMetadata tool) => string.Equals(tool?.Name, "batch_execute", StringComparison.OrdinalIgnoreCase);
 
         private static bool IsBuiltIn(ToolMetadata tool) => tool?.IsBuiltIn ?? false;
     }
