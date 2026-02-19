@@ -146,7 +146,11 @@ def _get_frontmost_app_macos() -> _FrontmostAppInfo | None:
                 'tell application "System Events"\n'
                 '    set frontProc to first process whose frontmost is true\n'
                 '    set procName to name of frontProc\n'
-                '    set bundleID to bundle identifier of frontProc\n'
+                '    set bundleID to ""\n'
+                '    try\n'
+                '        set bID to bundle identifier of frontProc\n'
+                '        if bID is not missing value then set bundleID to bID\n'
+                '    end try\n'
                 '    return procName & "|" & bundleID\n'
                 'end tell',
             ],
@@ -158,7 +162,12 @@ def _get_frontmost_app_macos() -> _FrontmostAppInfo | None:
             output = result.stdout.strip()
             parts = output.split("|", 1)
             name = parts[0]
-            bundle_id = parts[1] if len(parts) > 1 and parts[1] else None
+            bundle_id: str | None = None
+            if len(parts) > 1:
+                raw_bundle_id = parts[1].strip()
+                # Some processes report "missing value" as bundle ID; treat as absent
+                if raw_bundle_id and raw_bundle_id.lower() != "missing value":
+                    bundle_id = raw_bundle_id
             return _FrontmostAppInfo(name=name, bundle_id=bundle_id)
     except Exception as e:
         logger.debug(f"Failed to get frontmost app: {e}")
@@ -293,7 +302,7 @@ tell application id bundleID to activate
             # VS Code's process name is "Electron", and `tell application "Electron"`
             # can launch a standalone Electron instance instead of returning to VS Code.
             if bundle_id:
-                escaped_bundle_id = bundle_id.replace('"', '\\"')
+                escaped_bundle_id = bundle_id.replace('"', '""')
                 result = subprocess.run(
                     ["osascript", "-e", f'tell application id "{escaped_bundle_id}" to activate'],
                     capture_output=True,
@@ -302,10 +311,14 @@ tell application id bundleID to activate
                 )
                 if result.returncode == 0:
                     return True
-                logger.debug(f"Bundle ID activation failed for {bundle_id}, falling back to name")
+                logger.debug(
+                    "Bundle ID activation failed for %s, falling back to name: %s",
+                    bundle_id,
+                    result.stderr.strip() if result.stderr else "(no stderr)",
+                )
 
             # Fallback to name-based activation
-            escaped_app_name = app_name.replace('"', '\\"')
+            escaped_app_name = app_name.replace('"', '""')
             result = subprocess.run(
                 ["osascript", "-e", f'tell application "{escaped_app_name}" to activate'],
                 capture_output=True,
