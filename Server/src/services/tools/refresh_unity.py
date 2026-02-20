@@ -70,6 +70,23 @@ def is_reloading_rejection(resp: Any) -> bool:
     return data.get("reason") == "reloading" and resp.get("hint") == "retry"
 
 
+def is_connection_lost_after_send(resp: Any) -> bool:
+    """True when a mutation's response indicates TCP was lost after command was sent.
+
+    Script mutations trigger domain reload which kills the TCP connection.
+    The mutation was likely executed but the response was lost.
+    """
+    if isinstance(resp, dict):
+        if resp.get("success"):
+            return False
+        err = (resp.get("error") or resp.get("message") or "").lower()
+    else:
+        if getattr(resp, "success", None):
+            return False
+        err = (getattr(resp, "error", "") or "").lower()
+    return "connection closed" in err or "disconnected" in err or "aborted" in err
+
+
 @mcp_for_unity_tool(
     description="Request a Unity asset database refresh and optionally a script compilation. Can optionally wait for readiness.",
     annotations=ToolAnnotations(

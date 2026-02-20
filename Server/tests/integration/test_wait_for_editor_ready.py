@@ -119,3 +119,38 @@ def test_is_reloading_rejection_false_on_other_error():
 def test_is_reloading_rejection_false_on_non_dict():
     assert is_reloading_rejection("some string") is False
     assert is_reloading_rejection(None) is False
+
+
+# --- is_connection_lost_after_send tests ---
+
+from services.tools.refresh_unity import is_connection_lost_after_send
+
+
+def test_connection_lost_on_connection_closed():
+    resp = {"success": False, "error": "Connection closed before reading expected bytes"}
+    assert is_connection_lost_after_send(resp) is True
+
+
+def test_connection_lost_on_disconnected():
+    resp = {"success": False, "error": "Unity disconnected"}
+    assert is_connection_lost_after_send(resp) is True
+
+
+def test_connection_lost_on_aborted():
+    resp = {"success": False, "error": "Connection aborted"}
+    assert is_connection_lost_after_send(resp) is True
+
+
+def test_connection_lost_false_on_success():
+    resp = {"success": True, "error": "Connection closed before reading expected bytes"}
+    assert is_connection_lost_after_send(resp) is False
+
+
+def test_connection_lost_false_on_other_error():
+    resp = {"success": False, "error": "timeout"}
+    assert is_connection_lost_after_send(resp) is False
+
+
+def test_connection_lost_false_on_non_dict():
+    assert is_connection_lost_after_send("some string") is False
+    assert is_connection_lost_after_send(None) is False

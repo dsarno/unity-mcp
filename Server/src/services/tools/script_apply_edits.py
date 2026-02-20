@@ -8,7 +8,7 @@ from mcp.types import ToolAnnotations
 
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
-from services.tools.refresh_unity import wait_for_editor_ready, is_reloading_rejection
+from services.tools.refresh_unity import wait_for_editor_ready, is_reloading_rejection, is_connection_lost_after_send
 from services.tools.utils import parse_json_payload
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
@@ -668,7 +668,31 @@ def _err(code: str, message: str, *, expected: dict[str, Any] | None = None, rew
         payload["data"] = data
     return payload
 
-# Natural-language parsing removed; clients should send structured edits.
+async def _verify_edit_after_disconnect(
+    unity_instance: str | None,
+    name: str,
+    path: str,
+    pre_sha: str | None,
+) -> bool:
+    """After connection lost during a mutation, verify the edit was applied.
+
+    Reads the script's SHA and compares to the pre-mutation SHA.
+    Returns True if the file was modified (edit likely applied).
+    """
+    if not pre_sha:
+        return False
+    try:
+        verify = await async_send_command_with_retry(
+            "manage_script",
+            {"action": "get_sha", "name": name, "path": path},
+            instance_id=unity_instance,
+        )
+        if isinstance(verify, dict) and verify.get("success"):
+            new_sha = (verify.get("data") or {}).get("sha256")
+            return bool(new_sha and new_sha != pre_sha)
+    except Exception:
+        pass
+    return False
 
 
 @mcp_for_unity_tool(
@@ -954,6 +978,17 @@ async def script_apply_edits(
 
     # If everything is structured (method/class/anchor ops), forward directly to Unity's structured editor.
     if all_struct:
+        # Get pre-edit SHA for disconnect verification
+        pre_sha = None
+        try:
+            sha_resp = await async_send_command_with_retry(
+                "manage_script", {"action": "get_sha", "name": name, "path": path},
+                instance_id=unity_instance,
+            )
+            if isinstance(sha_resp, dict) and sha_resp.get("success"):
+                pre_sha = (sha_resp.get("data") or {}).get("sha256")
+        except Exception:
+            pass
         opts2 = dict(options or {})
         # For structured edits, prefer immediate refresh to avoid missed reloads when Editor is unfocused
         opts2.setdefault("refresh", "immediate")
@@ -982,6 +1017,10 @@ async def script_apply_edits(
                 params_struct,
                 retry_on_reload=False,
             )
+        if is_connection_lost_after_send(resp_struct):
+            await wait_for_editor_ready(ctx)
+            if await _verify_edit_after_disconnect(unity_instance, name, path, pre_sha):
+                resp_struct = {"success": True, "message": "Edit applied (verified after domain reload)."}
         await wait_for_editor_ready(ctx)
         return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="structured")
 
@@ -1131,6 +1170,10 @@ async def script_apply_edits(
                         params_text,
                         retry_on_reload=False,
                     )
+                if is_connection_lost_after_send(resp_text):
+                    await wait_for_editor_ready(ctx)
+                    if await _verify_edit_after_disconnect(unity_instance, name, path, sha):
+                        resp_text = {"success": True, "message": "Text edits applied (verified after domain reload)."}
                 if not (isinstance(resp_text, dict) and resp_text.get("success")):
                     return _with_norm(resp_text if isinstance(resp_text, dict) else {"success": False, "message": str(resp_text)}, normalized_for_echo, routing="mixed/text-first")
         except Exception as e:
@@ -1165,6 +1208,10 @@ async def script_apply_edits(
                     params_struct,
                     retry_on_reload=False,
                 )
+            if is_connection_lost_after_send(resp_struct):
+                await wait_for_editor_ready(ctx)
+                if await _verify_edit_after_disconnect(unity_instance, name, path, sha):
+                    resp_struct = {"success": True, "message": "Edit applied (verified after domain reload)."}
             await wait_for_editor_ready(ctx)
             return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="mixed/text-first")
 
@@ -1307,6 +1354,10 @@ async def script_apply_edits(
                     params,
                     retry_on_reload=False,
                 )
+            if is_connection_lost_after_send(resp):
+                await wait_for_editor_ready(ctx)
+                if await _verify_edit_after_disconnect(unity_instance, name, path, sha):
+                    resp = {"success": True, "message": "Edit applied (verified after domain reload)."}
             await wait_for_editor_ready(ctx)
             return _with_norm(
                 resp if isinstance(resp, dict)
@@ -1405,6 +1456,10 @@ async def script_apply_edits(
             params,
             retry_on_reload=False,
         )
+    if is_connection_lost_after_send(write_resp):
+        await wait_for_editor_ready(ctx)
+        if await _verify_edit_after_disconnect(unity_instance, name, path, sha):
+            write_resp = {"success": True, "message": "Edit applied (verified after domain reload)."}
     await wait_for_editor_ready(ctx)
     return _with_norm(
         write_resp if isinstance(write_resp, dict)
