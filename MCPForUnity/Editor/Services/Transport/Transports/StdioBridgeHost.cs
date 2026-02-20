@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -25,6 +26,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         public string CommandJson;
         public TaskCompletionSource<string> Tcs;
         public bool IsExecuting;
+        public long EnqueuedAtMs;
     }
 
     [InitializeOnLoad]
@@ -51,6 +53,8 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         private static bool isAutoConnectMode = false;
         private const ulong MaxFrameBytes = 64UL * 1024 * 1024;
         private const int FrameIOTimeoutMs = 30000;
+        private static readonly Stopwatch _uptime = Stopwatch.StartNew();
+        private static volatile int _consecutiveTimeouts = 0;
 
         private static void IoInfo(string s) { McpLog.Info(s, always: false); }
 
@@ -488,15 +492,14 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
             using (NetworkStream stream = client.GetStream())
             {
                 lock (clientsLock) { activeClients.Add(client); }
+                int clientCount;
+                lock (clientsLock) { clientCount = activeClients.Count; }
                 try
                 {
                     try
                     {
-                        if (IsDebugEnabled())
-                        {
-                            var ep = client.Client?.RemoteEndPoint?.ToString() ?? "unknown";
-                            McpLog.Info($"Client connected {ep}");
-                        }
+                        var ep = client.Client?.RemoteEndPoint?.ToString() ?? "unknown";
+                        McpLog.Info($"Client connected {ep} (active clients: {clientCount})");
                     }
                     catch { }
                     try
@@ -520,6 +523,23 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     {
                         if (IsDebugEnabled()) McpLog.Warn($"Handshake failed: {ex.Message}");
                         return;
+                    }
+
+                    // In stdio transport there is only ever one active Python server.
+                    // A new connection means the old one is dead — close stale clients so
+                    // their hung ReadFrameAsUtf8Async calls throw and exit cleanly.
+                    TcpClient[] staleClients;
+                    lock (clientsLock)
+                    {
+                        staleClients = activeClients.Where(c => c != client).ToArray();
+                    }
+                    if (staleClients.Length > 0)
+                    {
+                        McpLog.Info($"Closing {staleClients.Length} stale client(s) after new connection");
+                        foreach (var stale in staleClients)
+                        {
+                            try { stale.Close(); } catch { }
+                        }
                     }
 
                     while (isRunning && !token.IsCancellationRequested)
@@ -555,7 +575,8 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                                 {
                                     CommandJson = commandText,
                                     Tcs = tcs,
-                                    IsExecuting = false
+                                    IsExecuting = false,
+                                    EnqueuedAtMs = _uptime.ElapsedMilliseconds
                                 };
                             }
 
@@ -568,9 +589,26 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                                 {
                                     respCts.Cancel();
                                     response = tcs.Task.Result;
+                                    Interlocked.Exchange(ref _consecutiveTimeouts, 0);
                                 }
                                 else
                                 {
+                                    int timeouts = Interlocked.Increment(ref _consecutiveTimeouts);
+                                    McpLog.Warn($"Command TCS timed out ({timeouts} consecutive)");
+                                    if (timeouts >= 2)
+                                    {
+                                        // Self-healing: force re-register ProcessCommands in case
+                                        // the EditorApplication.update callback was lost (e.g. after
+                                        // domain reload) and reset the reentrancy guard.
+                                        EditorApplication.delayCall += () =>
+                                        {
+                                            if (!isRunning) return;
+                                            EditorApplication.update -= ProcessCommands;
+                                            EditorApplication.update += ProcessCommands;
+                                            Interlocked.Exchange(ref processingCommands, 0);
+                                            McpLog.Info("ProcessCommands re-registered (self-healing after consecutive timeouts)");
+                                        };
+                                    }
                                     var timeoutResponse = new
                                     {
                                         status = "error",
@@ -636,6 +674,9 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                 finally
                 {
                     lock (clientsLock) { activeClients.Remove(client); }
+                    int remaining;
+                    lock (clientsLock) { remaining = activeClients.Count; }
+                    McpLog.Info($"Client handler exited (remaining clients: {remaining})");
                 }
             }
         }
@@ -781,6 +822,30 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     if (commandQueue.Count == 0)
                     {
                         return;
+                    }
+
+                    // Evict commands stuck with IsExecuting=true for too long (e.g. from pre-reload state).
+                    long nowMs = _uptime.ElapsedMilliseconds;
+                    const long staleThresholdMs = 2L * FrameIOTimeoutMs; // 60s
+                    List<string> staleIds = null;
+                    foreach (var kvp in commandQueue)
+                    {
+                        if (kvp.Value.IsExecuting && (nowMs - kvp.Value.EnqueuedAtMs) > staleThresholdMs)
+                        {
+                            staleIds ??= new List<string>();
+                            staleIds.Add(kvp.Key);
+                        }
+                    }
+                    if (staleIds != null)
+                    {
+                        foreach (var sid in staleIds)
+                        {
+                            var staleCmd = commandQueue[sid];
+                            commandQueue.Remove(sid);
+                            var err = new { status = "error", error = "Command evicted: stuck too long in queue" };
+                            try { staleCmd.Tcs.TrySetResult(JsonConvert.SerializeObject(err)); } catch { }
+                        }
+                        McpLog.Info($"Evicted {staleIds.Count} stale command(s) from queue");
                     }
 
                     work = new List<(string, QueuedCommand)>(commandQueue.Count);
