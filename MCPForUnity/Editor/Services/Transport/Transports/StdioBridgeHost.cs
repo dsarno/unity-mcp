@@ -55,6 +55,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         private const int FrameIOTimeoutMs = 30000;
         private static readonly Stopwatch _uptime = Stopwatch.StartNew();
         private static volatile int _consecutiveTimeouts = 0;
+        private static bool _processCommandsHooked = false;
 
         private static void IoInfo(string s) { McpLog.Info(s, always: false); }
 
@@ -270,68 +271,31 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
 
                     LogBreadcrumb("Start");
 
-                    const int maxImmediateRetries = 10;
-                    const int retrySleepMs = 200;
-                    int attempt = 0;
-                    for (; ; )
+                    try
                     {
+                        listener = CreateConfiguredListener(currentUnityPort);
+                        listener.Start();
+                    }
+                    catch (SocketException se) when (se.SocketErrorCode == SocketError.AddressAlreadyInUse)
+                    {
+                        // Port is busy. Try switching to a new port once; if that also fails,
+                        // let the reload handler retry with async backoff instead of blocking here.
+                        int oldPort = currentUnityPort;
+                        currentUnityPort = PortManager.DiscoverNewPort();
+
                         try
                         {
-                            listener = CreateConfiguredListener(currentUnityPort);
-                            listener.Start();
-                            break;
+                            EditorPrefs.SetInt(EditorPrefKeys.UnitySocketPort, currentUnityPort);
                         }
-                        catch (SocketException se) when (se.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt < maxImmediateRetries)
+                        catch { }
+
+                        if (IsDebugEnabled())
                         {
-                            attempt++;
-                            Thread.Sleep(retrySleepMs);
-                            continue;
+                            McpLog.Info($"Port {oldPort} occupied, switching to port {currentUnityPort}");
                         }
-                        catch (SocketException se) when (se.SocketErrorCode == SocketError.AddressAlreadyInUse && attempt >= maxImmediateRetries)
-                        {
-                            int oldPort = currentUnityPort;
 
-                            // Before switching ports, give the old one a brief chance to release if it looks like ours
-                            try
-                            {
-                                if (PortManager.IsPortUsedByMCPForUnity(oldPort))
-                                {
-                                    const int waitStepMs = 100;
-                                    int waited = 0;
-                                    while (waited < 300 && !PortManager.IsPortAvailable(oldPort))
-                                    {
-                                        Thread.Sleep(waitStepMs);
-                                        waited += waitStepMs;
-                                    }
-                                }
-                            }
-                            catch { }
-
-                            currentUnityPort = PortManager.DiscoverNewPort();
-
-                            // Persist the new port so next time we start on this port
-                            try
-                            {
-                                EditorPrefs.SetInt(EditorPrefKeys.UnitySocketPort, currentUnityPort);
-                            }
-                            catch { }
-
-                            if (IsDebugEnabled())
-                            {
-                                if (currentUnityPort == oldPort)
-                                {
-                                    McpLog.Info($"Port {oldPort} became available, proceeding");
-                                }
-                                else
-                                {
-                                    McpLog.Info($"Port {oldPort} occupied, switching to port {currentUnityPort}");
-                                }
-                            }
-
-                            listener = CreateConfiguredListener(currentUnityPort);
-                            listener.Start();
-                            break;
-                        }
+                        listener = CreateConfiguredListener(currentUnityPort);
+                        listener.Start();
                     }
 
                     isRunning = true;
@@ -342,7 +306,11 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     cts = new CancellationTokenSource();
                     listenerTask = Task.Run(() => ListenerLoopAsync(cts.Token));
                     CommandRegistry.Initialize();
-                    EditorApplication.update += ProcessCommands;
+                    if (!_processCommandsHooked)
+                    {
+                        _processCommandsHooked = true;
+                        EditorApplication.update += ProcessCommands;
+                    }
                     try { EditorApplication.quitting -= Stop; } catch { }
                     try { EditorApplication.quitting += Stop; } catch { }
                     heartbeatSeq++;
@@ -360,11 +328,12 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         {
             var newListener = new TcpListener(IPAddress.Loopback, port);
 #if UNITY_EDITOR_OSX
-            newListener.Server.SetSocketOption(
-                SocketOptionLevel.Socket,
-                SocketOptionName.ReuseAddress,
-                true
-            );
+            // SO_REUSEADDR is intentionally NOT set. On macOS it allows multiple
+            // processes (including AssetImportWorkers) to bind the same port,
+            // causing connections to land on a worker that can't process commands.
+            // The ExclusiveAddressUse flag prevents this; port-busy conflicts are
+            // handled by the retry/fallback logic in Start() and the reload handler.
+            try { newListener.Server.ExclusiveAddressUse = true; } catch { }
 #endif
             try
             {
@@ -420,10 +389,13 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
 
             if (toWait != null)
             {
-                try { toWait.Wait(2000); } catch { }
+                // CTS is already cancelled; give the listener task a brief moment to exit.
+                try { toWait.Wait(500); } catch { }
             }
 
-            try { EditorApplication.update -= ProcessCommands; } catch { }
+            // ProcessCommands stays permanently hooked (guarded by _processCommandsHooked)
+            // to eliminate the registration gap between Stop and Start during domain reload.
+            // ProcessCommands already exits early when !isRunning.
             try { EditorApplication.quitting -= Stop; } catch { }
 
             try
@@ -580,6 +552,11 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                                 };
                             }
 
+                            // Force Unity's main loop to iterate even when backgrounded,
+                            // so ProcessCommands fires and picks up the queued command.
+                            // This mirrors what HTTP does via TransportCommandDispatcher.RequestMainThreadPump().
+                            try { EditorApplication.QueuePlayerLoopUpdate(); } catch { }
+
                             string response;
                             try
                             {
@@ -595,20 +572,6 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                                 {
                                     int timeouts = Interlocked.Increment(ref _consecutiveTimeouts);
                                     McpLog.Warn($"Command TCS timed out ({timeouts} consecutive)");
-                                    if (timeouts >= 2)
-                                    {
-                                        // Self-healing: force re-register ProcessCommands in case
-                                        // the EditorApplication.update callback was lost (e.g. after
-                                        // domain reload) and reset the reentrancy guard.
-                                        EditorApplication.delayCall += () =>
-                                        {
-                                            if (!isRunning) return;
-                                            EditorApplication.update -= ProcessCommands;
-                                            EditorApplication.update += ProcessCommands;
-                                            Interlocked.Exchange(ref processingCommands, 0);
-                                            McpLog.Info("ProcessCommands re-registered (self-healing after consecutive timeouts)");
-                                        };
-                                    }
                                     var timeoutResponse = new
                                     {
                                         status = "error",
