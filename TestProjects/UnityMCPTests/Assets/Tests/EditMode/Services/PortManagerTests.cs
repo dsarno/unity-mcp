@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using NUnit.Framework;
@@ -8,10 +9,56 @@ namespace MCPForUnityTests.Editor.Services
     [TestFixture]
     public class PortManagerTests
     {
+        private string _savedPortFileContent;
+        private string _savedLegacyFileContent;
+        private string _portFilePath;
+        private string _legacyFilePath;
+
+        [SetUp]
+        public void SetUp()
+        {
+            // Snapshot the on-disk port config so DiscoverNewPort tests don't
+            // permanently alter the running bridge's persisted port.
+            string dir = Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                ".unity-mcp");
+            _legacyFilePath = Path.Combine(dir, "unity-mcp-port.json");
+
+            // The hashed file uses a private helper; approximate the same hash.
+            // We snapshot every json file in the directory to be safe.
+            _portFilePath = null;
+            _savedPortFileContent = null;
+            _savedLegacyFileContent = null;
+
+            if (File.Exists(_legacyFilePath))
+                _savedLegacyFileContent = File.ReadAllText(_legacyFilePath);
+
+            // Find the hashed port file for this project
+            if (Directory.Exists(dir))
+            {
+                foreach (var f in Directory.GetFiles(dir, "unity-mcp-port-*.json"))
+                {
+                    _portFilePath = f;
+                    _savedPortFileContent = File.ReadAllText(f);
+                    break; // one project at a time
+                }
+            }
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            // Restore the original port files
+            if (_savedLegacyFileContent != null && _legacyFilePath != null)
+                File.WriteAllText(_legacyFilePath, _savedLegacyFileContent);
+
+            if (_savedPortFileContent != null && _portFilePath != null)
+                File.WriteAllText(_portFilePath, _savedPortFileContent);
+        }
+
         [Test]
         public void IsPortAvailable_ReturnsFalse_WhenPortIsOccupied()
         {
-            // Bind a port with ExclusiveAddressUse to simulate the real listener
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
             int port = ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -30,7 +77,6 @@ namespace MCPForUnityTests.Editor.Services
         [Test]
         public void IsPortAvailable_ReturnsTrue_WhenPortIsFree()
         {
-            // Bind and immediately release to get a port that was recently free
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
             int port = ((IPEndPoint)listener.LocalEndpoint).Port;

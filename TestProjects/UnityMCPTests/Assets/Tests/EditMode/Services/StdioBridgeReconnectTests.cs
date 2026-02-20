@@ -36,7 +36,8 @@ namespace MCPForUnityTests.Editor.Services
             // --- First client: connect, verify ping/pong, then abruptly close ---
             using (var client1 = new TcpClient())
             {
-                client1.Connect("127.0.0.1", port);
+                Assert.IsTrue(client1.ConnectAsync("127.0.0.1", port).Wait(ConnectTimeoutMs),
+                    "First client connect timed out");
                 client1.ReceiveTimeout = ReadTimeoutMs;
                 var stream1 = client1.GetStream();
 
@@ -61,7 +62,8 @@ namespace MCPForUnityTests.Editor.Services
             // --- Second client: connect and verify commands still work ---
             using (var client2 = new TcpClient())
             {
-                client2.Connect("127.0.0.1", port);
+                Assert.IsTrue(client2.ConnectAsync("127.0.0.1", port).Wait(ConnectTimeoutMs),
+                    "Second client connect timed out");
                 client2.ReceiveTimeout = ReadTimeoutMs;
                 var stream2 = client2.GetStream();
 
@@ -94,7 +96,8 @@ namespace MCPForUnityTests.Editor.Services
             var client1 = new TcpClient();
             try
             {
-                client1.Connect("127.0.0.1", port);
+                Assert.IsTrue(client1.ConnectAsync("127.0.0.1", port).Wait(ConnectTimeoutMs),
+                    "First client connect timed out");
                 client1.ReceiveTimeout = ReadTimeoutMs;
                 var stream1 = client1.GetStream();
 
@@ -109,7 +112,8 @@ namespace MCPForUnityTests.Editor.Services
                 // --- Second client: connect while first is still open ---
                 using (var client2 = new TcpClient())
                 {
-                    client2.Connect("127.0.0.1", port);
+                    Assert.IsTrue(client2.ConnectAsync("127.0.0.1", port).Wait(ConnectTimeoutMs),
+                        "Second client connect timed out");
                     client2.ReceiveTimeout = ReadTimeoutMs;
                     var stream2 = client2.GetStream();
 
