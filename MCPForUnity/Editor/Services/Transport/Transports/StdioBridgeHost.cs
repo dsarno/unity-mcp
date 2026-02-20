@@ -463,9 +463,12 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
             using (client)
             using (NetworkStream stream = client.GetStream())
             {
-                lock (clientsLock) { activeClients.Add(client); }
                 int clientCount;
-                lock (clientsLock) { clientCount = activeClients.Count; }
+                lock (clientsLock)
+                {
+                    activeClients.Add(client);
+                    clientCount = activeClients.Count;
+                }
                 try
                 {
                     try

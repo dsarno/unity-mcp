@@ -23,7 +23,7 @@ Resource URIs use a specific scheme — do NOT guess or fabricate them. If you a
 |----------|-----|
 | Editor state | `mcpforunity://editor/state` |
 | Project info | `mcpforunity://project/info` |
-| Scene gameobject API | `mcpforunity://scene/gameobject-api` |
+| Scene GameObject API | `mcpforunity://scene/gameobject-api` |
 | Tags | `mcpforunity://project/tags` |
 | Layers | `mcpforunity://project/layers` |
 | Instances | `mcpforunity://instances` |

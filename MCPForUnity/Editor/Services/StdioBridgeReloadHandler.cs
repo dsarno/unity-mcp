@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using MCPForUnity.Editor.Constants;
 using MCPForUnity.Editor.Helpers;
@@ -25,14 +26,25 @@ namespace MCPForUnity.Editor.Services
             TimeSpan.FromSeconds(30)
         };
 
+        private static CancellationTokenSource _retryCts;
+
         static StdioBridgeReloadHandler()
         {
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
+            EditorApplication.quitting += CancelRetries;
+        }
+
+        private static void CancelRetries()
+        {
+            try { _retryCts?.Cancel(); } catch { }
         }
 
         private static void OnBeforeAssemblyReload()
         {
+            // Cancel any in-flight retry loop before the next reload.
+            CancelRetries();
+
             try
             {
                 // Only persist resume intent when stdio is the active transport and the bridge is running.
@@ -126,10 +138,17 @@ namespace MCPForUnity.Editor.Services
 
         private static async Task ResumeStdioWithRetriesAsync()
         {
+            // Cancel any previous retry loop and create a fresh token.
+            CancelRetries();
+            var cts = _retryCts = new CancellationTokenSource();
+            var token = cts.Token;
+
             Exception lastException = null;
 
             for (int i = 0; i < ResumeRetrySchedule.Length; i++)
             {
+                if (token.IsCancellationRequested) return;
+
                 int attempt = i + 1;
                 McpLog.Debug($"[Stdio Reload] Resume attempt {attempt}/{ResumeRetrySchedule.Length}");
 
@@ -137,8 +156,8 @@ namespace MCPForUnity.Editor.Services
                 if (delay > TimeSpan.Zero)
                 {
                     McpLog.Debug($"[Stdio Reload] Waiting {delay.TotalSeconds:0.#}s before resume attempt {attempt}");
-                    try { await Task.Delay(delay); }
-                    catch { return; }
+                    try { await Task.Delay(delay, token); }
+                    catch (OperationCanceledException) { return; }
                 }
 
                 // Abort retries if the user switched transports while we were waiting.
