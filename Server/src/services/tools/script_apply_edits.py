@@ -8,7 +8,7 @@ from mcp.types import ToolAnnotations
 
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
-from services.tools.refresh_unity import wait_for_editor_ready, is_reloading_rejection, is_connection_lost_after_send
+from services.tools.refresh_unity import send_mutation, verify_edit_by_sha
 from services.tools.utils import parse_json_payload
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
@@ -668,33 +668,6 @@ def _err(code: str, message: str, *, expected: dict[str, Any] | None = None, rew
         payload["data"] = data
     return payload
 
-async def _verify_edit_after_disconnect(
-    unity_instance: str | None,
-    name: str,
-    path: str,
-    pre_sha: str | None,
-) -> bool:
-    """After connection lost during a mutation, verify the edit was applied.
-
-    Reads the script's SHA and compares to the pre-mutation SHA.
-    Returns True if the file was modified (edit likely applied).
-    """
-    if not pre_sha:
-        return False
-    try:
-        verify = await async_send_command_with_retry(
-            "manage_script",
-            {"action": "get_sha", "name": name, "path": path},
-            instance_id=unity_instance,
-        )
-        if isinstance(verify, dict) and verify.get("success"):
-            new_sha = (verify.get("data") or {}).get("sha256")
-            return bool(new_sha and new_sha != pre_sha)
-    except Exception:
-        pass
-    return False
-
-
 @mcp_for_unity_tool(
     name="script_apply_edits",
     unity_target="manage_script",
@@ -1001,27 +974,13 @@ async def script_apply_edits(
             "edits": edits,
             "options": opts2,
         }
-        resp_struct = await send_with_unity_instance(
-            async_send_command_with_retry,
-            unity_instance,
-            "manage_script",
-            params_struct,
-            retry_on_reload=False,
-        )
-        if is_reloading_rejection(resp_struct):
-            await wait_for_editor_ready(ctx)
-            resp_struct = await send_with_unity_instance(
-                async_send_command_with_retry,
-                unity_instance,
-                "manage_script",
-                params_struct,
-                retry_on_reload=False,
-            )
-        if is_connection_lost_after_send(resp_struct):
-            await wait_for_editor_ready(ctx)
-            if await _verify_edit_after_disconnect(unity_instance, name, path, pre_sha):
-                resp_struct = {"success": True, "message": "Edit applied (verified after domain reload)."}
-        await wait_for_editor_ready(ctx)
+
+        async def _verify():
+            if await verify_edit_by_sha(unity_instance, name, path, pre_sha):
+                return {"success": True, "message": "Edit applied (verified after domain reload)."}
+            return None
+
+        resp_struct = await send_mutation(ctx, unity_instance, "manage_script", params_struct, verify_after_disconnect=_verify)
         return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="structured")
 
     # 1) read from Unity
@@ -1154,26 +1113,12 @@ async def script_apply_edits(
                     "precondition_sha256": sha,
                     "options": {"refresh": (options or {}).get("refresh", "debounced"), "validate": (options or {}).get("validate", "standard"), "applyMode": ("atomic" if len(at_edits) > 1 else (options or {}).get("applyMode", "sequential"))}
                 }
-                resp_text = await send_with_unity_instance(
-                    async_send_command_with_retry,
-                    unity_instance,
-                    "manage_script",
-                    params_text,
-                    retry_on_reload=False,
-                )
-                if is_reloading_rejection(resp_text):
-                    await wait_for_editor_ready(ctx)
-                    resp_text = await send_with_unity_instance(
-                        async_send_command_with_retry,
-                        unity_instance,
-                        "manage_script",
-                        params_text,
-                        retry_on_reload=False,
-                    )
-                if is_connection_lost_after_send(resp_text):
-                    await wait_for_editor_ready(ctx)
-                    if await _verify_edit_after_disconnect(unity_instance, name, path, sha):
-                        resp_text = {"success": True, "message": "Text edits applied (verified after domain reload)."}
+                async def _verify_text():
+                    if await verify_edit_by_sha(unity_instance, name, path, sha):
+                        return {"success": True, "message": "Text edits applied (verified after domain reload)."}
+                    return None
+
+                resp_text = await send_mutation(ctx, unity_instance, "manage_script", params_text, verify_after_disconnect=_verify_text)
                 if not (isinstance(resp_text, dict) and resp_text.get("success")):
                     return _with_norm(resp_text if isinstance(resp_text, dict) else {"success": False, "message": str(resp_text)}, normalized_for_echo, routing="mixed/text-first")
         except Exception as e:
@@ -1192,30 +1137,14 @@ async def script_apply_edits(
                 "edits": struct_edits,
                 "options": opts2
             }
-            resp_struct = await send_with_unity_instance(
-                async_send_command_with_retry,
-                unity_instance,
-                "manage_script",
-                params_struct,
-                retry_on_reload=False,
-            )
-            if is_reloading_rejection(resp_struct):
-                await wait_for_editor_ready(ctx)
-                resp_struct = await send_with_unity_instance(
-                    async_send_command_with_retry,
-                    unity_instance,
-                    "manage_script",
-                    params_struct,
-                    retry_on_reload=False,
-                )
-            if is_connection_lost_after_send(resp_struct):
-                await wait_for_editor_ready(ctx)
-                if await _verify_edit_after_disconnect(unity_instance, name, path, sha):
-                    resp_struct = {"success": True, "message": "Edit applied (verified after domain reload)."}
-            await wait_for_editor_ready(ctx)
+            async def _verify_struct():
+                if await verify_edit_by_sha(unity_instance, name, path, sha):
+                    return {"success": True, "message": "Edit applied (verified after domain reload)."}
+                return None
+
+            resp_struct = await send_mutation(ctx, unity_instance, "manage_script", params_struct, verify_after_disconnect=_verify_struct)
             return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="mixed/text-first")
 
-        await wait_for_editor_ready(ctx)
         return _with_norm({"success": True, "message": "Applied text edits (no structured ops)"}, normalized_for_echo, routing="mixed/text-first")
 
     # If the edits are text-ops, prefer sending them to Unity's apply_text_edits with precondition
@@ -1338,27 +1267,12 @@ async def script_apply_edits(
                     "applyMode": ("atomic" if len(at_edits) > 1 else (options or {}).get("applyMode", "sequential"))
                 }
             }
-            resp = await send_with_unity_instance(
-                async_send_command_with_retry,
-                unity_instance,
-                "manage_script",
-                params,
-                retry_on_reload=False,
-            )
-            if is_reloading_rejection(resp):
-                await wait_for_editor_ready(ctx)
-                resp = await send_with_unity_instance(
-                    async_send_command_with_retry,
-                    unity_instance,
-                    "manage_script",
-                    params,
-                    retry_on_reload=False,
-                )
-            if is_connection_lost_after_send(resp):
-                await wait_for_editor_ready(ctx)
-                if await _verify_edit_after_disconnect(unity_instance, name, path, sha):
-                    resp = {"success": True, "message": "Edit applied (verified after domain reload)."}
-            await wait_for_editor_ready(ctx)
+            async def _verify_text_only():
+                if await verify_edit_by_sha(unity_instance, name, path, sha):
+                    return {"success": True, "message": "Edit applied (verified after domain reload)."}
+                return None
+
+            resp = await send_mutation(ctx, unity_instance, "manage_script", params, verify_after_disconnect=_verify_text_only)
             return _with_norm(
                 resp if isinstance(resp, dict)
                 else {"success": False, "message": str(resp)},
@@ -1440,27 +1354,12 @@ async def script_apply_edits(
         "options": options or {"validate": "standard", "refresh": "debounced"},
     }
 
-    write_resp = await send_with_unity_instance(
-        async_send_command_with_retry,
-        unity_instance,
-        "manage_script",
-        params,
-        retry_on_reload=False,
-    )
-    if is_reloading_rejection(write_resp):
-        await wait_for_editor_ready(ctx)
-        write_resp = await send_with_unity_instance(
-            async_send_command_with_retry,
-            unity_instance,
-            "manage_script",
-            params,
-            retry_on_reload=False,
-        )
-    if is_connection_lost_after_send(write_resp):
-        await wait_for_editor_ready(ctx)
-        if await _verify_edit_after_disconnect(unity_instance, name, path, sha):
-            write_resp = {"success": True, "message": "Edit applied (verified after domain reload)."}
-    await wait_for_editor_ready(ctx)
+    async def _verify_write():
+        if await verify_edit_by_sha(unity_instance, name, path, sha):
+            return {"success": True, "message": "Edit applied (verified after domain reload)."}
+        return None
+
+    write_resp = await send_mutation(ctx, unity_instance, "manage_script", params, verify_after_disconnect=_verify_write)
     return _with_norm(
         write_resp if isinstance(write_resp, dict)
         else {"success": False, "message": str(write_resp)},

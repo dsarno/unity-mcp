@@ -154,3 +154,86 @@ def test_connection_lost_false_on_other_error():
 def test_connection_lost_false_on_non_dict():
     assert is_connection_lost_after_send("some string") is False
     assert is_connection_lost_after_send(None) is False
+
+
+# --- send_mutation tests ---
+
+from services.tools.refresh_unity import send_mutation
+
+
+@pytest.mark.asyncio
+async def test_send_mutation_returns_success_directly(monkeypatch):
+    """Normal success response is returned as-is."""
+    from services.tools import refresh_unity as mod
+
+    async def fake_send(*args, **kwargs):
+        return {"success": True, "data": {"ok": True}}
+
+    monkeypatch.setattr(mod.unity_transport, "send_with_unity_instance", fake_send)
+
+    ctx = DummyContext()
+    resp = await send_mutation(ctx, None, "manage_script", {"action": "create"})
+    assert resp == {"success": True, "data": {"ok": True}}
+
+
+@pytest.mark.asyncio
+async def test_send_mutation_retries_on_reloading_rejection(monkeypatch):
+    """Reloading rejection triggers one retry after wait."""
+    from services.tools import refresh_unity as mod
+
+    call_count = 0
+
+    async def fake_send(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return {"success": False, "data": {"reason": "reloading"}, "hint": "retry"}
+        return {"success": True, "data": {"retried": True}}
+
+    monkeypatch.setattr(mod.unity_transport, "send_with_unity_instance", fake_send)
+
+    ctx = DummyContext()
+    resp = await send_mutation(ctx, None, "manage_script", {"action": "create"})
+    assert resp.get("success") is True
+    assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_send_mutation_calls_verify_on_connection_lost(monkeypatch):
+    """Connection lost triggers verify callback."""
+    from services.tools import refresh_unity as mod
+
+    async def fake_send(*args, **kwargs):
+        return {"success": False, "error": "Connection closed before reading expected bytes"}
+
+    monkeypatch.setattr(mod.unity_transport, "send_with_unity_instance", fake_send)
+
+    verify_called = False
+
+    async def fake_verify():
+        nonlocal verify_called
+        verify_called = True
+        return {"success": True, "message": "Verified!"}
+
+    ctx = DummyContext()
+    resp = await send_mutation(ctx, None, "manage_script", {}, verify_after_disconnect=fake_verify)
+    assert verify_called
+    assert resp == {"success": True, "message": "Verified!"}
+
+
+@pytest.mark.asyncio
+async def test_send_mutation_keeps_error_when_verify_returns_none(monkeypatch):
+    """When verify callback returns None, original error is preserved."""
+    from services.tools import refresh_unity as mod
+
+    async def fake_send(*args, **kwargs):
+        return {"success": False, "error": "Connection closed before reading expected bytes"}
+
+    monkeypatch.setattr(mod.unity_transport, "send_with_unity_instance", fake_send)
+
+    async def fake_verify():
+        return None
+
+    ctx = DummyContext()
+    resp = await send_mutation(ctx, None, "manage_script", {}, verify_after_disconnect=fake_verify)
+    assert resp.get("success") is False

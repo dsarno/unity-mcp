@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import time
+from collections.abc import Awaitable, Callable
 from typing import Annotated, Any, Literal
 
 from fastmcp import Context
@@ -13,7 +14,8 @@ from models import MCPResponse
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
 import transport.unity_transport as unity_transport
-from transport.legacy.unity_connection import async_send_command_with_retry, _extract_response_reason
+import transport.legacy.unity_connection as _legacy_conn
+from transport.legacy.unity_connection import _extract_response_reason
 from services.state.external_changes_scanner import external_changes_scanner
 import services.resources.editor_state as editor_state
 
@@ -87,6 +89,82 @@ def is_connection_lost_after_send(resp: Any) -> bool:
     return "connection closed" in err or "disconnected" in err or "aborted" in err
 
 
+async def send_mutation(
+    ctx: Context,
+    unity_instance: str | None,
+    command: str,
+    params: dict[str, Any],
+    *,
+    verify_after_disconnect: Callable[[], Awaitable[dict | None]] | None = None,
+) -> dict | Any:
+    """Send a non-idempotent mutation with reload recovery.
+
+    Handles the full retry/recovery pattern for script mutations:
+    1. Send with retry_on_reload=False (don't re-send if Unity is reloading)
+    2. If reloading rejection (command never executed) → wait + retry once
+    3. If connection lost after send → wait + verify via callback
+    4. Wait for editor readiness before returning
+
+    Args:
+        verify_after_disconnect: async callable returning a replacement response
+            dict if the mutation was verified after connection loss, or None to
+            keep the original error response.
+    """
+    resp = await unity_transport.send_with_unity_instance(
+        _legacy_conn.async_send_command_with_retry,
+        unity_instance,
+        command,
+        params,
+        retry_on_reload=False,
+    )
+    if is_reloading_rejection(resp):
+        await wait_for_editor_ready(ctx)
+        resp = await unity_transport.send_with_unity_instance(
+            _legacy_conn.async_send_command_with_retry,
+            unity_instance,
+            command,
+            params,
+            retry_on_reload=False,
+        )
+    if is_connection_lost_after_send(resp) and verify_after_disconnect:
+        await wait_for_editor_ready(ctx)
+        verified = await verify_after_disconnect()
+        if verified is not None:
+            resp = verified
+    await wait_for_editor_ready(ctx)
+    return resp
+
+
+async def verify_edit_by_sha(
+    unity_instance: str | None,
+    name: str,
+    path: str,
+    pre_sha: str | None,
+) -> bool:
+    """Verify a script edit was applied by comparing SHA before and after.
+
+    Returns True if the file's SHA changed (edit likely applied).
+    """
+    if not pre_sha:
+        return False
+    try:
+        verify = await unity_transport.send_with_unity_instance(
+            _legacy_conn.async_send_command_with_retry,
+            unity_instance,
+            "manage_script",
+            {"action": "get_sha", "name": name, "path": path},
+        )
+        if isinstance(verify, dict) and verify.get("success"):
+            new_sha = (verify.get("data") or {}).get("sha256")
+            return bool(new_sha and new_sha != pre_sha)
+    except Exception as exc:
+        logger.debug(
+            "Failed to verify edit after disconnect for %s at %s: %r",
+            name, path, exc,
+        )
+    return False
+
+
 @mcp_for_unity_tool(
     description="Request a Unity asset database refresh and optionally a script compilation. Can optionally wait for readiness.",
     annotations=ToolAnnotations(
@@ -117,7 +195,7 @@ async def refresh_unity(
     # Don't retry on reload - refresh_unity triggers compilation/reload,
     # so retrying would cause multiple reloads (issue #577)
     response = await unity_transport.send_with_unity_instance(
-        async_send_command_with_retry,
+        _legacy_conn.async_send_command_with_retry,
         unity_instance,
         "refresh_unity",
         params,
