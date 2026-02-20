@@ -516,11 +516,14 @@ namespace MCPForUnity.Editor.Services
                 // which prevents unnecessary _cached rebuilds, not from caching the clone.
                 var clone = (JObject)_cached.DeepClone();
 
-                // Stamp the clone with the current time so the server-side staleness
-                // check reflects when the snapshot was *served*, not when the update
-                // loop last ran. Without this, backgrounded Unity (where OnUpdate is
-                // throttled) always appears stale even though the data is current.
-                clone["observed_at_unix_ms"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                // When Unity is backgrounded, OnUpdate is throttled and the
+                // cached timestamp grows stale even though the data is current.
+                // Re-stamp only in that case so the server-side staleness check
+                // still fires for genuinely unresponsive editors when focused.
+                if (!InternalEditorUtility.isApplicationActive)
+                {
+                    clone["observed_at_unix_ms"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                }
 
                 return clone;
             }
