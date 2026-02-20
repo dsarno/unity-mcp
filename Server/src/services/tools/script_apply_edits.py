@@ -8,6 +8,7 @@ from mcp.types import ToolAnnotations
 
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
+from services.tools.refresh_unity import wait_for_editor_ready, is_reloading_rejection
 from services.tools.utils import parse_json_payload
 from transport.unity_transport import send_with_unity_instance
 from transport.legacy.unity_connection import async_send_command_with_retry
@@ -972,8 +973,16 @@ async def script_apply_edits(
             params_struct,
             retry_on_reload=False,
         )
-        if isinstance(resp_struct, dict) and resp_struct.get("success"):
-            pass  # Optional sentinel reload removed (deprecated)
+        if is_reloading_rejection(resp_struct):
+            await wait_for_editor_ready(ctx)
+            resp_struct = await send_with_unity_instance(
+                async_send_command_with_retry,
+                unity_instance,
+                "manage_script",
+                params_struct,
+                retry_on_reload=False,
+            )
+        await wait_for_editor_ready(ctx)
         return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="structured")
 
     # 1) read from Unity
@@ -1113,9 +1122,17 @@ async def script_apply_edits(
                     params_text,
                     retry_on_reload=False,
                 )
+                if is_reloading_rejection(resp_text):
+                    await wait_for_editor_ready(ctx)
+                    resp_text = await send_with_unity_instance(
+                        async_send_command_with_retry,
+                        unity_instance,
+                        "manage_script",
+                        params_text,
+                        retry_on_reload=False,
+                    )
                 if not (isinstance(resp_text, dict) and resp_text.get("success")):
                     return _with_norm(resp_text if isinstance(resp_text, dict) else {"success": False, "message": str(resp_text)}, normalized_for_echo, routing="mixed/text-first")
-                # Optional sentinel reload removed (deprecated)
         except Exception as e:
             return _with_norm({"success": False, "message": f"Text edit conversion failed: {e}"}, normalized_for_echo, routing="mixed/text-first")
 
@@ -1139,10 +1156,19 @@ async def script_apply_edits(
                 params_struct,
                 retry_on_reload=False,
             )
-            if isinstance(resp_struct, dict) and resp_struct.get("success"):
-                pass  # Optional sentinel reload removed (deprecated)
+            if is_reloading_rejection(resp_struct):
+                await wait_for_editor_ready(ctx)
+                resp_struct = await send_with_unity_instance(
+                    async_send_command_with_retry,
+                    unity_instance,
+                    "manage_script",
+                    params_struct,
+                    retry_on_reload=False,
+                )
+            await wait_for_editor_ready(ctx)
             return _with_norm(resp_struct if isinstance(resp_struct, dict) else {"success": False, "message": str(resp_struct)}, normalized_for_echo, routing="mixed/text-first")
 
+        await wait_for_editor_ready(ctx)
         return _with_norm({"success": True, "message": "Applied text edits (no structured ops)"}, normalized_for_echo, routing="mixed/text-first")
 
     # If the edits are text-ops, prefer sending them to Unity's apply_text_edits with precondition
@@ -1272,8 +1298,16 @@ async def script_apply_edits(
                 params,
                 retry_on_reload=False,
             )
-            if isinstance(resp, dict) and resp.get("success"):
-                pass  # Optional sentinel reload removed (deprecated)
+            if is_reloading_rejection(resp):
+                await wait_for_editor_ready(ctx)
+                resp = await send_with_unity_instance(
+                    async_send_command_with_retry,
+                    unity_instance,
+                    "manage_script",
+                    params,
+                    retry_on_reload=False,
+                )
+            await wait_for_editor_ready(ctx)
             return _with_norm(
                 resp if isinstance(resp, dict)
                 else {"success": False, "message": str(resp)},
@@ -1362,8 +1396,16 @@ async def script_apply_edits(
         params,
         retry_on_reload=False,
     )
-    if isinstance(write_resp, dict) and write_resp.get("success"):
-        pass  # Optional sentinel reload removed (deprecated)
+    if is_reloading_rejection(write_resp):
+        await wait_for_editor_ready(ctx)
+        write_resp = await send_with_unity_instance(
+            async_send_command_with_retry,
+            unity_instance,
+            "manage_script",
+            params,
+            retry_on_reload=False,
+        )
+    await wait_for_editor_ready(ctx)
     return _with_norm(
         write_resp if isinstance(write_resp, dict)
         else {"success": False, "message": str(write_resp)},

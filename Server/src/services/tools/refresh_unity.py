@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from typing import Annotated, Any, Literal
 
@@ -17,6 +18,56 @@ from services.state.external_changes_scanner import external_changes_scanner
 import services.resources.editor_state as editor_state
 
 logger = logging.getLogger(__name__)
+
+# Blocking reasons that indicate Unity is actually busy (not just stale status).
+# Must match activityPhase values from EditorStateCache.cs
+_REAL_BLOCKING_REASONS = {"compiling", "domain_reload", "running_tests", "asset_import"}
+
+
+def _in_pytest() -> bool:
+    """Return True when running inside pytest to avoid polling unmocked resources."""
+    return "PYTEST_CURRENT_TEST" in os.environ
+
+
+async def wait_for_editor_ready(ctx: Context, timeout_s: float = 30.0) -> tuple[bool, float]:
+    """Poll editor_state until Unity is ready for tool calls.
+
+    Returns (ready, elapsed_seconds).  Treats exceptions from
+    get_editor_state as "not ready yet" so the loop survives transient
+    connection errors during domain reload.
+    """
+    if _in_pytest():
+        return (True, 0.0)
+
+    start = time.monotonic()
+    while time.monotonic() - start < timeout_s:
+        try:
+            state_resp = await editor_state.get_editor_state(ctx)
+            state = state_resp.model_dump() if hasattr(state_resp, "model_dump") else state_resp
+            data = (state or {}).get("data") if isinstance(state, dict) else None
+            advice = (data or {}).get("advice") if isinstance(data, dict) else None
+            if isinstance(advice, dict):
+                if advice.get("ready_for_tools") is True:
+                    return (True, time.monotonic() - start)
+                blocking = set(advice.get("blocking_reasons") or [])
+                if not (blocking & _REAL_BLOCKING_REASONS):
+                    return (True, time.monotonic() - start)
+        except Exception:
+            pass  # not ready yet — keep polling
+        await asyncio.sleep(0.25)
+
+    return (False, time.monotonic() - start)
+
+
+def is_reloading_rejection(resp: Any) -> bool:
+    """True when Unity rejected a command because it thinks it is reloading.
+
+    The command was never executed, so retrying is safe.
+    """
+    if not isinstance(resp, dict) or resp.get("success"):
+        return False
+    data = resp.get("data") or {}
+    return data.get("reason") == "reloading" and resp.get("hint") == "retry"
 
 
 @mcp_for_unity_tool(
@@ -98,41 +149,15 @@ async def refresh_unity(
     # poll the canonical editor_state resource until ready or timeout.
     ready_confirmed = False
     if wait_for_ready:
-        timeout_s = 60.0
-        start = time.monotonic()
-
-        # Blocking reasons that indicate Unity is actually busy (not just stale status)
-        # Must match activityPhase values from EditorStateCache.cs
-        real_blocking_reasons = {"compiling", "domain_reload", "running_tests", "asset_import"}
-
-        while time.monotonic() - start < timeout_s:
-            state_resp = await editor_state.get_editor_state(ctx)
-            state = state_resp.model_dump() if hasattr(
-                state_resp, "model_dump") else state_resp
-            data = (state or {}).get("data") if isinstance(
-                state, dict) else None
-            advice = (data or {}).get(
-                "advice") if isinstance(data, dict) else None
-            if isinstance(advice, dict):
-                # Exit if ready_for_tools is True
-                if advice.get("ready_for_tools") is True:
-                    ready_confirmed = True
-                    break
-                # Also exit if the only blocking reason is "stale_status" (Unity in background)
-                # Staleness means we can't confirm status, not that Unity is actually busy
-                blocking = set(advice.get("blocking_reasons") or [])
-                if not (blocking & real_blocking_reasons):
-                    ready_confirmed = True  # No real blocking reasons, consider ready
-                    break
-            await asyncio.sleep(0.25)
+        ready_confirmed, _ = await wait_for_editor_ready(ctx, timeout_s=60.0)
 
         # If we timed out without confirming readiness, log and return failure
         if not ready_confirmed:
-            logger.warning(f"refresh_unity: Timed out after {timeout_s}s waiting for editor to become ready")
+            logger.warning("refresh_unity: Timed out after 60s waiting for editor to become ready")
             return MCPResponse(
                 success=False,
-                message=f"Refresh triggered but timed out after {timeout_s}s waiting for editor readiness.",
-                data={"timeout": True, "wait_seconds": timeout_s},
+                message="Refresh triggered but timed out after 60s waiting for editor readiness.",
+                data={"timeout": True, "wait_seconds": 60.0},
             )
 
     # After readiness is restored, clear any external-dirty flag for this instance so future tools can proceed cleanly.

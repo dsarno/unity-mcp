@@ -8,6 +8,7 @@ from mcp.types import ToolAnnotations
 
 from services.registry import mcp_for_unity_tool
 from services.tools import get_unity_instance_from_context
+from services.tools.refresh_unity import wait_for_editor_ready, is_reloading_rejection
 from transport.unity_transport import send_with_unity_instance
 import transport.legacy.unity_connection
 
@@ -331,6 +332,16 @@ async def apply_text_edits(
         params,
         retry_on_reload=False,
     )
+    if is_reloading_rejection(resp):
+        await wait_for_editor_ready(ctx)
+        resp = await send_with_unity_instance(
+            transport.legacy.unity_connection.async_send_command_with_retry,
+            unity_instance,
+            "manage_script",
+            params,
+            retry_on_reload=False,
+        )
+    await wait_for_editor_ready(ctx)
     if isinstance(resp, dict):
         data = resp.setdefault("data", {})
         data.setdefault("normalizedEdits", normalized_edits)
@@ -430,6 +441,16 @@ async def create_script(
         params,
         retry_on_reload=False,
     )
+    if is_reloading_rejection(resp):
+        await wait_for_editor_ready(ctx)
+        resp = await send_with_unity_instance(
+            transport.legacy.unity_connection.async_send_command_with_retry,
+            unity_instance,
+            "manage_script",
+            params,
+            retry_on_reload=False,
+        )
+    await wait_for_editor_ready(ctx)
     return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
 
 
@@ -460,6 +481,16 @@ async def delete_script(
         params,
         retry_on_reload=False,
     )
+    if is_reloading_rejection(resp):
+        await wait_for_editor_ready(ctx)
+        resp = await send_with_unity_instance(
+            transport.legacy.unity_connection.async_send_command_with_retry,
+            unity_instance,
+            "manage_script",
+            params,
+            retry_on_reload=False,
+        )
+    await wait_for_editor_ready(ctx)
     return resp if isinstance(resp, dict) else {"success": False, "message": str(resp)}
 
 
@@ -560,6 +591,18 @@ async def manage_script(
             params,
             retry_on_reload=(action == "read"),
         )
+
+        if action != "read":
+            if is_reloading_rejection(response):
+                await wait_for_editor_ready(ctx)
+                response = await send_with_unity_instance(
+                    transport.legacy.unity_connection.async_send_command_with_retry,
+                    unity_instance,
+                    "manage_script",
+                    params,
+                    retry_on_reload=False,
+                )
+            await wait_for_editor_ready(ctx)
 
         if isinstance(response, dict):
             if response.get("success"):
