@@ -514,7 +514,15 @@ namespace MCPForUnity.Editor.Services
                 // Always return a fresh clone to prevent mutation bugs.
                 // The main GC optimization comes from state-change detection (OnUpdate)
                 // which prevents unnecessary _cached rebuilds, not from caching the clone.
-                return (JObject)_cached.DeepClone();
+                var clone = (JObject)_cached.DeepClone();
+
+                // Stamp the clone with the current time so the server-side staleness
+                // check reflects when the snapshot was *served*, not when the update
+                // loop last ran. Without this, backgrounded Unity (where OnUpdate is
+                // throttled) always appears stale even though the data is current.
+                clone["observed_at_unix_ms"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+                return clone;
             }
         }
 
