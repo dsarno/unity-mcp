@@ -769,13 +769,15 @@ namespace MCPForUnity.Editor.Tools.Prefabs
                     string typeName = entry.Name;
                     if (!ComponentResolver.TryResolve(typeName, out Type componentType, out string resolveError))
                     {
-                        return (false, new ErrorResponse($"Component type '{typeName}' not found: {resolveError}"));
+                        errors.Add($"{typeName}: type not found — {resolveError}");
+                        continue;
                     }
 
                     Component component = targetGo.GetComponent(componentType);
                     if (component == null)
                     {
-                        return (false, new ErrorResponse($"Component '{typeName}' not found on '{targetGo.name}'."));
+                        errors.Add($"{typeName}: not found on '{targetGo.name}'");
+                        continue;
                     }
 
                     if (entry.Value is not JObject props || !props.HasValues)
