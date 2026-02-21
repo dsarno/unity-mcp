@@ -85,6 +85,13 @@ class TestNudgeUnityFocus:
             assert result is False
 
     @pytest.mark.asyncio
+    async def test_skips_when_frontmost_app_unknown(self):
+        with patch("utils.focus_nudge._is_available", return_value=True), \
+             patch("utils.focus_nudge._get_frontmost_app", return_value=None):
+            result = await nudge_unity_focus(force=True)
+            assert result is False
+
+    @pytest.mark.asyncio
     async def test_rate_limited_by_backoff(self):
         import utils.focus_nudge as fn
         from utils.focus_nudge import _FrontmostAppInfo

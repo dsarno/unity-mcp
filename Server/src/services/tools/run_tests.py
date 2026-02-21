@@ -21,6 +21,9 @@ from utils.focus_nudge import nudge_unity_focus, should_nudge, reset_nudge_backo
 
 logger = logging.getLogger(__name__)
 
+# Strong references to background fire-and-forget tasks to prevent premature GC.
+_background_tasks: set[asyncio.Task] = set()
+
 
 async def _get_unity_project_path(unity_instance: str | None) -> str | None:
     """Get the project root path for a Unity instance (for focus nudging).
@@ -333,6 +336,8 @@ async def get_test_job(
         ):
             logger.info(f"Test job {job_id} appears stalled (unfocused Unity), scheduling background nudge...")
             project_path = await _get_unity_project_path(unity_instance)
-            asyncio.create_task(nudge_unity_focus(unity_project_path=project_path))
+            task = asyncio.create_task(nudge_unity_focus(unity_project_path=project_path))
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
 
     return GetTestJobResponse(**response)

@@ -886,6 +886,8 @@ namespace MCPForUnityTests.Editor.Tools
             }
         }
 
+        // Note: root rename is NOT tested here because LoadAssetAtPath<GameObject> returns
+        // the asset filename as .name for prefab roots, so rename assertions always fail.
         [Test]
         public void ModifyContents_ComponentProperties_CombinesWithOtherModifications()
         {
