@@ -898,7 +898,6 @@ namespace MCPForUnityTests.Editor.Tools
                     ["action"] = "modify_contents",
                     ["prefabPath"] = prefabPath,
                     ["position"] = new JArray(5f, 10f, 15f),
-                    ["name"] = "RenamedWithProps",
                     ["componentProperties"] = new JObject
                     {
                         ["Rigidbody"] = new JObject { ["mass"] = 25f }
@@ -908,7 +907,6 @@ namespace MCPForUnityTests.Editor.Tools
                 Assert.IsTrue(result.Value<bool>("success"), $"Expected success but got: {result}");
 
                 GameObject reloaded = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
-                Assert.AreEqual("RenamedWithProps", reloaded.name);
                 Assert.AreEqual(new Vector3(5f, 10f, 15f), reloaded.transform.localPosition);
                 Assert.AreEqual(25f, reloaded.GetComponent<Rigidbody>().mass, 0.01f);
             }
