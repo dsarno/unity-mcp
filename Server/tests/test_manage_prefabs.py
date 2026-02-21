@@ -28,7 +28,7 @@ class TestManagePrefabsComponentProperties:
         )
         assert prefab_tool is not None
         # Description is stored at top level or in kwargs depending on how the decorator stores it
-        desc = prefab_tool.get("description") or prefab_tool["kwargs"].get("description", "")
+        desc = prefab_tool.get("description") or prefab_tool.get("kwargs", {}).get("description", "")
         assert "component_properties" in desc
 
     def test_required_params_include_modify_contents(self):

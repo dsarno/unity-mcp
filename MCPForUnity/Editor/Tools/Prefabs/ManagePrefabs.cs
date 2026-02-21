@@ -800,7 +800,7 @@ namespace MCPForUnity.Editor.Tools.Prefabs
 
                 if (errors.Count > 0)
                 {
-                    return (false, new ErrorResponse($"Failed to set some component properties: {string.Join("; ", errors)}"));
+                    return (false, new ErrorResponse($"Failed to set component properties (no changes saved): {string.Join("; ", errors)}"));
                 }
             }
 
