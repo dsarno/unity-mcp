@@ -758,6 +758,50 @@ namespace MCPForUnity.Editor.Tools.Prefabs
                 }
             }
 
+            // Set properties on existing components
+            JObject componentProperties = @params["componentProperties"] as JObject ?? @params["component_properties"] as JObject;
+            if (componentProperties != null && componentProperties.Count > 0)
+            {
+                var errors = new List<string>();
+
+                foreach (var entry in componentProperties.Properties())
+                {
+                    string typeName = entry.Name;
+                    if (!ComponentResolver.TryResolve(typeName, out Type componentType, out string resolveError))
+                    {
+                        return (false, new ErrorResponse($"Component type '{typeName}' not found: {resolveError}"));
+                    }
+
+                    Component component = targetGo.GetComponent(componentType);
+                    if (component == null)
+                    {
+                        return (false, new ErrorResponse($"Component '{typeName}' not found on '{targetGo.name}'."));
+                    }
+
+                    if (entry.Value is not JObject props || !props.HasValues)
+                    {
+                        continue;
+                    }
+
+                    foreach (var prop in props.Properties())
+                    {
+                        if (!ComponentOps.SetProperty(component, prop.Name, prop.Value, out string setError))
+                        {
+                            errors.Add($"{typeName}.{prop.Name}: {setError}");
+                        }
+                        else
+                        {
+                            modified = true;
+                        }
+                    }
+                }
+
+                if (errors.Count > 0)
+                {
+                    return (false, new ErrorResponse($"Failed to set some component properties: {string.Join("; ", errors)}"));
+                }
+            }
+
             return (modified, null);
         }
 
