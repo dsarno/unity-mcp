@@ -225,7 +225,7 @@ namespace MCPForUnity.Editor.Tools
                 return toolName;
 
             // Double-underscore format: "mcp__ServerName__tool_name"
-            if (toolName.StartsWith("mcp__"))
+            if (toolName.StartsWith("mcp__", StringComparison.Ordinal))
             {
                 int secondSep = toolName.IndexOf("__", 5, StringComparison.Ordinal);
                 if (secondSep >= 0 && secondSep + 2 < toolName.Length)

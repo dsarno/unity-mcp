@@ -34,10 +34,14 @@ def strip_mcp_prefix(tool_name: str) -> str:
     """
     # Double-underscore format: "mcp__ServerName__tool_name"
     if tool_name.startswith("mcp__") and "__" in tool_name[5:]:
-        return tool_name.split("__", 2)[-1]
+        suffix = tool_name.split("__", 2)[-1]
+        if suffix:
+            return suffix
     # Colon format: "ServerName:tool_name"
     if ":" in tool_name:
-        return tool_name.rsplit(":", 1)[-1]
+        suffix = tool_name.rsplit(":", 1)[-1]
+        if suffix:
+            return suffix
     return tool_name
 
 

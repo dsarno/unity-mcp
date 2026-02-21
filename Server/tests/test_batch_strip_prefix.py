@@ -19,6 +19,14 @@ from services.tools.batch_execute import strip_mcp_prefix
         ("mcp__UnityMCP__manage_scene", "manage_scene"),
         # Tool name itself contains underscores — should be preserved
         ("mcp__UnityMCP__manage_scriptable_object", "manage_scriptable_object"),
+        # Edge cases: trailing separators pass through unchanged (match C# behavior)
+        (":", ":"),
+        ("Server:", "Server:"),
+        ("mcp__Server__", "mcp__Server__"),
+        # Empty string passes through
+        ("", ""),
+        # Multiple colons: last segment used
+        ("a:b:manage_gameobject", "manage_gameobject"),
     ],
 )
 def test_strip_mcp_prefix(input_name: str, expected: str):
