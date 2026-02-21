@@ -310,8 +310,29 @@ async def get_test_job(
     
     # No wait_timeout - return immediately (original behavior)
     response = await _fetch_status()
-    if isinstance(response, dict):
-        if not response.get("success", True):
-            return MCPResponse(**response)
-        return GetTestJobResponse(**response)
-    return MCPResponse(success=False, error=str(response))
+    if not isinstance(response, dict):
+        return MCPResponse(success=False, error=str(response))
+    if not response.get("success", True):
+        return MCPResponse(**response)
+
+    # Fire-and-forget nudge check: even without wait_timeout, clients may poll
+    # externally. Check if Unity needs a nudge on every call so stalls get
+    # detected regardless of polling style.
+    data = response.get("data", {})
+    status = data.get("status", "")
+    if status == "running":
+        progress = data.get("progress", {})
+        editor_is_focused = progress.get("editor_is_focused", True)
+        last_update_unix_ms = data.get("last_update_unix_ms")
+        current_time_ms = int(time.time() * 1000)
+        if should_nudge(
+            status=status,
+            editor_is_focused=editor_is_focused,
+            last_update_unix_ms=last_update_unix_ms,
+            current_time_ms=current_time_ms,
+        ):
+            logger.info(f"Test job {job_id} appears stalled (unfocused Unity), scheduling background nudge...")
+            project_path = await _get_unity_project_path(unity_instance)
+            asyncio.create_task(nudge_unity_focus(unity_project_path=project_path))
+
+    return GetTestJobResponse(**response)
