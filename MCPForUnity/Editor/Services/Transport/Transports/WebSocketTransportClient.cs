@@ -39,6 +39,12 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         private static readonly TimeSpan DefaultKeepAliveInterval = TimeSpan.FromSeconds(15);
         private static readonly TimeSpan DefaultCommandTimeout = TimeSpan.FromSeconds(30);
 
+        // If we receive no traffic from the server (it pings us on its own cadence) for
+        // this long, the socket is silently dead — e.g. after system sleep/wake, a network
+        // change, or a half-open TCP connection that ReceiveAsync never faults on. The
+        // watchdog then forces a reconnect instead of leaving the client a zombie.
+        private static readonly TimeSpan DefaultInboundLivenessTimeout = TimeSpan.FromSeconds(40);
+
         private readonly IToolDiscoveryService _toolDiscoveryService;
         private ClientWebSocket _socket;
         private CancellationTokenSource _lifecycleCts;
@@ -55,6 +61,8 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         private string _unityVersion;
         private TimeSpan _keepAliveInterval = DefaultKeepAliveInterval;
         private TimeSpan _socketKeepAliveInterval = DefaultKeepAliveInterval;
+        private TimeSpan _inboundLivenessTimeout = DefaultInboundLivenessTimeout;
+        private long _lastInboundUtcTicks;
         private volatile bool _isConnected;
         private int _isReconnectingFlag;
         private TransportState _state = TransportState.Disconnected(TransportDisplayName, "Transport not started");
@@ -175,6 +183,9 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         /// </summary>
         public void ForceStop()
         {
+            // Logged so an expected reload/shutdown close is distinguishable in the editor
+            // log from an unexpected drop (network/sleep), which logs "Connection closed".
+            McpLog.Info("[WebSocket] Force-stopping transport (domain reload or shutdown).", false);
             try { _lifecycleCts?.Cancel(); } catch { }
             try { _connectionCts?.Cancel(); } catch { }
 
@@ -372,6 +383,9 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                 return;
             }
 
+            // Seed liveness so the watchdog doesn't trip before the first server ping arrives.
+            Interlocked.Exchange(ref _lastInboundUtcTicks, DateTime.UtcNow.Ticks);
+
             _receiveTask = Task.Run(() => ReceiveLoopAsync(token), CancellationToken.None);
             _keepAliveTask = Task.Run(() => KeepAliveLoopAsync(token), CancellationToken.None);
         }
@@ -395,8 +409,13 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                 }
                 catch (WebSocketException wse)
                 {
-                    McpLog.Warn($"[WebSocket] Receive loop error: {wse.Message}");
-                    await HandleSocketClosureAsync(wse.Message).ConfigureAwait(false);
+                    // Surface the error code + inner exception so the trigger is diagnosable
+                    // (e.g. ConnectionClosedPrematurely = TCP reset vs a clean server close).
+                    string inner = wse.InnerException != null
+                        ? $" (inner: {wse.InnerException.GetType().Name}: {wse.InnerException.Message})"
+                        : string.Empty;
+                    McpLog.Warn($"[WebSocket] Receive loop closed: {wse.WebSocketErrorCode} - {wse.Message}{inner}");
+                    await HandleSocketClosureAsync($"{wse.WebSocketErrorCode}: {wse.Message}").ConfigureAwait(false);
                     break;
                 }
                 catch (Exception ex)
@@ -424,6 +443,8 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                 while (!token.IsCancellationRequested)
                 {
                     WebSocketReceiveResult result = await _socket.ReceiveAsync(buffer, token).ConfigureAwait(false);
+                    // Any frame from the server (including pings/close) counts as liveness.
+                    Interlocked.Exchange(ref _lastInboundUtcTicks, DateTime.UtcNow.Ticks);
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
@@ -506,6 +527,10 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                 int safeSeconds = Math.Max(5, Math.Min(serverTimeoutSeconds.Value, sourceSeconds));
                 _socketKeepAliveInterval = TimeSpan.FromSeconds(safeSeconds);
             }
+
+            // Allow ~2.5 missed server keep-alives before declaring the link dead.
+            double livenessSeconds = Math.Max(30.0, _keepAliveInterval.TotalSeconds * 2.5);
+            _inboundLivenessTimeout = TimeSpan.FromSeconds(livenessSeconds);
         }
 
         private async Task HandleRegisteredAsync(JObject payload, CancellationToken token)
@@ -675,6 +700,22 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     {
                         break;
                     }
+
+                    // Liveness watchdog: the server pings us on its own cadence, so a healthy
+                    // link is never silent for long. If we've heard nothing back past the
+                    // timeout the socket is silently dead (sleep/wake, network loss, half-open
+                    // TCP that ReceiveAsync never faults on) — abort and reconnect rather than
+                    // zombie. Abort() faults the parked ReceiveAsync; the reconnect is guarded
+                    // against double-firing by _isReconnectingFlag in HandleSocketClosureAsync.
+                    TimeSpan sinceInbound = TimeSpan.FromTicks(DateTime.UtcNow.Ticks - Interlocked.Read(ref _lastInboundUtcTicks));
+                    if (sinceInbound > _inboundLivenessTimeout)
+                    {
+                        McpLog.Warn($"[WebSocket] No server traffic for {sinceInbound.TotalSeconds:0}s (liveness timeout {_inboundLivenessTimeout.TotalSeconds:0}s); aborting and reconnecting.");
+                        try { _socket.Abort(); } catch { }
+                        await HandleSocketClosureAsync($"Liveness timeout after {sinceInbound.TotalSeconds:0}s of server silence").ConfigureAwait(false);
+                        break;
+                    }
+
                     await SendPongAsync(token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
