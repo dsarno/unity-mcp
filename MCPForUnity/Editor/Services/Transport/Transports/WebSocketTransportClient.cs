@@ -63,6 +63,7 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
         private TimeSpan _socketKeepAliveInterval = DefaultKeepAliveInterval;
         private TimeSpan _inboundLivenessTimeout = DefaultInboundLivenessTimeout;
         private long _lastInboundUtcTicks;
+        private int _commandsInFlight;
         private volatile bool _isConnected;
         private int _isReconnectingFlag;
         private TransportState _state = TransportState.Disconnected(TransportDisplayName, "Transport not started");
@@ -528,9 +529,23 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                 _socketKeepAliveInterval = TimeSpan.FromSeconds(safeSeconds);
             }
 
-            // Allow ~2.5 missed server keep-alives before declaring the link dead.
-            double livenessSeconds = Math.Max(30.0, _keepAliveInterval.TotalSeconds * 2.5);
-            _inboundLivenessTimeout = TimeSpan.FromSeconds(livenessSeconds);
+            _inboundLivenessTimeout = ComputeInboundLivenessTimeout(_keepAliveInterval);
+        }
+
+        // Allow ~2.5 missed server keep-alives before declaring the link dead, with a 30s
+        // floor so a small server cadence can't produce a trigger-happy timeout.
+        private static TimeSpan ComputeInboundLivenessTimeout(TimeSpan keepAliveInterval)
+        {
+            double livenessSeconds = Math.Max(30.0, keepAliveInterval.TotalSeconds * 2.5);
+            return TimeSpan.FromSeconds(livenessSeconds);
+        }
+
+        // The watchdog only trips on genuine link silence. While a command is in flight the
+        // receive loop is intentionally parked in HandleExecuteAsync rather than reading, so
+        // the resulting inbound silence is expected and must not be mistaken for a dead socket.
+        private static bool ShouldTripLivenessWatchdog(TimeSpan sinceInbound, TimeSpan livenessTimeout, int commandsInFlight)
+        {
+            return commandsInFlight == 0 && sinceInbound > livenessTimeout;
         }
 
         private async Task HandleRegisteredAsync(JObject payload, CancellationToken token)
@@ -642,6 +657,10 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
             };
 
             string responseJson;
+            // Dispatch parks the receive loop here while the command runs, so flag it
+            // in-flight to keep the liveness watchdog from mistaking that expected
+            // silence for a dead socket on long-running commands (tests, imports, etc.).
+            Interlocked.Increment(ref _commandsInFlight);
             try
             {
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -663,6 +682,14 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     status = "error",
                     error = ex.Message
                 });
+            }
+            finally
+            {
+                // Refresh liveness before clearing the flag so the watchdog doesn't trip in
+                // the gap before the next ReceiveAsync drains the pings the server buffered
+                // during execution. Stamp first, then decrement.
+                Interlocked.Exchange(ref _lastInboundUtcTicks, DateTime.UtcNow.Ticks);
+                Interlocked.Decrement(ref _commandsInFlight);
             }
 
             JToken resultToken;
@@ -707,8 +734,10 @@ namespace MCPForUnity.Editor.Services.Transport.Transports
                     // TCP that ReceiveAsync never faults on) — abort and reconnect rather than
                     // zombie. Abort() faults the parked ReceiveAsync; the reconnect is guarded
                     // against double-firing by _isReconnectingFlag in HandleSocketClosureAsync.
+                    // A command in flight is skipped: the receive loop is parked on dispatch,
+                    // not on a dead socket, so its silence is expected.
                     TimeSpan sinceInbound = TimeSpan.FromTicks(DateTime.UtcNow.Ticks - Interlocked.Read(ref _lastInboundUtcTicks));
-                    if (sinceInbound > _inboundLivenessTimeout)
+                    if (ShouldTripLivenessWatchdog(sinceInbound, _inboundLivenessTimeout, Volatile.Read(ref _commandsInFlight)))
                     {
                         McpLog.Warn($"[WebSocket] No server traffic for {sinceInbound.TotalSeconds:0}s (liveness timeout {_inboundLivenessTimeout.TotalSeconds:0}s); aborting and reconnecting.");
                         try { _socket.Abort(); } catch { }
