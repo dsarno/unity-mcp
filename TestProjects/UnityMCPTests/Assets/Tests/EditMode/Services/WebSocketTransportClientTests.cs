@@ -82,6 +82,121 @@ namespace MCPForUnityTests.Editor.Services
             }
         }
 
+        [Test]
+        public void ComputeInboundLivenessTimeout_ScalesKeepAliveByTwoAndAHalf()
+        {
+            TimeSpan result = InvokeComputeInboundLivenessTimeout(TimeSpan.FromSeconds(15));
+
+            // 15s * 2.5 = 37.5s, comfortably above the 30s floor.
+            Assert.AreEqual(37.5, result.TotalSeconds, 0.0001);
+        }
+
+        [Test]
+        public void ComputeInboundLivenessTimeout_AppliesThirtySecondFloor()
+        {
+            // 5s * 2.5 = 12.5s, which the floor lifts to 30s.
+            TimeSpan small = InvokeComputeInboundLivenessTimeout(TimeSpan.FromSeconds(5));
+            Assert.AreEqual(30.0, small.TotalSeconds, 0.0001);
+
+            // A zero/degenerate cadence must still produce the floor, never zero.
+            TimeSpan zero = InvokeComputeInboundLivenessTimeout(TimeSpan.Zero);
+            Assert.AreEqual(30.0, zero.TotalSeconds, 0.0001);
+        }
+
+        [Test]
+        public void ComputeInboundLivenessTimeout_LargeCadenceScalesAboveFloor()
+        {
+            // 60s * 2.5 = 150s, well above the floor.
+            TimeSpan result = InvokeComputeInboundLivenessTimeout(TimeSpan.FromSeconds(60));
+            Assert.AreEqual(150.0, result.TotalSeconds, 0.0001);
+        }
+
+        [Test]
+        public void ShouldTripLivenessWatchdog_SilencePastTimeoutWithNoCommand_Trips()
+        {
+            bool trip = InvokeShouldTripLivenessWatchdog(
+                TimeSpan.FromSeconds(50), TimeSpan.FromSeconds(38), commandsInFlight: 0);
+
+            Assert.IsTrue(trip);
+        }
+
+        [Test]
+        public void ShouldTripLivenessWatchdog_CommandInFlight_DoesNotTrip()
+        {
+            // The core false-trip guard: an in-flight command parks the receive loop, so the
+            // inbound silence is expected and must not be treated as a dead socket.
+            bool oneInFlight = InvokeShouldTripLivenessWatchdog(
+                TimeSpan.FromSeconds(50), TimeSpan.FromSeconds(38), commandsInFlight: 1);
+            Assert.IsFalse(oneInFlight);
+
+            bool manyInFlight = InvokeShouldTripLivenessWatchdog(
+                TimeSpan.FromSeconds(5000), TimeSpan.FromSeconds(38), commandsInFlight: 3);
+            Assert.IsFalse(manyInFlight);
+        }
+
+        [Test]
+        public void ShouldTripLivenessWatchdog_WithinTimeout_DoesNotTrip()
+        {
+            bool underTimeout = InvokeShouldTripLivenessWatchdog(
+                TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(38), commandsInFlight: 0);
+            Assert.IsFalse(underTimeout);
+
+            // Exactly at the timeout is not past it (strictly-greater comparison).
+            bool atTimeout = InvokeShouldTripLivenessWatchdog(
+                TimeSpan.FromSeconds(38), TimeSpan.FromSeconds(38), commandsInFlight: 0);
+            Assert.IsFalse(atTimeout);
+        }
+
+        private static TimeSpan InvokeComputeInboundLivenessTimeout(TimeSpan keepAliveInterval)
+        {
+            MethodInfo method = ResolveStaticMethod("ComputeInboundLivenessTimeout", typeof(TimeSpan));
+            if (method == null)
+            {
+                Assert.Fail("Expected private static ComputeInboundLivenessTimeout(TimeSpan) to exist.");
+            }
+            object result = method.Invoke(null, new object[] { keepAliveInterval });
+            Assert.IsInstanceOf<TimeSpan>(result);
+            return (TimeSpan)result;
+        }
+
+        private static bool InvokeShouldTripLivenessWatchdog(TimeSpan sinceInbound, TimeSpan livenessTimeout, int commandsInFlight)
+        {
+            MethodInfo method = ResolveStaticMethod(
+                "ShouldTripLivenessWatchdog", typeof(TimeSpan), typeof(TimeSpan), typeof(int));
+            if (method == null)
+            {
+                Assert.Fail("Expected private static ShouldTripLivenessWatchdog(TimeSpan, TimeSpan, int) to exist.");
+            }
+            object result = method.Invoke(null, new object[] { sinceInbound, livenessTimeout, commandsInFlight });
+            Assert.IsInstanceOf<bool>(result);
+            return (bool)result;
+        }
+
+        private static MethodInfo ResolveStaticMethod(string name, params Type[] parameterTypes)
+        {
+            const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static;
+
+            MethodInfo direct = typeof(WebSocketTransportClient).GetMethod(name, flags, binder: null, types: parameterTypes, modifiers: null);
+            if (direct != null)
+            {
+                return direct;
+            }
+
+            // Fallback across loaded assemblies, mirroring candidate-builder resolution for
+            // environments where multiple copies of the type may be loaded.
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type candidateType = assembly.GetType(WebSocketTransportClientTypeName);
+                MethodInfo method = candidateType?.GetMethod(name, flags, binder: null, types: parameterTypes, modifiers: null);
+                if (method != null)
+                {
+                    return method;
+                }
+            }
+
+            return null;
+        }
+
         private static List<Uri> InvokeBuildConnectionCandidateUris(Uri endpoint)
         {
             if (BuildConnectionCandidateUrisMethod == null)
