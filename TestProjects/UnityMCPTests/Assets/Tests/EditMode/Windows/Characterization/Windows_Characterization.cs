@@ -207,6 +207,35 @@ namespace MCPForUnityTests.Editor.Windows.Characterization
         }
 
         /// <summary>
+        /// The debounced orphan teardown (issue #1207): a session is only ended once the local
+        /// server has stayed unreachable for the full grace period. A transient blip (e.g. a server
+        /// restart) must NOT tear down the session, because that path also kills the reconnect loop
+        /// and strands the session until a manual Start Session.
+        /// </summary>
+        [Test]
+        public void McpConnectionSection_ShouldEndOrphanedSession_DebouncesTransientUnreachable()
+        {
+            var method = typeof(McpConnectionSection).GetMethod(
+                "ShouldEndOrphanedSession", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+            Assert.IsNotNull(method, "Expected internal static ShouldEndOrphanedSession to exist.");
+
+            bool Invoke(bool running, bool reachable, double since, double now, double grace)
+                => (bool)method.Invoke(null, new object[] { running, reachable, since, now, grace });
+
+            // Server reachable -> never end.
+            Assert.IsFalse(Invoke(true, true, -1.0, 100.0, 10.0));
+            // Unreachable but within the grace window (a transient blip) -> do NOT end.
+            Assert.IsFalse(Invoke(true, false, 95.0, 100.0, 10.0));   // 5s elapsed < 10s grace
+            Assert.IsFalse(Invoke(true, false, 100.0, 100.0, 10.0));  // 0s elapsed
+            // Unreachable continuously past the grace -> end the orphaned session.
+            Assert.IsTrue(Invoke(true, false, 88.0, 100.0, 10.0));    // 12s elapsed >= 10s grace
+            // Session not running -> never end.
+            Assert.IsFalse(Invoke(false, false, 50.0, 100.0, 10.0));
+            // No unreachable-start recorded (-1 sentinel) -> never end.
+            Assert.IsFalse(Invoke(true, false, -1.0, 100.0, 10.0));
+        }
+
+        /// <summary>
         /// Current behavior: McpConnectionSection reads 3+ EditorPrefs in InitializeUI
         /// (UseHttpTransport, HttpTransportScope, UnitySocketPort).
         /// </summary>

@@ -61,6 +61,13 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
         private string lastHealthStatus;
         private double lastLocalServerRunningPollTime;
         private bool lastLocalServerRunning;
+        // EditorApplication.timeSinceStartup when the local server first read unreachable while a
+        // session was running; -1 means currently reachable. Used to debounce the orphan teardown.
+        private double serverUnreachableSinceTime = -1.0;
+        // The local server must stay unreachable this long before we end the session. A single
+        // unreachable probe is almost always a transient blip while the server restarts; tearing
+        // the session down on it also kills the reconnect loop and strands the session (issue #1207).
+        private const double OrphanGraceSeconds = 10.0;
 
         // Reference to Advanced section for health status updates
         private Action<bool, string> onHealthStatusUpdate;
@@ -318,6 +325,18 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             RefreshHttpUi();
         }
 
+        // Pure decision for the debounced orphan teardown: only end the session when it is running,
+        // the local server is currently unreachable, and it has stayed unreachable continuously for
+        // at least the grace period (so transient restart blips, which the reconnect loop owns, don't
+        // strand the session).
+        internal static bool ShouldEndOrphanedSession(bool sessionRunning, bool localServerReachable, double unreachableSinceTime, double now, double graceSeconds)
+        {
+            return sessionRunning
+                && !localServerReachable
+                && unreachableSinceTime >= 0.0
+                && (now - unreachableSinceTime) >= graceSeconds;
+        }
+
         public void UpdateConnectionStatus()
         {
             var bridgeService = MCPServiceLocator.Bridge;
@@ -333,13 +352,35 @@ namespace MCPForUnity.Editor.Windows.Components.Connection
             // NOTE: This also updates lastLocalServerRunning which is used below for session toggle visibility.
             UpdateStartHttpButtonState();
 
-            // Detect orphaned session: if HTTP Local session thinks it's running but the server is gone,
-            // automatically end the session to keep UI in sync with reality.
-            if (showLocalServerControls && isRunning && !lastLocalServerRunning && !connectionToggleInProgress)
+            // Detect orphaned session: if an HTTP Local session thinks it's running but the local
+            // server has gone away, end the session to keep the UI in sync. DEBOUNCED: a single
+            // unreachable probe is usually just a transient blip while the server restarts, and
+            // tearing the session down here also kills the reconnect loop — stranding a session
+            // that would otherwise have reconnected on its own (issue #1207). So only end it after
+            // the server has stayed unreachable continuously for OrphanGraceSeconds.
+            if (showLocalServerControls && isRunning && !connectionToggleInProgress)
             {
-                McpLog.Info("Server no longer running; ending orphaned session.");
-                _ = EndOrphanedSessionAsync();
-                isRunning = false; // Update local state for the rest of this method
+                double now = EditorApplication.timeSinceStartup;
+                if (lastLocalServerRunning)
+                {
+                    serverUnreachableSinceTime = -1.0;
+                }
+                else if (serverUnreachableSinceTime < 0.0)
+                {
+                    serverUnreachableSinceTime = now;
+                }
+
+                if (ShouldEndOrphanedSession(isRunning, lastLocalServerRunning, serverUnreachableSinceTime, now, OrphanGraceSeconds))
+                {
+                    McpLog.Info($"Server unreachable for {OrphanGraceSeconds:0}s; ending orphaned session.");
+                    _ = EndOrphanedSessionAsync();
+                    isRunning = false; // Update local state for the rest of this method
+                    serverUnreachableSinceTime = -1.0;
+                }
+            }
+            else
+            {
+                serverUnreachableSinceTime = -1.0;
             }
 
             // For HTTP Local: show session toggle button only when server is running (so user can manually start/end session).
